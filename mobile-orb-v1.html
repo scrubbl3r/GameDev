@@ -1,0 +1,329 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Gyro Pattern Tester</title>
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; padding: 16px; }
+    button { font-size: 18px; padding: 12px 16px; }
+    .row { margin-top: 14px; font-size: 16px; }
+    .bar { height: 18px; width: 100%; background: #eee; border-radius: 10px; overflow: hidden; }
+    .fill { height: 100%; width: 0%; background: #111; transition: width 80ms linear; }
+    .small { opacity: 0.7; font-size: 13px; margin-top: 6px; }
+    code { background: #f6f6f6; padding: 2px 6px; border-radius: 6px; }
+
+    /* Big centered charge */
+    .bigChargeWrap {
+      position: fixed;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      pointer-events: none;
+    }
+    .bigCharge {
+      font-weight: 700;
+      font-size: clamp(64px, 18vw, 180px);
+      letter-spacing: -0.04em;
+      color: #111;
+      opacity: 0.92;
+      text-shadow: 0 1px 0 rgba(0,0,0,0.05);
+    }
+    .bigSub {
+      margin-top: -10px;
+      font-size: 14px;
+      opacity: 0.6;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <button id="startBtn">Start</button>
+  <div class="row">Status: <span id="status">idle</span></div>
+
+  <div class="row">Precision: <span id="precision">0</span></div>
+  <div class="bar"><div id="precisionBar" class="fill"></div></div>
+
+  <div class="row">Speed: <span id="speed">0</span></div>
+  <div class="bar"><div id="speedBar" class="fill"></div></div>
+
+  <div class="row">Energy: <span id="energy">0</span></div>
+  <div class="bar"><div id="energyBar" class="fill"></div></div>
+
+  <div class="small">
+    Notes: iOS requires <code>https</code> + permission + audio start from a user gesture.
+  </div>
+
+  <!-- Big centered readout -->
+  <div class="bigChargeWrap">
+    <div>
+      <div id="bigCharge" class="bigCharge">0%</div>
+      <div class="bigSub">charge</div>
+    </div>
+  </div>
+
+<script>
+(() => {
+  const startBtn = document.getElementById('startBtn');
+  const statusEl = document.getElementById('status');
+  const precisionEl = document.getElementById('precision');
+  const speedEl = document.getElementById('speed');
+  const energyEl = document.getElementById('energy');
+
+  const precisionBar = document.getElementById('precisionBar');
+  const speedBar = document.getElementById('speedBar');
+  const energyBar = document.getElementById('energyBar');
+
+  const bigChargeEl = document.getElementById('bigCharge');
+
+  // ---- Tunables (SSOT) ----
+  const SMOOTHING = 0.15;        // 0..1 (higher = snappier, lower = smoother)
+  const MIN_OMEGA = 0.15;        // ignore tiny motion noise
+  const PRECISION_WINDOW = 40;   // samples
+
+  const ENERGY_DECAY = 0.12;     // per second decay when not earning
+  const ENERGY_GAIN  = 0.65;     // multiplier for earning
+  const SPEED_NORM   = 4.0;      // higher => harder to max speed
+
+  // Big number smoothing (avoid flicker)
+  const ENERGY_UI_SMOOTH = 0.08; // 0..1
+
+  // Audio mapping
+  const AUDIO_GATE = 0.05;       // energy below this => silent
+  const AUDIO_MIN_DB = -50;      // near-silent
+  const AUDIO_MAX_DB = -6;       // comfortable top end
+  const AUDIO_SHAPE = 1.8;       // curve exponent (1.6–2.2 good range)
+  const TONE_HZ = 220;           // base tone (A3-ish). Keep it gentle.
+
+  let running = false;
+  let lastT = null;
+
+  // Low-pass filtered omega vector
+  let ox = 0, oy = 0, oz = 0;
+
+  // Precision: last N normalized direction vectors
+  const dirs = [];
+
+  let energy = 0;       // true energy
+  let energyUI = 0;     // smoothed for big readout + audio
+
+  // WebAudio state (created on Start button)
+  let audioCtx = null;
+  let osc = null;
+  let gainNode = null;
+
+  function clamp01(x){ return Math.max(0, Math.min(1, x)); }
+  function lerp(a,b,t){ return a + (b-a)*t; }
+  function vecMag(x,y,z){ return Math.sqrt(x*x+y*y+z*z); }
+
+  function dbToGain(db) {
+    return Math.pow(10, db / 20);
+  }
+
+  // Energy (0..1) -> Gain (0..~0.5), shaped and perceptual
+  function energyToGain(e) {
+    if (e <= AUDIO_GATE) return 0;
+
+    const x = (e - AUDIO_GATE) / (1 - AUDIO_GATE); // 0..1
+    const shaped = Math.pow(clamp01(x), AUDIO_SHAPE);
+
+    const db = AUDIO_MIN_DB + (AUDIO_MAX_DB - AUDIO_MIN_DB) * shaped;
+    return dbToGain(db);
+  }
+
+  async function requestMotionPermissionIfNeeded() {
+    const needs = (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function')
+              || (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function');
+
+    if (!needs) return true;
+
+    const reqs = [];
+    if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
+      reqs.push(DeviceMotionEvent.requestPermission().then(s => s === 'granted'));
+    }
+    if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+      reqs.push(DeviceOrientationEvent.requestPermission().then(s => s === 'granted'));
+    }
+    const results = await Promise.all(reqs);
+    return results.every(Boolean);
+  }
+
+  function computePrecisionScore() {
+    if (dirs.length < 8) return 0;
+
+    // Mean direction
+    let mx=0,my=0,mz=0;
+    for (const d of dirs) { mx+=d.x; my+=d.y; mz+=d.z; }
+    const inv = 1 / dirs.length;
+    mx*=inv; my*=inv; mz*=inv;
+
+    const mMag = vecMag(mx,my,mz);
+    if (mMag < 1e-6) return 0;
+
+    // Avg angular deviation from mean
+    let dev = 0;
+    for (const d of dirs) {
+      const dot = (d.x*mx + d.y*my + d.z*mz) / (mMag * 1.0);
+      const c = Math.max(-1, Math.min(1, dot));
+      dev += Math.acos(c);
+    }
+    dev *= inv;
+
+    // Map deviation -> 0..1 (tune if needed)
+    const tight = 0.15;
+    const loose = 0.60;
+    return clamp01((loose - dev) / (loose - tight));
+  }
+
+  function updateUI(precisionScore, speedScore, energy01) {
+    const p = Math.round(precisionScore * 100);
+    const s = Math.round(speedScore * 100);
+    const e = Math.round(energy01 * 100);
+
+    precisionEl.textContent = p;
+    speedEl.textContent = s;
+    energyEl.textContent = e;
+
+    precisionBar.style.width = `${p}%`;
+    speedBar.style.width = `${s}%`;
+    energyBar.style.width = `${e}%`;
+
+    bigChargeEl.textContent = `${e}%`;
+  }
+
+  function ensureAudio() {
+    if (audioCtx) return;
+
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    gainNode = audioCtx.createGain();
+    gainNode.gain.value = 0;
+
+    osc = audioCtx.createOscillator();
+    osc.type = 'sine';
+    osc.frequency.value = TONE_HZ;
+
+    osc.connect(gainNode);
+    gainNode.connect(audioCtx.destination);
+    osc.start();
+  }
+
+  function setAudioFromEnergy(eUI) {
+    if (!gainNode) return;
+
+    // Smooth gain changes to avoid zipper noise
+    const g = energyToGain(eUI);
+    const now = audioCtx.currentTime;
+    gainNode.gain.cancelScheduledValues(now);
+    gainNode.gain.setTargetAtTime(g, now, 0.06);
+  }
+
+  function onMotion(e) {
+    if (!running) return;
+
+    const t = performance.now() / 1000;
+    const dt = (lastT == null) ? 0 : (t - lastT);
+    lastT = t;
+
+    const rr = e.rotationRate;
+    if (!rr) return;
+
+    // Treat as arbitrary units (iOS often reports deg/s); normalize with SPEED_NORM.
+    const x = rr.beta ?? 0;
+    const y = rr.gamma ?? 0;
+    const z = rr.alpha ?? 0;
+
+    // Low-pass filter
+    ox = lerp(ox, x, SMOOTHING);
+    oy = lerp(oy, y, SMOOTHING);
+    oz = lerp(oz, z, SMOOTHING);
+
+    const mag = vecMag(ox,oy,oz);
+
+    // Speed score
+    const speedScore = clamp01(mag / SPEED_NORM);
+
+    // Precision: only collect direction if moving enough
+    if (mag > MIN_OMEGA) {
+      const invMag = 1 / mag;
+      dirs.push({ x: ox*invMag, y: oy*invMag, z: oz*invMag });
+      if (dirs.length > PRECISION_WINDOW) dirs.shift();
+    } else {
+      if (dirs.length) dirs.shift();
+    }
+
+    const precisionScore = computePrecisionScore();
+
+    // Energy earn/decay
+    if (dt > 0) {
+      const earn = speedScore * precisionScore;
+      const delta = (ENERGY_GAIN * earn - ENERGY_DECAY) * dt;
+      energy = clamp01(energy + delta);
+
+      // UI/audio smoothing
+      energyUI = lerp(energyUI, energy, ENERGY_UI_SMOOTH);
+    }
+
+    updateUI(precisionScore, speedScore, energyUI);
+
+    // Audio follows smoothed energy
+    if (audioCtx && audioCtx.state === 'running') {
+      setAudioFromEnergy(energyUI);
+    }
+  }
+
+  async function start() {
+    statusEl.textContent = 'requesting permission…';
+
+    if (!window.isSecureContext) {
+      statusEl.textContent = 'needs https (secure context)';
+      return;
+    }
+
+    const ok = await requestMotionPermissionIfNeeded();
+    if (!ok) {
+      statusEl.textContent = 'permission denied';
+      return;
+    }
+
+    // Start audio + resume (must be in user gesture)
+    ensureAudio();
+    try { await audioCtx.resume(); } catch (_) {}
+
+    // Reset state
+    running = true;
+    lastT = null;
+    ox=oy=oz=0;
+    dirs.length = 0;
+    energy = 0;
+    energyUI = 0;
+
+    setAudioFromEnergy(0);
+
+    window.addEventListener('devicemotion', onMotion, { passive: true });
+    statusEl.textContent = 'running';
+    startBtn.textContent = 'Stop';
+  }
+
+  function stop() {
+    running = false;
+    window.removeEventListener('devicemotion', onMotion);
+
+    // Fade out tone quickly
+    if (audioCtx && gainNode) {
+      const now = audioCtx.currentTime;
+      gainNode.gain.cancelScheduledValues(now);
+      gainNode.gain.setTargetAtTime(0, now, 0.05);
+    }
+
+    statusEl.textContent = 'stopped';
+    startBtn.textContent = 'Start';
+  }
+
+  startBtn.addEventListener('click', () => {
+    if (!running) start();
+    else stop();
+  });
+})();
+</script>
+</body>
+</html>
