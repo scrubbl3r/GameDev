@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Gyro Energy</title>
   <style>
-    :root { --green: #7dd35f; }
+    :root { --green:#7dd35f; }
 
     html, body {
       height: 100%;
@@ -13,6 +13,34 @@
       background: #000;
       color: var(--green);
       font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+    }
+
+    .app {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      padding: 18px 14px 20px;
+      box-sizing: border-box;
+      text-align: center;
+      gap: 14px;
+    }
+
+    /* Big readout is now part of normal flow (no overlay), so it can't overlap */
+    .bigCharge {
+      font-weight: 900;
+      font-size: clamp(72px, 18vw, 180px);
+      letter-spacing: -0.05em;
+      color: var(--green);
+      line-height: 0.95;
+      text-shadow: 0 0 18px rgba(125,211,95,0.16);
+      margin-top: 4px;
+    }
+    .bigSub {
+      margin-top: -6px;
+      font-size: 14px;
+      opacity: 0.75;
     }
 
     button {
@@ -24,24 +52,39 @@
       border-radius: 10px;
     }
 
-    .wrap {
-      min-height: 100%;
-      padding: 16px;
-      text-align: center;
+    .statusRow {
+      font-size: 14px;
+      opacity: 0.9;
+      margin-top: -4px;
     }
 
-    .row { margin-top: 12px; font-size: 16px; }
+    .panel {
+      width: min(560px, 92vw);
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      margin-top: 6px;
+    }
+
+    .metric {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      align-items: center;
+    }
+    .label {
+      font-size: 16px;
+    }
 
     .bar {
       height: 18px;
-      width: min(520px, 92vw);
-      margin: 6px auto 0;
-      border: 1px solid rgba(125,211,95,0.6);
+      width: 100%;
+      border: 1px solid rgba(125,211,95,0.60);
       border-radius: 10px;
       overflow: hidden;
       background: rgba(125,211,95,0.08);
+      box-sizing: border-box;
     }
-
     .fill {
       height: 100%;
       width: 0%;
@@ -50,66 +93,51 @@
     }
 
     .small {
+      width: min(560px, 92vw);
       opacity: 0.75;
       font-size: 13px;
-      margin-top: 10px;
+      margin-top: 2px;
+      line-height: 1.35;
     }
-
     code {
       background: rgba(125,211,95,0.08);
       border: 1px solid rgba(125,211,95,0.35);
       padding: 2px 6px;
       border-radius: 6px;
     }
-
-    /* Big centered charge */
-    .bigChargeWrap {
-      position: fixed;
-      inset: 0;
-      display: grid;
-      place-items: center;
-      pointer-events: none;
-    }
-    .bigCharge {
-      font-weight: 800;
-      font-size: clamp(72px, 20vw, 190px);
-      letter-spacing: -0.05em;
-      color: var(--green);
-      opacity: 0.95;
-      text-shadow: 0 0 18px rgba(125,211,95,0.15);
-    }
-    .bigSub {
-      margin-top: -10px;
-      font-size: 14px;
-      opacity: 0.7;
-    }
   </style>
 </head>
 <body>
-  <div class="wrap">
-    <button id="startBtn">Start</button>
-    <div class="row">Status: <span id="status">idle</span></div>
-
-    <div class="row">Precision: <span id="precision">0</span></div>
-    <div class="bar"><div id="precisionBar" class="fill"></div></div>
-
-    <div class="row">Speed: <span id="speed">0</span></div>
-    <div class="bar"><div id="speedBar" class="fill"></div></div>
-
-    <div class="row">Energy: <span id="energy">0</span></div>
-    <div class="bar"><div id="energyBar" class="fill"></div></div>
-
-    <div class="small">
-      iOS requires <code>https</code> + motion permission + audio started from button.
-    </div>
-  </div>
-
-  <div class="bigChargeWrap">
+  <main class="app">
     <div>
       <div id="bigCharge" class="bigCharge">0%</div>
       <div class="bigSub">charge</div>
     </div>
-  </div>
+
+    <button id="startBtn">Start</button>
+    <div class="statusRow">Status: <span id="status">idle</span></div>
+
+    <section class="panel">
+      <div class="metric">
+        <div class="label">Precision: <span id="precision">0</span></div>
+        <div class="bar"><div id="precisionBar" class="fill"></div></div>
+      </div>
+
+      <div class="metric">
+        <div class="label">Speed: <span id="speed">0</span></div>
+        <div class="bar"><div id="speedBar" class="fill"></div></div>
+      </div>
+
+      <div class="metric">
+        <div class="label">Energy: <span id="energy">0</span></div>
+        <div class="bar"><div id="energyBar" class="fill"></div></div>
+      </div>
+    </section>
+
+    <div class="small">
+      iOS requires <code>https</code> + motion permission + audio started from a button.
+    </div>
+  </main>
 
 <script>
 (() => {
@@ -127,44 +155,40 @@
   const bigChargeEl = document.getElementById('bigCharge');
 
   // ===========================================================================
-  // SSOT TUNABLES
+  // SSOT TUNABLES (ADJUSTED)
   // ===========================================================================
 
   // Filters
-  const OMEGA_LPF = 0.18;          // low-pass for gyro (0..1). higher = snappier
-  const UI_SMOOTH = 0.10;          // smoothing for displayed energy/charge
+  const OMEGA_LPF = 0.25;          // was 0.18 (snappier so windows fill)
+  const UI_SMOOTH = 0.10;
 
-  // Ignore tiny motion
-  const MIN_OMEGA = 0.25;
+  // Motion gate (lowered so it actually registers)
+  const MIN_OMEGA = 0.08;          // was 0.25
 
-  // SPEED: realistic starting point for iPhone gyro (often deg/s-ish). You will tune.
-  // If speed still pegs, raise this (e.g. 20 → 35 → 50).
+  // SPEED: starting point (tune after)
   const SPEED_NORM = 22.0;
+  const SPEED_SHAPE = 1.35;
 
-  // Soft-saturation curve for speed (prevents instant pegging)
-  const SPEED_SHAPE = 1.35;        // 1.2–1.7 typical
+  // Windows
+  const WINDOW_SAMPLES = 48;
 
-  // Precision components windows
-  const WINDOW_SAMPLES = 48;       // ~0.8s at 60Hz (enough for wrist roll feel)
+  // Balance
+  const BALANCE_WEIGHT = 1.0;
 
-  // Balance scoring strength
-  const BALANCE_WEIGHT = 1.0;      // 0..1 (keep 1.0 for “must be 3D-ish”)
+  // Coverage thresholds (loosened)
+  const COVERAGE_R_SINGLE = 0.98;  // was 0.93
+  const COVERAGE_R_GOOD   = 0.70;  // was 0.42
 
-  // Coverage thresholds (how much the direction "moves around")
-  const COVERAGE_R_SINGLE = 0.93;  // resultant length near this => basically single-axis
-  const COVERAGE_R_GOOD   = 0.42;  // resultant length near/below this => good orbit coverage
-
-  // Smoothness thresholds (jerk of omega vector)
-  // Larger values => more tolerant. If it feels too strict, raise these.
-  const JERK_TIGHT = 10.0;         // “very smooth”
-  const JERK_LOOSE = 60.0;         // “pretty shaky”
+  // Smoothness thresholds (loosened)
+  const JERK_TIGHT = 25.0;         // was 10
+  const JERK_LOOSE = 140.0;        // was 60
 
   // Energy earn/decay
   const ENERGY_GAIN  = 0.75;
   const ENERGY_DECAY = 0.16;
 
   // Audio mapping
-  const AUDIO_GATE   = 0.06;       // energy below this => silent
+  const AUDIO_GATE   = 0.06;
   const AUDIO_MIN_DB = -50;
   const AUDIO_MAX_DB = -6;
   const AUDIO_EXP    = 1.8;
@@ -178,7 +202,6 @@
   const mag3 = (x,y,z) => Math.sqrt(x*x+y*y+z*z);
   const dbToGain = (db) => Math.pow(10, db/20);
 
-  // energy (0..1) -> gain (perceptual)
   function energyToGain(e) {
     if (e <= AUDIO_GATE) return 0;
     const x = (e - AUDIO_GATE) / (1 - AUDIO_GATE);
@@ -187,31 +210,22 @@
     return dbToGain(db);
   }
 
-  // speed soft saturation: 1 - exp(-k*x) style
   function speedCurve(norm01) {
     const x = Math.max(0, norm01);
-    // Convert to a "feels good" ramp: early response but no instant peg
-    // The SPEED_SHAPE acts like steepness.
-    const y = 1 - Math.exp(-SPEED_SHAPE * x);
-    return clamp01(y);
+    return clamp01(1 - Math.exp(-SPEED_SHAPE * x));
   }
 
-  // balance score from RMS per-axis distribution
   function balanceScoreFromRMS(rmsX, rmsY, rmsZ) {
     const sum = rmsX + rmsY + rmsZ;
     if (sum < 1e-6) return 0;
-
     const px = rmsX / sum, py = rmsY / sum, pz = rmsZ / sum;
     const m = (px + py + pz) / 3;
     const varr = ((px-m)*(px-m) + (py-m)*(py-m) + (pz-m)*(pz-m)) / 3;
     const std = Math.sqrt(varr);
-
-    // Max std happens near (1,0,0) distribution:
     const MAX_STD = Math.sqrt(2/9); // ~0.4714
     return clamp01(1 - (std / MAX_STD));
   }
 
-  // coverage from mean direction resultant length
   function coverageFromDirs(dirs) {
     if (dirs.length < 8) return 0;
     let mx=0,my=0,mz=0;
@@ -219,19 +233,16 @@
     const inv = 1 / dirs.length;
     mx*=inv; my*=inv; mz*=inv;
 
-    const R = mag3(mx,my,mz); // 0..1 (1 = all same direction)
-    // Map R: single-axis => 0, good coverage => 1
+    const R = mag3(mx,my,mz); // 0..1 (1 = locked direction)
     const t = (COVERAGE_R_SINGLE - R) / (COVERAGE_R_SINGLE - COVERAGE_R_GOOD);
     return clamp01(t);
   }
 
-  // smoothness from omega jerk (change rate)
   function smoothnessFromJerks(jerks) {
     if (jerks.length < 6) return 0;
     let acc = 0;
     for (const j of jerks) acc += j;
     const avg = acc / jerks.length;
-
     const t = (JERK_LOOSE - avg) / (JERK_LOOSE - JERK_TIGHT);
     return clamp01(t);
   }
@@ -258,13 +269,11 @@
   let running = false;
   let lastT = null;
 
-  // filtered omega
   let ox=0, oy=0, oz=0;
 
-  // windows
-  const omegaWin = [];   // {x,y,z}
-  const dirWin = [];     // unit direction
-  const jerkWin = [];    // scalar jerk
+  const omegaWin = [];
+  const dirWin = [];
+  const jerkWin = [];
 
   let energy = 0;
   let energyUI = 0;
@@ -290,7 +299,6 @@
   function setAudioFromEnergy(eUI) {
     if (!gainNode) return;
     const g = energyToGain(eUI);
-
     const now = audioCtx.currentTime;
     gainNode.gain.cancelScheduledValues(now);
     gainNode.gain.setTargetAtTime(g, now, 0.06);
@@ -322,35 +330,31 @@
     const rr = e.rotationRate;
     if (!rr) return;
 
-    // iOS frequently reports in deg/s; we treat as arbitrary and normalize by SPEED_NORM.
     const x = rr.beta ?? 0;
     const y = rr.gamma ?? 0;
     const z = rr.alpha ?? 0;
 
-    // low-pass
     const prevOx = ox, prevOy = oy, prevOz = oz;
+
     ox = lerp(ox, x, OMEGA_LPF);
     oy = lerp(oy, y, OMEGA_LPF);
     oz = lerp(oz, z, OMEGA_LPF);
 
     const m = mag3(ox,oy,oz);
 
-    // speed score (soft curve)
+    // Speed
     const speedRaw = m / SPEED_NORM;
     const speedScore = speedCurve(speedRaw);
 
-    // windows update
+    // Windows
     if (m > MIN_OMEGA) {
-      // omega window
       omegaWin.push({x: ox, y: oy, z: oz});
       if (omegaWin.length > WINDOW_SAMPLES) omegaWin.shift();
 
-      // direction window
       const inv = 1 / m;
       dirWin.push({x: ox*inv, y: oy*inv, z: oz*inv});
       if (dirWin.length > WINDOW_SAMPLES) dirWin.shift();
 
-      // jerk window (requires dt)
       if (dt > 0) {
         const dx = ox - prevOx, dy = oy - prevOy, dz = oz - prevOz;
         const jerk = mag3(dx,dy,dz) / dt;
@@ -358,14 +362,12 @@
         if (jerkWin.length > WINDOW_SAMPLES) jerkWin.shift();
       }
     } else {
-      // decay windows gently when still
       if (omegaWin.length) omegaWin.shift();
       if (dirWin.length) dirWin.shift();
       if (jerkWin.length) jerkWin.shift();
     }
 
-    // --- Precision components ---
-    // Balance: RMS per axis over window
+    // Precision components
     let rmsX=0,rmsY=0,rmsZ=0;
     if (omegaWin.length) {
       let sx=0,sy=0,sz=0;
@@ -375,22 +377,16 @@
       rmsY = Math.sqrt(sy*invN);
       rmsZ = Math.sqrt(sz*invN);
     }
+
     const balance = balanceScoreFromRMS(rmsX, rmsY, rmsZ);
-
-    // Coverage: reward direction exploration (not locked axis)
     const coverage = coverageFromDirs(dirWin);
-
-    // Smoothness: penalize jitter/shake
     const smooth = smoothnessFromJerks(jerkWin);
 
-    // Precision aggregate (weighted toward 3D wrist roll)
     const precisionScore = clamp01(
-      smooth *
-      lerp(1.0, balance, BALANCE_WEIGHT) *
-      coverage
+      smooth * lerp(1.0, balance, BALANCE_WEIGHT) * coverage
     );
 
-    // --- Energy earn/decay ---
+    // Energy
     if (dt > 0) {
       const earn = speedScore * precisionScore;
       const delta = (ENERGY_GAIN * earn - ENERGY_DECAY) * dt;
@@ -424,10 +420,12 @@
 
     running = true;
     lastT = null;
+
     ox=oy=oz=0;
     omegaWin.length = 0;
     dirWin.length = 0;
     jerkWin.length = 0;
+
     energy = 0;
     energyUI = 0;
 
