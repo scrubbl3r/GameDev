@@ -1,17 +1,66 @@
 <!doctype html>
-<html>
+<html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Gyro Pattern Tester</title>
+  <title>Gyro Energy</title>
   <style>
-    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; padding: 16px; }
-    button { font-size: 18px; padding: 12px 16px; }
-    .row { margin-top: 14px; font-size: 16px; }
-    .bar { height: 18px; width: 100%; background: #eee; border-radius: 10px; overflow: hidden; }
-    .fill { height: 100%; width: 0%; background: #111; transition: width 80ms linear; }
-    .small { opacity: 0.7; font-size: 13px; margin-top: 6px; }
-    code { background: #f6f6f6; padding: 2px 6px; border-radius: 6px; }
+    :root { --green: #7dd35f; }
+
+    html, body {
+      height: 100%;
+      margin: 0;
+      background: #000;
+      color: var(--green);
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+    }
+
+    button {
+      font-size: 18px;
+      padding: 12px 16px;
+      background: transparent;
+      border: 1px solid var(--green);
+      color: var(--green);
+      border-radius: 10px;
+    }
+
+    .wrap {
+      min-height: 100%;
+      padding: 16px;
+      text-align: center;
+    }
+
+    .row { margin-top: 12px; font-size: 16px; }
+
+    .bar {
+      height: 18px;
+      width: min(520px, 92vw);
+      margin: 6px auto 0;
+      border: 1px solid rgba(125,211,95,0.6);
+      border-radius: 10px;
+      overflow: hidden;
+      background: rgba(125,211,95,0.08);
+    }
+
+    .fill {
+      height: 100%;
+      width: 0%;
+      background: var(--green);
+      transition: width 80ms linear;
+    }
+
+    .small {
+      opacity: 0.75;
+      font-size: 13px;
+      margin-top: 10px;
+    }
+
+    code {
+      background: rgba(125,211,95,0.08);
+      border: 1px solid rgba(125,211,95,0.35);
+      padding: 2px 6px;
+      border-radius: 6px;
+    }
 
     /* Big centered charge */
     .bigChargeWrap {
@@ -22,39 +71,39 @@
       pointer-events: none;
     }
     .bigCharge {
-      font-weight: 700;
-      font-size: clamp(64px, 18vw, 180px);
-      letter-spacing: -0.04em;
-      color: #111;
-      opacity: 0.92;
-      text-shadow: 0 1px 0 rgba(0,0,0,0.05);
+      font-weight: 800;
+      font-size: clamp(72px, 20vw, 190px);
+      letter-spacing: -0.05em;
+      color: var(--green);
+      opacity: 0.95;
+      text-shadow: 0 0 18px rgba(125,211,95,0.15);
     }
     .bigSub {
       margin-top: -10px;
       font-size: 14px;
-      opacity: 0.6;
-      text-align: center;
+      opacity: 0.7;
     }
   </style>
 </head>
 <body>
-  <button id="startBtn">Start</button>
-  <div class="row">Status: <span id="status">idle</span></div>
+  <div class="wrap">
+    <button id="startBtn">Start</button>
+    <div class="row">Status: <span id="status">idle</span></div>
 
-  <div class="row">Precision: <span id="precision">0</span></div>
-  <div class="bar"><div id="precisionBar" class="fill"></div></div>
+    <div class="row">Precision: <span id="precision">0</span></div>
+    <div class="bar"><div id="precisionBar" class="fill"></div></div>
 
-  <div class="row">Speed: <span id="speed">0</span></div>
-  <div class="bar"><div id="speedBar" class="fill"></div></div>
+    <div class="row">Speed: <span id="speed">0</span></div>
+    <div class="bar"><div id="speedBar" class="fill"></div></div>
 
-  <div class="row">Energy: <span id="energy">0</span></div>
-  <div class="bar"><div id="energyBar" class="fill"></div></div>
+    <div class="row">Energy: <span id="energy">0</span></div>
+    <div class="bar"><div id="energyBar" class="fill"></div></div>
 
-  <div class="small">
-    Notes: iOS requires <code>https</code> + permission + audio start from a user gesture.
+    <div class="small">
+      iOS requires <code>https</code> + motion permission + audio started from button.
+    </div>
   </div>
 
-  <!-- Big centered readout -->
   <div class="bigChargeWrap">
     <div>
       <div id="bigCharge" class="bigCharge">0%</div>
@@ -66,6 +115,7 @@
 (() => {
   const startBtn = document.getElementById('startBtn');
   const statusEl = document.getElementById('status');
+
   const precisionEl = document.getElementById('precision');
   const speedEl = document.getElementById('speed');
   const energyEl = document.getElementById('energy');
@@ -76,65 +126,119 @@
 
   const bigChargeEl = document.getElementById('bigCharge');
 
-  // ---- Tunables (SSOT) ----
-  const SMOOTHING = 0.15;        // 0..1 (higher = snappier, lower = smoother)
-  const MIN_OMEGA = 0.15;        // ignore tiny motion noise
-  const PRECISION_WINDOW = 40;   // samples
+  // ===========================================================================
+  // SSOT TUNABLES
+  // ===========================================================================
 
-  const ENERGY_DECAY = 0.12;     // per second decay when not earning
-  const ENERGY_GAIN  = 0.65;     // multiplier for earning
-  const SPEED_NORM   = 4.0;      // higher => harder to max speed
+  // Filters
+  const OMEGA_LPF = 0.18;          // low-pass for gyro (0..1). higher = snappier
+  const UI_SMOOTH = 0.10;          // smoothing for displayed energy/charge
 
-  // Big number smoothing (avoid flicker)
-  const ENERGY_UI_SMOOTH = 0.08; // 0..1
+  // Ignore tiny motion
+  const MIN_OMEGA = 0.25;
+
+  // SPEED: realistic starting point for iPhone gyro (often deg/s-ish). You will tune.
+  // If speed still pegs, raise this (e.g. 20 → 35 → 50).
+  const SPEED_NORM = 22.0;
+
+  // Soft-saturation curve for speed (prevents instant pegging)
+  const SPEED_SHAPE = 1.35;        // 1.2–1.7 typical
+
+  // Precision components windows
+  const WINDOW_SAMPLES = 48;       // ~0.8s at 60Hz (enough for wrist roll feel)
+
+  // Balance scoring strength
+  const BALANCE_WEIGHT = 1.0;      // 0..1 (keep 1.0 for “must be 3D-ish”)
+
+  // Coverage thresholds (how much the direction "moves around")
+  const COVERAGE_R_SINGLE = 0.93;  // resultant length near this => basically single-axis
+  const COVERAGE_R_GOOD   = 0.42;  // resultant length near/below this => good orbit coverage
+
+  // Smoothness thresholds (jerk of omega vector)
+  // Larger values => more tolerant. If it feels too strict, raise these.
+  const JERK_TIGHT = 10.0;         // “very smooth”
+  const JERK_LOOSE = 60.0;         // “pretty shaky”
+
+  // Energy earn/decay
+  const ENERGY_GAIN  = 0.75;
+  const ENERGY_DECAY = 0.16;
 
   // Audio mapping
-  const AUDIO_GATE = 0.05;       // energy below this => silent
-  const AUDIO_MIN_DB = -50;      // near-silent
-  const AUDIO_MAX_DB = -6;       // comfortable top end
-  const AUDIO_SHAPE = 1.8;       // curve exponent (1.6–2.2 good range)
-  const TONE_HZ = 220;           // base tone (A3-ish). Keep it gentle.
+  const AUDIO_GATE   = 0.06;       // energy below this => silent
+  const AUDIO_MIN_DB = -50;
+  const AUDIO_MAX_DB = -6;
+  const AUDIO_EXP    = 1.8;
+  const TONE_HZ      = 220;
 
-  let running = false;
-  let lastT = null;
+  // ===========================================================================
+  // Helpers
+  // ===========================================================================
+  const clamp01 = (x) => Math.max(0, Math.min(1, x));
+  const lerp = (a,b,t) => a + (b-a)*t;
+  const mag3 = (x,y,z) => Math.sqrt(x*x+y*y+z*z);
+  const dbToGain = (db) => Math.pow(10, db/20);
 
-  // Low-pass filtered omega vector
-  let ox = 0, oy = 0, oz = 0;
-
-  // Precision: last N normalized direction vectors
-  const dirs = [];
-
-  let energy = 0;       // true energy
-  let energyUI = 0;     // smoothed for big readout + audio
-
-  // WebAudio state (created on Start button)
-  let audioCtx = null;
-  let osc = null;
-  let gainNode = null;
-
-  function clamp01(x){ return Math.max(0, Math.min(1, x)); }
-  function lerp(a,b,t){ return a + (b-a)*t; }
-  function vecMag(x,y,z){ return Math.sqrt(x*x+y*y+z*z); }
-
-  function dbToGain(db) {
-    return Math.pow(10, db / 20);
-  }
-
-  // Energy (0..1) -> Gain (0..~0.5), shaped and perceptual
+  // energy (0..1) -> gain (perceptual)
   function energyToGain(e) {
     if (e <= AUDIO_GATE) return 0;
-
-    const x = (e - AUDIO_GATE) / (1 - AUDIO_GATE); // 0..1
-    const shaped = Math.pow(clamp01(x), AUDIO_SHAPE);
-
+    const x = (e - AUDIO_GATE) / (1 - AUDIO_GATE);
+    const shaped = Math.pow(clamp01(x), AUDIO_EXP);
     const db = AUDIO_MIN_DB + (AUDIO_MAX_DB - AUDIO_MIN_DB) * shaped;
     return dbToGain(db);
+  }
+
+  // speed soft saturation: 1 - exp(-k*x) style
+  function speedCurve(norm01) {
+    const x = Math.max(0, norm01);
+    // Convert to a "feels good" ramp: early response but no instant peg
+    // The SPEED_SHAPE acts like steepness.
+    const y = 1 - Math.exp(-SPEED_SHAPE * x);
+    return clamp01(y);
+  }
+
+  // balance score from RMS per-axis distribution
+  function balanceScoreFromRMS(rmsX, rmsY, rmsZ) {
+    const sum = rmsX + rmsY + rmsZ;
+    if (sum < 1e-6) return 0;
+
+    const px = rmsX / sum, py = rmsY / sum, pz = rmsZ / sum;
+    const m = (px + py + pz) / 3;
+    const varr = ((px-m)*(px-m) + (py-m)*(py-m) + (pz-m)*(pz-m)) / 3;
+    const std = Math.sqrt(varr);
+
+    // Max std happens near (1,0,0) distribution:
+    const MAX_STD = Math.sqrt(2/9); // ~0.4714
+    return clamp01(1 - (std / MAX_STD));
+  }
+
+  // coverage from mean direction resultant length
+  function coverageFromDirs(dirs) {
+    if (dirs.length < 8) return 0;
+    let mx=0,my=0,mz=0;
+    for (const d of dirs) { mx+=d.x; my+=d.y; mz+=d.z; }
+    const inv = 1 / dirs.length;
+    mx*=inv; my*=inv; mz*=inv;
+
+    const R = mag3(mx,my,mz); // 0..1 (1 = all same direction)
+    // Map R: single-axis => 0, good coverage => 1
+    const t = (COVERAGE_R_SINGLE - R) / (COVERAGE_R_SINGLE - COVERAGE_R_GOOD);
+    return clamp01(t);
+  }
+
+  // smoothness from omega jerk (change rate)
+  function smoothnessFromJerks(jerks) {
+    if (jerks.length < 6) return 0;
+    let acc = 0;
+    for (const j of jerks) acc += j;
+    const avg = acc / jerks.length;
+
+    const t = (JERK_LOOSE - avg) / (JERK_LOOSE - JERK_TIGHT);
+    return clamp01(t);
   }
 
   async function requestMotionPermissionIfNeeded() {
     const needs = (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function')
               || (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function');
-
     if (!needs) return true;
 
     const reqs = [];
@@ -148,31 +252,48 @@
     return results.every(Boolean);
   }
 
-  function computePrecisionScore() {
-    if (dirs.length < 8) return 0;
+  // ===========================================================================
+  // State
+  // ===========================================================================
+  let running = false;
+  let lastT = null;
 
-    // Mean direction
-    let mx=0,my=0,mz=0;
-    for (const d of dirs) { mx+=d.x; my+=d.y; mz+=d.z; }
-    const inv = 1 / dirs.length;
-    mx*=inv; my*=inv; mz*=inv;
+  // filtered omega
+  let ox=0, oy=0, oz=0;
 
-    const mMag = vecMag(mx,my,mz);
-    if (mMag < 1e-6) return 0;
+  // windows
+  const omegaWin = [];   // {x,y,z}
+  const dirWin = [];     // unit direction
+  const jerkWin = [];    // scalar jerk
 
-    // Avg angular deviation from mean
-    let dev = 0;
-    for (const d of dirs) {
-      const dot = (d.x*mx + d.y*my + d.z*mz) / (mMag * 1.0);
-      const c = Math.max(-1, Math.min(1, dot));
-      dev += Math.acos(c);
-    }
-    dev *= inv;
+  let energy = 0;
+  let energyUI = 0;
 
-    // Map deviation -> 0..1 (tune if needed)
-    const tight = 0.15;
-    const loose = 0.60;
-    return clamp01((loose - dev) / (loose - tight));
+  // Audio
+  let audioCtx = null, osc = null, gainNode = null;
+
+  function ensureAudio() {
+    if (audioCtx) return;
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    gainNode = audioCtx.createGain();
+    gainNode.gain.value = 0;
+
+    osc = audioCtx.createOscillator();
+    osc.type = 'sine';
+    osc.frequency.value = TONE_HZ;
+
+    osc.connect(gainNode);
+    gainNode.connect(audioCtx.destination);
+    osc.start();
+  }
+
+  function setAudioFromEnergy(eUI) {
+    if (!gainNode) return;
+    const g = energyToGain(eUI);
+
+    const now = audioCtx.currentTime;
+    gainNode.gain.cancelScheduledValues(now);
+    gainNode.gain.setTargetAtTime(g, now, 0.06);
   }
 
   function updateUI(precisionScore, speedScore, energy01) {
@@ -191,32 +312,6 @@
     bigChargeEl.textContent = `${e}%`;
   }
 
-  function ensureAudio() {
-    if (audioCtx) return;
-
-    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    gainNode = audioCtx.createGain();
-    gainNode.gain.value = 0;
-
-    osc = audioCtx.createOscillator();
-    osc.type = 'sine';
-    osc.frequency.value = TONE_HZ;
-
-    osc.connect(gainNode);
-    gainNode.connect(audioCtx.destination);
-    osc.start();
-  }
-
-  function setAudioFromEnergy(eUI) {
-    if (!gainNode) return;
-
-    // Smooth gain changes to avoid zipper noise
-    const g = energyToGain(eUI);
-    const now = audioCtx.currentTime;
-    gainNode.gain.cancelScheduledValues(now);
-    gainNode.gain.setTargetAtTime(g, now, 0.06);
-  }
-
   function onMotion(e) {
     if (!running) return;
 
@@ -227,45 +322,84 @@
     const rr = e.rotationRate;
     if (!rr) return;
 
-    // Treat as arbitrary units (iOS often reports deg/s); normalize with SPEED_NORM.
+    // iOS frequently reports in deg/s; we treat as arbitrary and normalize by SPEED_NORM.
     const x = rr.beta ?? 0;
     const y = rr.gamma ?? 0;
     const z = rr.alpha ?? 0;
 
-    // Low-pass filter
-    ox = lerp(ox, x, SMOOTHING);
-    oy = lerp(oy, y, SMOOTHING);
-    oz = lerp(oz, z, SMOOTHING);
+    // low-pass
+    const prevOx = ox, prevOy = oy, prevOz = oz;
+    ox = lerp(ox, x, OMEGA_LPF);
+    oy = lerp(oy, y, OMEGA_LPF);
+    oz = lerp(oz, z, OMEGA_LPF);
 
-    const mag = vecMag(ox,oy,oz);
+    const m = mag3(ox,oy,oz);
 
-    // Speed score
-    const speedScore = clamp01(mag / SPEED_NORM);
+    // speed score (soft curve)
+    const speedRaw = m / SPEED_NORM;
+    const speedScore = speedCurve(speedRaw);
 
-    // Precision: only collect direction if moving enough
-    if (mag > MIN_OMEGA) {
-      const invMag = 1 / mag;
-      dirs.push({ x: ox*invMag, y: oy*invMag, z: oz*invMag });
-      if (dirs.length > PRECISION_WINDOW) dirs.shift();
+    // windows update
+    if (m > MIN_OMEGA) {
+      // omega window
+      omegaWin.push({x: ox, y: oy, z: oz});
+      if (omegaWin.length > WINDOW_SAMPLES) omegaWin.shift();
+
+      // direction window
+      const inv = 1 / m;
+      dirWin.push({x: ox*inv, y: oy*inv, z: oz*inv});
+      if (dirWin.length > WINDOW_SAMPLES) dirWin.shift();
+
+      // jerk window (requires dt)
+      if (dt > 0) {
+        const dx = ox - prevOx, dy = oy - prevOy, dz = oz - prevOz;
+        const jerk = mag3(dx,dy,dz) / dt;
+        jerkWin.push(jerk);
+        if (jerkWin.length > WINDOW_SAMPLES) jerkWin.shift();
+      }
     } else {
-      if (dirs.length) dirs.shift();
+      // decay windows gently when still
+      if (omegaWin.length) omegaWin.shift();
+      if (dirWin.length) dirWin.shift();
+      if (jerkWin.length) jerkWin.shift();
     }
 
-    const precisionScore = computePrecisionScore();
+    // --- Precision components ---
+    // Balance: RMS per axis over window
+    let rmsX=0,rmsY=0,rmsZ=0;
+    if (omegaWin.length) {
+      let sx=0,sy=0,sz=0;
+      for (const o of omegaWin) { sx += o.x*o.x; sy += o.y*o.y; sz += o.z*o.z; }
+      const invN = 1 / omegaWin.length;
+      rmsX = Math.sqrt(sx*invN);
+      rmsY = Math.sqrt(sy*invN);
+      rmsZ = Math.sqrt(sz*invN);
+    }
+    const balance = balanceScoreFromRMS(rmsX, rmsY, rmsZ);
 
-    // Energy earn/decay
+    // Coverage: reward direction exploration (not locked axis)
+    const coverage = coverageFromDirs(dirWin);
+
+    // Smoothness: penalize jitter/shake
+    const smooth = smoothnessFromJerks(jerkWin);
+
+    // Precision aggregate (weighted toward 3D wrist roll)
+    const precisionScore = clamp01(
+      smooth *
+      lerp(1.0, balance, BALANCE_WEIGHT) *
+      coverage
+    );
+
+    // --- Energy earn/decay ---
     if (dt > 0) {
       const earn = speedScore * precisionScore;
       const delta = (ENERGY_GAIN * earn - ENERGY_DECAY) * dt;
       energy = clamp01(energy + delta);
-
-      // UI/audio smoothing
-      energyUI = lerp(energyUI, energy, ENERGY_UI_SMOOTH);
+      energyUI = lerp(energyUI, energy, UI_SMOOTH);
     }
 
     updateUI(precisionScore, speedScore, energyUI);
 
-    // Audio follows smoothed energy
     if (audioCtx && audioCtx.state === 'running') {
       setAudioFromEnergy(energyUI);
     }
@@ -285,15 +419,15 @@
       return;
     }
 
-    // Start audio + resume (must be in user gesture)
     ensureAudio();
     try { await audioCtx.resume(); } catch (_) {}
 
-    // Reset state
     running = true;
     lastT = null;
     ox=oy=oz=0;
-    dirs.length = 0;
+    omegaWin.length = 0;
+    dirWin.length = 0;
+    jerkWin.length = 0;
     energy = 0;
     energyUI = 0;
 
@@ -308,7 +442,6 @@
     running = false;
     window.removeEventListener('devicemotion', onMotion);
 
-    // Fade out tone quickly
     if (audioCtx && gainNode) {
       const now = audioCtx.currentTime;
       gainNode.gain.cancelScheduledValues(now);
