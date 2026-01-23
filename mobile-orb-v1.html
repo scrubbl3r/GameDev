@@ -160,9 +160,6 @@
       <br>
       <button id="startBtn">Start</button>
 
-      <div class="small">
-        Requires <code>https</code> + motion permission + audio started from the button (iOS).
-      </div>
     </section>
   </main>
 
@@ -260,7 +257,7 @@
 
   // NEW: overall output level
   // 1.0 = current loudness. Try 2.0–4.0. We clamp to 1.0 before feeding GainNode.
-  const MASTER_GAIN  = 2.0;
+  const MASTER_GAIN  = 3.0;
 
   const TONE_BASE_HZ    = 180;
   const TONE_MAX_ADD_HZ = 220;
