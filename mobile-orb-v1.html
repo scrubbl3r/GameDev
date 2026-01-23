@@ -10,7 +10,7 @@
     html, body {
       height: 100%;
       margin: 0;
-      background: #000; /* will be overridden dynamically */
+      background: #000; /* overridden dynamically */
       color: var(--green);
       font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
       transition: background-color 80ms linear;
@@ -22,7 +22,7 @@
       flex-direction: column;
       align-items: center;
       justify-content: flex-start;
-      padding: 18px 14px 20px;
+      padding: 18px 14px 22px; /* a little extra bottom padding */
       box-sizing: border-box;
       text-align: center;
       gap: 14px;
@@ -90,29 +90,14 @@
       width: min(560px, 92vw);
       opacity: 0.75;
       font-size: 13px;
-      margin-top: 2px;
       line-height: 1.35;
+      margin-top: 2px;
     }
     code {
       background: rgba(125,211,95,0.08);
       border: 1px solid rgba(125,211,95,0.35);
       padding: 2px 6px;
       border-radius: 6px;
-    }
-
-    /* bottom area */
-    .spacer {
-      flex: 1;
-      min-height: 10px;
-    }
-
-    .bottomBar {
-      width: min(560px, 92vw);
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 10px;
-      padding-top: 8px;
     }
 
     button {
@@ -122,8 +107,7 @@
       border: 1px solid var(--green);
       color: var(--green);
       border-radius: 10px;
-      width: 100%;
-      max-width: 560px;
+      width: min(560px, 92vw);
     }
   </style>
 </head>
@@ -171,16 +155,14 @@
         <div class="label">Energy <span id="energy">0</span></div>
         <div class="bar"><div id="energyBar" class="fill"></div></div>
       </div>
-    </section>
 
-    <div class="spacer"></div>
-
-    <div class="bottomBar">
+      <!-- 1) Start button now sits one "space" below the energy meter -->
       <button id="startBtn">Start</button>
+
       <div class="small">
         Requires <code>https</code> + motion permission + audio started from the button (iOS).
       </div>
-    </div>
+    </section>
   </main>
 
 <script>
@@ -204,9 +186,8 @@
   const energyBar = document.getElementById('energyBar');
 
   // Background: linear from black (0) to bright red-orange (1)
-  // You can tweak target RGB if you want a different “hot” color.
   const BG0 = { r: 0,   g: 0,  b: 0  };
-  const BG1 = { r: 255, g: 42, b: 0  }; // bright red-orange
+  const BG1 = { r: 255, g: 42, b: 0  };
   function setBgFromEnergy(e01) {
     const t = Math.max(0, Math.min(1, e01));
     const r = Math.round(BG0.r + (BG1.r - BG0.r) * t);
@@ -220,57 +201,44 @@
   // DIAL PACK v4 — "FASTER DECAY" (PRESERVED)
   // ===========================================================================
 
-  // Input smoothing
   const OMEGA_LPF = 0.22;
 
-  // Two-window strategy
   const HUNT_WINDOW_SEC   = 1.35;
   const STABLE_WINDOW_SEC = 3.10;
 
   const MIN_WINDOW_SAMPLES = 55;
   const MAX_WINDOW_SAMPLES = 260;
 
-  // Ignore tiny motion noise
   const MIN_OMEGA = 0.08;
 
-  // SPEED
   const SPEED_NORM  = 140.0;
   const SPEED_SHAPE = 0.85;
 
-  // Groove lock hysteresis
   const LOCK_ON  = 0.30;
   const LOCK_OFF = 0.22;
 
-  // Autocorrelation tempo bounds
   const MIN_HZ = 0.55;
   const MAX_HZ = 2.30;
 
-  // Smoothness
   const JERK_TIGHT = 220.0;
   const JERK_LOOSE = 2600.0;
 
-  // Orbit preference
   const ORBIT_FLOOR      = 0.75;
   const ORBIT_STRICTNESS = 1.0;
 
-  // Energy dynamics
   const ENERGY_GAIN_LOCKED = 1.25;
   const ENERGY_GAIN_FREE   = 0.65;
 
-  // --- DECAY TUNING ---
   const ENERGY_DECAY       = 0.090;
   const STOP_SPEED_THRESH  = 0.06;
   const STOP_DECAY_MULT    = 1.0;
 
-  // Coasting only applies if you're STILL MOVING
   const COAST_QUALITY_MIN  = 0.28;
   const COAST_DECAY_MULT   = 0.65;
 
-  // UI smoothing
   const UI_SMOOTH   = 0.10;
   const LOCK_SMOOTH = 0.14;
 
-  // Hand-walking
   const GRACE_SEC = 0.75;
   const GRACE_SPEED_MIN = 0.12;
 
@@ -278,14 +246,15 @@
   const RECENTER_SPEED_MIN = 0.18;
   const RECENTER_GROOVE_MAX = 0.22;
 
-  // Signal normalization
   const NORM_ALPHA = 0.10;
 
-  // Audio
-  const AUDIO_GATE   = 0.06;
-  const AUDIO_MIN_DB = -50;
+  // ===========================================================================
+  // 2) AUDIO MAPPING — gentler curve, audible by ~10% energy
+  // ===========================================================================
+  const AUDIO_GATE   = 0.02;  // was 0.06: begin audible sooner
+  const AUDIO_MIN_DB = -42;   // was -50: raise floor slightly
   const AUDIO_MAX_DB = -6;
-  const AUDIO_EXP    = 1.8;
+  const AUDIO_EXP    = 1.15;  // was 1.8: gentler curve (less “late bloom”)
 
   const TONE_BASE_HZ    = 180;
   const TONE_MAX_ADD_HZ = 220;
@@ -532,8 +501,6 @@
     energyBar.style.width = `${energyP}%`;
 
     bigChargeEl.textContent = `${energyP}%`;
-
-    // Dynamic background color (linear 0..1)
     setBgFromEnergy(vals.energy);
   }
 
@@ -673,10 +640,8 @@
       const earn = gain * earnBase;
 
       let decay = ENERGY_DECAY;
-
       if (speedScore < STOP_SPEED_THRESH) decay *= STOP_DECAY_MULT;
       if (inGrace) decay *= 0.70;
-
       if (speedScore >= STOP_SPEED_THRESH && grooveQuality >= COAST_QUALITY_MIN) {
         decay *= COAST_DECAY_MULT;
       }
@@ -690,10 +655,7 @@
       orbit: orbitShown,
       smooth: smoothScore,
       speed: speedScore,
-      energy: energyUI,
-      locked: (lock || inGrace),
-      hz: grooveHz,
-      mode: lock ? 'locked' : (inGrace ? 'grace' : 'hunt')
+      energy: energyUI
     });
 
     setAudio(energyUI, lockStrength, (lock || inGrace));
@@ -709,7 +671,7 @@
       reqs.push(DeviceMotionEvent.requestPermission().then(s => s === 'granted'));
     }
     if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
-      reqs.push(DeviceOrientationEvent.requestPermission().then(s => s === 'granted'));
+      reqs.push(DeviceMotionEvent.requestPermission().then(s => s === 'granted'));
     }
     const results = await Promise.all(reqs);
     return results.every(Boolean);
@@ -749,6 +711,7 @@
     energyUI = 0;
 
     setAudio(0,0,false);
+    setBgFromEnergy(0);
 
     window.addEventListener('devicemotion', onMotion, { passive: true });
     startBtn.textContent = 'Stop';
