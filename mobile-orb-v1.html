@@ -230,12 +230,13 @@
   const energyBar = document.getElementById('energyBar');
 
   // ===========================================================================
-  // DIAL PACK v3 — "ENERGY SHOULD RISE" + HAND WALKING (REPLACE THIS WHOLE SECTION)
+  // DIAL PACK v4 — "FASTER DECAY" (REPLACE THIS WHOLE SECTION NEXT TIME)
   // ---------------------------------------------------------------------------
-  // Fixes:
-  //  - Energy no longer stuck at 0 when groove~0.30, speed~0.50, smooth~0.55.
-  //  - Easier lock acquisition (real-world autocorr peaks are lower than v2).
-  //  - Softer decay while you're "pretty groovy" but not fully locked yet.
+  // Goal: make charge dissipate quickly when motion ceases so tuning is clearer.
+  // Changes vs v3:
+  //  - Higher base decay
+  //  - Strong extra decay when "stopped" (speed very low)
+  //  - Coast decay softened ONLY while motion continues (so it doesn't linger)
   // ===========================================================================
 
   // Input smoothing
@@ -255,9 +256,9 @@
   const SPEED_NORM  = 140.0;
   const SPEED_SHAPE = 0.85;
 
-  // Groove lock hysteresis (LOWERED so groove≈30 can lock)
-  const LOCK_ON  = 0.30;     // was 0.48
-  const LOCK_OFF = 0.22;     // was 0.34
+  // Groove lock hysteresis
+  const LOCK_ON  = 0.30;
+  const LOCK_OFF = 0.22;
 
   // Autocorrelation tempo bounds
   const MIN_HZ = 0.55;
@@ -271,14 +272,18 @@
   const ORBIT_FLOOR      = 0.75;
   const ORBIT_STRICTNESS = 1.0;
 
-  // Energy dynamics (less "tax", more "feel alive")
+  // Energy dynamics
   const ENERGY_GAIN_LOCKED = 1.25;
-  const ENERGY_GAIN_FREE   = 0.65;   // was 0.30 (lets energy climb pre-lock)
-  const ENERGY_DECAY       = 0.045;  // was 0.085
+  const ENERGY_GAIN_FREE   = 0.65;
 
-  // If you have *some* grooveQuality, decay is softened instead of annihilating you
-  const COAST_QUALITY_MIN = 0.28;    // below = normal decay, above = coasting
-  const COAST_DECAY_MULT  = 0.55;    // decay *= this during coasting
+  // --- DECAY TUNING (MAIN CHANGE) ---
+  const ENERGY_DECAY       = 0.095;  // was 0.045 (base decay roughly ~2x)
+  const STOP_SPEED_THRESH  = 0.06;   // below this, treat as "stopped"
+  const STOP_DECAY_MULT    = 3.25;   // extra decay when stopped (fast drop)
+
+  // Coasting only applies if you're STILL MOVING
+  const COAST_QUALITY_MIN  = 0.28;
+  const COAST_DECAY_MULT   = 0.65;  // less generous than before (was 0.55)
 
   // UI smoothing
   const UI_SMOOTH   = 0.10;
@@ -605,9 +610,7 @@
       const inv = 1/m;
       omegaDir.push({x:ox*inv, y:oy*inv, z:oz*inv});
 
-      if (dt > 0) {
-        jerkBuf.push(mag3(ox-prevOx, oy-prevOy, oz-prevOz) / dt);
-      }
+      if (dt > 0) jerkBuf.push(mag3(ox-prevOx, oy-prevOy, oz-prevOz) / dt);
     } else {
       if (omegaMag.length) omegaMag.shift();
       if (omegaNorm.length) omegaNorm.shift();
@@ -621,7 +624,9 @@
 
     if (omegaNorm.length < Math.min(MIN_WINDOW_SAMPLES, nTarget)) {
       if (dt > 0) {
-        energy = clamp01(energy - ENERGY_DECAY * 0.6 * dt);
+        // stopped => aggressive decay
+        const d = ENERGY_DECAY * STOP_DECAY_MULT;
+        energy = clamp01(energy - d * dt);
         energyUI = lerp(energyUI, energy, UI_SMOOTH);
       }
       updateUI({ groove:0, orbit:0, smooth:0, speed:speedScore, energy:energyUI, locked:false, hz:0, mode:'idle' });
@@ -640,7 +645,6 @@
     const orbitBonus = orbitBonusFromDirCov(dirCov);
     const orbitShown = (orbitBonus - ORBIT_FLOOR) / (1 - ORBIT_FLOOR);
 
-    // Lock state machine
     let mode = 'hunt';
 
     if (!lock) {
@@ -648,9 +652,7 @@
         lock = true;
         graceLeft = 0;
         mode = 'locked';
-      } else {
-        mode = 'hunt';
-      }
+      } else mode = 'hunt';
     } else {
       mode = 'locked';
       const shouldDrop = (lockStrength < LOCK_OFF) || (speedScore < 0.08);
@@ -671,7 +673,6 @@
       }
     }
 
-    // Recenter when moving-but-not-grooving (regime change / hand-walk)
     if (dt > 0) {
       const moving = speedScore >= RECENTER_SPEED_MIN;
       const badGroove = lockStrength <= RECENTER_GROOVE_MAX;
@@ -686,14 +687,13 @@
       }
     }
 
-    // Groove quality
     const grooveQuality = clamp01(
       0.62 * lockStrength +
       0.30 * smoothScore +
       0.08 * orbitShown
     );
 
-    // Energy
+    // ENERGY
     if (dt > 0) {
       const earnBase = speedScore * grooveQuality * orbitBonus;
       const effectivelyLocked = lock || inGrace;
@@ -701,11 +701,19 @@
       const gain = effectivelyLocked ? ENERGY_GAIN_LOCKED : ENERGY_GAIN_FREE;
       const earn = gain * earnBase;
 
-      // Decay shaping: coast if you're already somewhat groovy
+      // Decay: MUCH faster when stopped, moderate otherwise.
       let decay = ENERGY_DECAY;
-      if (inGrace) decay *= 0.45;
-      if (speedScore < 0.06) decay *= 1.35;
-      if (grooveQuality >= COAST_QUALITY_MIN) decay *= COAST_DECAY_MULT;
+
+      // Strong "stopped" behavior: if speed is truly low, drop quickly
+      if (speedScore < STOP_SPEED_THRESH) decay *= STOP_DECAY_MULT;
+
+      // Grace still softens decay slightly, but NOT enough to linger forever
+      if (inGrace) decay *= 0.70;
+
+      // Coasting only while moving (prevents long linger when stopped)
+      if (speedScore >= STOP_SPEED_THRESH && grooveQuality >= COAST_QUALITY_MIN) {
+        decay *= COAST_DECAY_MULT;
+      }
 
       energy = clamp01(energy + (earn - decay) * dt);
       energyUI = lerp(energyUI, energy, UI_SMOOTH);
