@@ -10,9 +10,10 @@
     html, body {
       height: 100%;
       margin: 0;
-      background: #000;
+      background: #000; /* will be overridden dynamically */
       color: var(--green);
       font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      transition: background-color 80ms linear;
     }
 
     .app {
@@ -40,50 +41,6 @@
       margin-top: -6px;
       font-size: 14px;
       opacity: 0.78;
-    }
-
-    button {
-      font-size: 18px;
-      padding: 12px 16px;
-      background: transparent;
-      border: 1px solid var(--green);
-      color: var(--green);
-      border-radius: 10px;
-    }
-
-    .statusRow {
-      font-size: 14px;
-      opacity: 0.92;
-      margin-top: -4px;
-      display: flex;
-      gap: 10px;
-      align-items: baseline;
-      justify-content: center;
-      flex-wrap: wrap;
-    }
-
-    .pill {
-      display: inline-flex;
-      gap: 8px;
-      align-items: center;
-      padding: 4px 10px;
-      border: 1px solid rgba(125,211,95,0.45);
-      border-radius: 999px;
-      background: rgba(125,211,95,0.06);
-      font-size: 13px;
-      opacity: 0.95;
-    }
-
-    .dot {
-      width: 8px;
-      height: 8px;
-      border-radius: 999px;
-      background: rgba(125,211,95,0.20);
-      box-shadow: 0 0 10px rgba(125,211,95,0.0);
-    }
-    .dot.on {
-      background: var(--green);
-      box-shadow: 0 0 14px rgba(125,211,95,0.35);
     }
 
     .panel {
@@ -142,6 +99,32 @@
       padding: 2px 6px;
       border-radius: 6px;
     }
+
+    /* bottom area */
+    .spacer {
+      flex: 1;
+      min-height: 10px;
+    }
+
+    .bottomBar {
+      width: min(560px, 92vw);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+      padding-top: 8px;
+    }
+
+    button {
+      font-size: 18px;
+      padding: 12px 16px;
+      background: transparent;
+      border: 1px solid var(--green);
+      color: var(--green);
+      border-radius: 10px;
+      width: 100%;
+      max-width: 560px;
+    }
   </style>
 </head>
 <body>
@@ -149,15 +132,6 @@
     <div>
       <div id="bigCharge" class="bigCharge">0%</div>
       <div class="bigSub">energy</div>
-    </div>
-
-    <button id="startBtn">Start</button>
-
-    <div class="statusRow">
-      <span>Status: <span id="status">idle</span></span>
-      <span class="pill"><span id="lockDot" class="dot"></span> GROOVE LOCK</span>
-      <span class="pill">Hz: <span id="hz">—</span></span>
-      <span class="pill">Mode: <span id="mode">idle</span></span>
     </div>
 
     <section class="panel">
@@ -199,8 +173,13 @@
       </div>
     </section>
 
-    <div class="small">
-      Requires <code>https</code> + motion permission + audio started from the button (iOS).
+    <div class="spacer"></div>
+
+    <div class="bottomBar">
+      <button id="startBtn">Start</button>
+      <div class="small">
+        Requires <code>https</code> + motion permission + audio started from the button (iOS).
+      </div>
     </div>
   </main>
 
@@ -210,12 +189,7 @@
   // UI
   // ===========================================================================
   const startBtn = document.getElementById('startBtn');
-  const statusEl = document.getElementById('status');
   const bigChargeEl = document.getElementById('bigCharge');
-
-  const lockDot = document.getElementById('lockDot');
-  const hzEl = document.getElementById('hz');
-  const modeEl = document.getElementById('mode');
 
   const grooveEl = document.getElementById('groove');
   const orbitEl  = document.getElementById('orbit');
@@ -229,14 +203,21 @@
   const speedBar  = document.getElementById('speedBar');
   const energyBar = document.getElementById('energyBar');
 
+  // Background: linear from black (0) to bright red-orange (1)
+  // You can tweak target RGB if you want a different “hot” color.
+  const BG0 = { r: 0,   g: 0,  b: 0  };
+  const BG1 = { r: 255, g: 42, b: 0  }; // bright red-orange
+  function setBgFromEnergy(e01) {
+    const t = Math.max(0, Math.min(1, e01));
+    const r = Math.round(BG0.r + (BG1.r - BG0.r) * t);
+    const g = Math.round(BG0.g + (BG1.g - BG0.g) * t);
+    const b = Math.round(BG0.b + (BG1.b - BG0.b) * t);
+    document.body.style.backgroundColor = `rgb(${r},${g},${b})`;
+  }
+  setBgFromEnergy(0);
+
   // ===========================================================================
-  // DIAL PACK v4 — "FASTER DECAY" (REPLACE THIS WHOLE SECTION NEXT TIME)
-  // ---------------------------------------------------------------------------
-  // Goal: make charge dissipate quickly when motion ceases so tuning is clearer.
-  // Changes vs v3:
-  //  - Higher base decay
-  //  - Strong extra decay when "stopped" (speed very low)
-  //  - Coast decay softened ONLY while motion continues (so it doesn't linger)
+  // DIAL PACK v4 — "FASTER DECAY" (PRESERVED)
   // ===========================================================================
 
   // Input smoothing
@@ -276,14 +257,14 @@
   const ENERGY_GAIN_LOCKED = 1.25;
   const ENERGY_GAIN_FREE   = 0.65;
 
-  // --- DECAY TUNING (MAIN CHANGE) ---
-  const ENERGY_DECAY       = 0.090;  // was 0.045 (base decay roughly ~2x)
-  const STOP_SPEED_THRESH  = 0.06;   // below this, treat as "stopped"
-  const STOP_DECAY_MULT    = 2.25;   // extra decay when stopped (fast drop)
+  // --- DECAY TUNING ---
+  const ENERGY_DECAY       = 0.090;
+  const STOP_SPEED_THRESH  = 0.06;
+  const STOP_DECAY_MULT    = 1.0;
 
   // Coasting only applies if you're STILL MOVING
   const COAST_QUALITY_MIN  = 0.28;
-  const COAST_DECAY_MULT   = 0.65;  // less generous than before (was 0.55)
+  const COAST_DECAY_MULT   = 0.65;
 
   // UI smoothing
   const UI_SMOOTH   = 0.10;
@@ -552,9 +533,8 @@
 
     bigChargeEl.textContent = `${energyP}%`;
 
-    lockDot.classList.toggle('on', vals.locked);
-    hzEl.textContent = vals.hz > 0 ? vals.hz.toFixed(2) : '—';
-    modeEl.textContent = vals.mode;
+    // Dynamic background color (linear 0..1)
+    setBgFromEnergy(vals.energy);
   }
 
   function flushHistorySoft() {
@@ -624,7 +604,6 @@
 
     if (omegaNorm.length < Math.min(MIN_WINDOW_SAMPLES, nTarget)) {
       if (dt > 0) {
-        // stopped => aggressive decay
         const d = ENERGY_DECAY * STOP_DECAY_MULT;
         energy = clamp01(energy - d * dt);
         energyUI = lerp(energyUI, energy, UI_SMOOTH);
@@ -645,31 +624,24 @@
     const orbitBonus = orbitBonusFromDirCov(dirCov);
     const orbitShown = (orbitBonus - ORBIT_FLOOR) / (1 - ORBIT_FLOOR);
 
-    let mode = 'hunt';
-
     if (!lock) {
       if (lockStrength > LOCK_ON && speedScore > 0.16) {
         lock = true;
         graceLeft = 0;
-        mode = 'locked';
-      } else mode = 'hunt';
+      }
     } else {
-      mode = 'locked';
       const shouldDrop = (lockStrength < LOCK_OFF) || (speedScore < 0.08);
       if (shouldDrop) {
         lock = false;
         graceLeft = GRACE_SEC;
-        mode = 'grace';
       }
     }
 
     const inGrace = (!lock && graceLeft > 0);
     if (inGrace) {
-      mode = 'grace';
       if (lockStrength > LOCK_ON && speedScore > GRACE_SPEED_MIN) {
         lock = true;
         graceLeft = 0;
-        mode = 'locked';
       }
     }
 
@@ -693,7 +665,6 @@
       0.08 * orbitShown
     );
 
-    // ENERGY
     if (dt > 0) {
       const earnBase = speedScore * grooveQuality * orbitBonus;
       const effectivelyLocked = lock || inGrace;
@@ -701,16 +672,11 @@
       const gain = effectivelyLocked ? ENERGY_GAIN_LOCKED : ENERGY_GAIN_FREE;
       const earn = gain * earnBase;
 
-      // Decay: MUCH faster when stopped, moderate otherwise.
       let decay = ENERGY_DECAY;
 
-      // Strong "stopped" behavior: if speed is truly low, drop quickly
       if (speedScore < STOP_SPEED_THRESH) decay *= STOP_DECAY_MULT;
-
-      // Grace still softens decay slightly, but NOT enough to linger forever
       if (inGrace) decay *= 0.70;
 
-      // Coasting only while moving (prevents long linger when stopped)
       if (speedScore >= STOP_SPEED_THRESH && grooveQuality >= COAST_QUALITY_MIN) {
         decay *= COAST_DECAY_MULT;
       }
@@ -727,7 +693,7 @@
       energy: energyUI,
       locked: (lock || inGrace),
       hz: grooveHz,
-      mode
+      mode: lock ? 'locked' : (inGrace ? 'grace' : 'hunt')
     });
 
     setAudio(energyUI, lockStrength, (lock || inGrace));
@@ -750,18 +716,10 @@
   }
 
   async function start() {
-    statusEl.textContent = 'requesting permission…';
-
-    if (!window.isSecureContext) {
-      statusEl.textContent = 'needs https';
-      return;
-    }
+    if (!window.isSecureContext) return;
 
     const ok = await requestMotionPermissionIfNeeded();
-    if (!ok) {
-      statusEl.textContent = 'permission denied';
-      return;
-    }
+    if (!ok) return;
 
     ensureAudio();
     try { await audioCtx.resume(); } catch(_) {}
@@ -793,9 +751,7 @@
     setAudio(0,0,false);
 
     window.addEventListener('devicemotion', onMotion, { passive: true });
-    statusEl.textContent = 'running';
     startBtn.textContent = 'Stop';
-    modeEl.textContent = 'hunt';
   }
 
   function stop() {
@@ -808,10 +764,7 @@
       gainNode.gain.setTargetAtTime(0, now, 0.05);
     }
 
-    statusEl.textContent = 'stopped';
     startBtn.textContent = 'Start';
-    lockDot.classList.remove('on');
-    modeEl.textContent = 'idle';
   }
 
   startBtn.addEventListener('click', () => {
