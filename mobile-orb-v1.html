@@ -228,56 +228,68 @@
   const energyBar = document.getElementById('energyBar');
 
   // ===========================================================================
-  // SSOT TUNABLES — "FIND YOUR GROOVE" ENGINE
+  // DIAL PACK v1 — TUNING BLOCK (REPLACE THIS WHOLE SECTION NEXT TIME)
+  // ---------------------------------------------------------------------------
+  // Goal (Option 2): "Find your groove" (adaptive), prefer orbit-ish motion,
+  // but do NOT exclude clean single-axis loops (they should still charge slowly).
+  //
+  // If things feel "dead":
+  // - Smooth stuck at 0 => raise JERK_LOOSE (big) / JERK_TIGHT (some).
+  // - Speed pegging => raise SPEED_NORM (big) and/or lower SPEED_SHAPE.
+  // - Groove low => increase TARGET_WINDOW_SEC and/or lower LOCK_ON/OFF.
+  // - Energy never rises => lower ENERGY_DECAY and/or raise ENERGY_GAIN_*.
   // ===========================================================================
-  // Motion input smoothing
-  const OMEGA_LPF = 0.22;          // low-pass gyro vector (0..1)
 
-  // Windowing (adaptive groove analysis)
-  const TARGET_WINDOW_SEC = 1.6;   // analysis window duration
-  const MIN_WINDOW_SAMPLES = 50;   // minimum samples before scoring
-  const MAX_WINDOW_SAMPLES = 140;  // cap for performance
+  // Input smoothing
+  const OMEGA_LPF = 0.22;             // gyro LPF (0..1). higher = snappier
 
-  // Ignore tiny motion
+  // Windowing (more cycles = better autocorr peak)
+  const TARGET_WINDOW_SEC   = 3.0;    // was 1.6 (bigger -> stronger groove detection)
+  const MIN_WINDOW_SAMPLES  = 70;
+  const MAX_WINDOW_SAMPLES  = 240;
+
+  // Ignore tiny motion noise
   const MIN_OMEGA = 0.08;
 
-  // Speed normalization and curve (fix "pegs at 100")
-  const SPEED_NORM = 30.0;         // raise if speed still pegs
-  const SPEED_SHAPE = 1.35;        // soft saturation steepness
+  // SPEED: prevent instant pegging (iOS often spikes / uses deg/s)
+  const SPEED_NORM  = 140.0;          // was 30 (raise until "normal groove" ~30–70%)
+  const SPEED_SHAPE = 0.85;           // was 1.35 (lower = slower ramp)
 
-  // Groove lock hysteresis (periodicity threshold)
-  const LOCK_ON  = 0.62;
-  const LOCK_OFF = 0.48;
+  // Groove lock hysteresis (make it easier to lock while tuning)
+  const LOCK_ON  = 0.50;              // was 0.62
+  const LOCK_OFF = 0.38;              // was 0.48
 
   // Autocorrelation lag search (gesture tempo)
-  const MIN_HZ = 0.45;             // slow groove bound
-  const MAX_HZ = 2.60;             // fast groove bound
+  const MIN_HZ = 0.45;
+  const MAX_HZ = 2.60;
 
-  // Smoothness (jerk thresholds)
-  const JERK_TIGHT = 25.0;
-  const JERK_LOOSE = 160.0;
+  // SMOOTHNESS: make jerk mapping far more forgiving (was pinning at 0)
+  // (These are in "gyro-units per second", so they can be surprisingly large.)
+  const JERK_TIGHT = 220.0;           // "very smooth"
+  const JERK_LOOSE = 2600.0;          // "pretty shaky" (raise if Smooth still 0)
 
-  // Orbit bonus (multi-axis preference) — do NOT hard-zero energy
-  // We compute isotropy from covariance eigenvalues and map it to [ORBIT_FLOOR..1]
-  const ORBIT_FLOOR = 0.55;        // single-axis still charges, just slower
-  const ORBIT_STRICTNESS = 1.0;    // 0.6..1.4 (higher prefers multi-axis more)
+  // ORBIT preference (floor prevents orbit from zeroing energy)
+  // NOTE: Orbit is now computed from COVARIANCE OF *UNIT DIRECTIONS* (ω/|ω|)
+  // so it measures "axis wandering" more directly than raw ω covariance.
+  const ORBIT_FLOOR      = 0.75;      // was 0.55 (single-axis still charges)
+  const ORBIT_STRICTNESS = 1.0;       // raise to prefer multi-axis more
 
-  // Energy dynamics
-  const ENERGY_GAIN_LOCKED = 0.95; // earn rate when locked
-  const ENERGY_GAIN_FREE   = 0.20; // earn rate when not locked (tiny)
-  const ENERGY_DECAY       = 0.20; // decay when not earning
+  // Energy dynamics (make energy climb possible during tuning)
+  const ENERGY_GAIN_LOCKED = 1.25;    // was 0.95
+  const ENERGY_GAIN_FREE   = 0.28;    // was 0.20
+  const ENERGY_DECAY       = 0.085;   // was 0.20 (lowered so it can rise)
 
   // UI smoothing
-  const UI_SMOOTH = 0.10;
+  const UI_SMOOTH   = 0.10;
   const LOCK_SMOOTH = 0.15;
 
-  // Audio
-  const AUDIO_GATE = 0.06;         // energy below => silent
+  // Audio mapping
+  const AUDIO_GATE   = 0.06;
   const AUDIO_MIN_DB = -50;
   const AUDIO_MAX_DB = -6;
-  const AUDIO_EXP = 1.8;
+  const AUDIO_EXP    = 1.8;
 
-  const TONE_BASE_HZ = 180;
+  const TONE_BASE_HZ    = 180;
   const TONE_MAX_ADD_HZ = 220;
 
   // ===========================================================================
@@ -303,15 +315,10 @@
 
   // --- 3x3 symmetric eigenvalues via Jacobi rotations (stable enough for this use)
   function eigenvaluesSym3(m00,m01,m02,m11,m12,m22) {
-    // Matrix:
-    // [m00 m01 m02]
-    // [m01 m11 m12]
-    // [m02 m12 m22]
     let a00=m00, a01=m01, a02=m02, a11=m11, a12=m12, a22=m22;
 
     const iters = 10;
     for (let k=0;k<iters;k++) {
-      // Find largest off-diagonal element
       let p=0,q=1;
       let apq = Math.abs(a01);
       const a02abs = Math.abs(a02);
@@ -320,7 +327,6 @@
       if (a12abs > apq) { apq = a12abs; p=1; q=2; }
       if (apq < 1e-12) break;
 
-      // Extract values by (p,q)
       let app, aqq, apqv;
       if (p===0 && q===1) { app=a00; aqq=a11; apqv=a01; }
       else if (p===0 && q===2) { app=a00; aqq=a22; apqv=a02; }
@@ -330,52 +336,38 @@
       const c = Math.cos(phi);
       const s = Math.sin(phi);
 
-      // Perform rotation on A (only need update symmetric entries)
-      function rot(xp, xq) {
-        return [c*xp - s*xq, s*xp + c*xq];
-      }
+      function rot(xp, xq) { return [c*xp - s*xq, s*xp + c*xq]; }
 
-      // Update diagonal elements for p,q
       const appNew = c*c*app - 2*s*c*apqv + s*s*aqq;
       const aqqNew = s*s*app + 2*s*c*apqv + c*c*aqq;
 
-      // Update affected off-diagonals
       if (p===0 && q===1) {
-        // a02, a12 rotate
         const [a02n, a12n] = rot(a02, a12);
         a02=a02n; a12=a12n;
-
         a00=appNew; a11=aqqNew; a01=0;
       } else if (p===0 && q===2) {
-        // a01, a12 rotate
         const [a01n, a12n] = rot(a01, a12);
         a01=a01n; a12=a12n;
-
         a00=appNew; a22=aqqNew; a02=0;
-      } else { // p=1 q=2
-        // a01, a02 rotate
+      } else {
         const [a01n, a02n] = rot(a01, a02);
         a01=a01n; a02=a02n;
-
         a11=appNew; a22=aqqNew; a12=0;
       }
     }
 
-    // eigenvalues are approximately the diagonal
     let l1=a00, l2=a11, l3=a22;
-    // sort descending
     if (l1 < l2) [l1,l2]=[l2,l1];
     if (l2 < l3) [l2,l3]=[l3,l2];
     if (l1 < l2) [l1,l2]=[l2,l1];
     return [l1,l2,l3];
   }
 
-  // Compute normalized autocorrelation peak for |omega|
+  // Normalized autocorrelation peak for a 1D signal (here: |omega|)
   function autocorrPeak(signal, dt) {
     const n = signal.length;
     if (n < 24) return {peak: 0, lag: 0, hz: 0};
 
-    // remove mean
     let mean=0;
     for (let i=0;i<n;i++) mean += signal[i];
     mean /= n;
@@ -387,7 +379,6 @@
     }
     if (varr < 1e-9) return {peak: 0, lag: 0, hz: 0};
 
-    // lag range by Hz bounds
     const minLag = Math.max(2, Math.floor(1/(MAX_HZ*dt)));
     const maxLag = Math.min(n-3, Math.floor(1/(MIN_HZ*dt)));
 
@@ -399,7 +390,7 @@
       for (let i=0;i<n-lag;i++) {
         c += (signal[i]-mean) * (signal[i+lag]-mean);
       }
-      const r = c / varr; // normalized-ish
+      const r = c / varr;
       if (r > best) { best = r; bestLag = lag; }
     }
 
@@ -412,15 +403,55 @@
     return clamp01(t);
   }
 
-  function orbitBonusFromCov(cov) {
-    // cov: {xx,xy,xz,yy,yz,zz}
-    const [l1,l2,l3] = eigenvaluesSym3(cov.xx,cov.xy,cov.xz,cov.yy,cov.yz,cov.zz);
+  // Covariance of vectors (mean-removed)
+  function cov3(vecs) {
+    const n = vecs.length;
+    if (n < 10) return {xx:0,xy:0,xz:0,yy:0,yz:0,zz:0, trace:0};
+
+    let mx=0,my=0,mz=0;
+    for (const v of vecs) { mx+=v.x; my+=v.y; mz+=v.z; }
+    mx/=n; my/=n; mz/=n;
+
+    let xx=0,xy=0,xz=0,yy=0,yz=0,zz=0;
+    for (const v of vecs) {
+      const x=v.x-mx, y=v.y-my, z=v.z-mz;
+      xx += x*x; xy += x*y; xz += x*z;
+      yy += y*y; yz += y*z; zz += z*z;
+    }
+    const inv = 1/(n-1);
+    xx*=inv; xy*=inv; xz*=inv; yy*=inv; yz*=inv; zz*=inv;
+    return {xx,xy,xz,yy,yz,zz, trace: (xx+yy+zz)};
+  }
+
+  // Orbit bonus from covariance eigenvalue isotropy (computed on *unit direction* vectors)
+  function orbitBonusFromDirCov(cov) {
     const eps = 1e-9;
-    // isotropy: how even are eigenvalues (1 = perfectly even)
-    const iso = clamp01(1 - ((l1 - l3) / (l1 + eps)));
-    // map to preference but don't zero out
+    if (cov.trace < 1e-6) return ORBIT_FLOOR; // axis basically fixed / no wander
+
+    const [l1, l2, l3] = eigenvaluesSym3(cov.xx,cov.xy,cov.xz,cov.yy,cov.yz,cov.zz);
+    const iso = clamp01(1 - ((l1 - l3) / (l1 + eps))); // 0..1
     const shaped = Math.pow(iso, ORBIT_STRICTNESS);
-    return ORBIT_FLOOR + (1 - ORBIT_FLOOR) * shaped;
+    return ORBIT_FLOOR + (1 - ORBIT_FLOOR) * shaped;    // [floor..1]
+  }
+
+  function computeAvg(arr) {
+    if (!arr.length) return 0;
+    let s=0;
+    for (const x of arr) s+=x;
+    return s/arr.length;
+  }
+
+  function trimToWindow(dtMean, omegaMag, omegaVec, omegaDir, jerkBuf, dtBuf) {
+    let targetN = dtMean > 1e-4 ? Math.round(TARGET_WINDOW_SEC / dtMean) : MAX_WINDOW_SAMPLES;
+    targetN = Math.max(MIN_WINDOW_SAMPLES, Math.min(MAX_WINDOW_SAMPLES, targetN));
+
+    while (omegaMag.length > targetN) omegaMag.shift();
+    while (omegaVec.length > targetN) omegaVec.shift();
+    while (omegaDir.length > targetN) omegaDir.shift();
+    while (jerkBuf.length  > targetN) jerkBuf.shift();
+    while (dtBuf.length    > targetN) dtBuf.shift();
+
+    return targetN;
   }
 
   // ===========================================================================
@@ -435,6 +466,7 @@
   // rolling buffers
   const omegaMag = [];      // |omega|
   const omegaVec = [];      // {x,y,z}
+  const omegaDir = [];      // unit direction {x,y,z} = omega/|omega|
   const jerkBuf  = [];      // scalar jerk
   const dtBuf    = [];      // dt estimate
 
@@ -466,12 +498,14 @@
   function setAudio(eUI, groove, locked) {
     if (!audioCtx || !gainNode || !osc) return;
 
-    // Silence unless we have at least some energy AND some groove
+    // Keep audio tied to groove + energy; stay quiet when not grooving.
     const gBase = energyToGain(eUI);
-    const gGroove = locked ? (0.25 + 0.75*groove) : (0.10 + 0.25*groove);
+    const gGroove = locked ? (0.30 + 0.70*groove) : (0.08 + 0.22*groove);
     const g = gBase * gGroove;
 
-    const f = TONE_BASE_HZ + TONE_MAX_ADD_HZ * (locked ? groove : 0.35*groove) + 60*eUI;
+    const f = TONE_BASE_HZ
+            + TONE_MAX_ADD_HZ * (locked ? groove : 0.30*groove)
+            + 60 * eUI;
 
     const now = audioCtx.currentTime;
     gainNode.gain.cancelScheduledValues(now);
@@ -485,7 +519,7 @@
     const toPct = (x) => Math.round(clamp01(x)*100);
 
     const grooveP = toPct(vals.groove);
-    const orbitP  = toPct(vals.orbit);  // already 0..1-ish
+    const orbitP  = toPct(vals.orbit);
     const smoothP = toPct(vals.smooth);
     const speedP  = toPct(vals.speed);
     const energyP = toPct(vals.energy);
@@ -508,46 +542,6 @@
     hzEl.textContent = vals.hz > 0 ? vals.hz.toFixed(2) : '—';
   }
 
-  function computeCov(vecs) {
-    // covariance of omega vectors (mean-removed)
-    const n = vecs.length;
-    if (n < 8) return {xx:0,xy:0,xz:0,yy:0,yz:0,zz:0};
-
-    let mx=0,my=0,mz=0;
-    for (const v of vecs) { mx+=v.x; my+=v.y; mz+=v.z; }
-    mx/=n; my/=n; mz/=n;
-
-    let xx=0,xy=0,xz=0,yy=0,yz=0,zz=0;
-    for (const v of vecs) {
-      const x=v.x-mx, y=v.y-my, z=v.z-mz;
-      xx += x*x; xy += x*y; xz += x*z;
-      yy += y*y; yz += y*z; zz += z*z;
-    }
-    const inv = 1/(n-1);
-    return {xx:xx*inv, xy:xy*inv, xz:xz*inv, yy:yy*inv, yz:yz*inv, zz:zz*inv};
-  }
-
-  function computeAvg(arr) {
-    if (!arr.length) return 0;
-    let s=0;
-    for (const x of arr) s+=x;
-    return s/arr.length;
-  }
-
-  function trimToWindow(dtMean) {
-    // Keep buffers around TARGET_WINDOW_SEC (clamped by min/max sample caps).
-    // If dtMean is weird, just cap by MAX_WINDOW_SAMPLES.
-    let targetN = dtMean > 1e-4 ? Math.round(TARGET_WINDOW_SEC / dtMean) : MAX_WINDOW_SAMPLES;
-    targetN = Math.max(MIN_WINDOW_SAMPLES, Math.min(MAX_WINDOW_SAMPLES, targetN));
-
-    while (omegaMag.length > targetN) omegaMag.shift();
-    while (omegaVec.length > targetN) omegaVec.shift();
-    while (jerkBuf.length  > targetN) jerkBuf.shift();
-    while (dtBuf.length    > targetN) dtBuf.shift();
-
-    return targetN;
-  }
-
   function onMotion(e) {
     if (!running) return;
 
@@ -559,7 +553,7 @@
     const rr = e.rotationRate;
     if (!rr) return;
 
-    // iOS often gives deg/s; treat as arbitrary and normalize empirically
+    // iOS often reports deg/s-ish. We'll treat as arbitrary and tune SPEED_NORM.
     const x = rr.beta ?? 0;
     const y = rr.gamma ?? 0;
     const z = rr.alpha ?? 0;
@@ -576,23 +570,24 @@
       omegaMag.push(m);
       omegaVec.push({x:ox, y:oy, z:oz});
 
+      const inv = 1/m;
+      omegaDir.push({x:ox*inv, y:oy*inv, z:oz*inv}); // <-- for orbit-ness
+
       if (dt > 0) {
         const j = mag3(ox-prevOx, oy-prevOy, oz-prevOz) / dt;
         jerkBuf.push(j);
       }
     } else {
-      // slight forget if stopped
       if (omegaMag.length) omegaMag.shift();
       if (omegaVec.length) omegaVec.shift();
+      if (omegaDir.length) omegaDir.shift();
       if (jerkBuf.length)  jerkBuf.shift();
     }
 
-    const dtMean = Math.max(1e-3, computeAvg(dtBuf.slice(-40)));
-    const nTarget = trimToWindow(dtMean);
+    const dtMean = Math.max(1e-3, computeAvg(dtBuf.slice(-50)));
+    const nTarget = trimToWindow(dtMean, omegaMag, omegaVec, omegaDir, jerkBuf, dtBuf);
 
-    // Not enough data yet
     if (omegaMag.length < Math.min(MIN_WINDOW_SAMPLES, nTarget)) {
-      // decay energy gently while waiting
       if (dt > 0) {
         energy = clamp01(energy - ENERGY_DECAY * 0.6 * dt);
         energyUI = lerp(energyUI, energy, UI_SMOOTH);
@@ -602,56 +597,57 @@
       return;
     }
 
-    // --- SPEED
+    // SPEED
     const speedScore = speedCurve(m / SPEED_NORM);
 
-    // --- GROOVE (periodicity) via autocorrelation of |omega|
+    // GROOVE (periodicity) via autocorrelation of |omega|
     const ac = autocorrPeak(omegaMag, dtMean);
-    // stabilize groove value
     lockStrength = lerp(lockStrength, ac.peak, LOCK_SMOOTH);
     grooveHz = ac.hz;
 
-    // lock hysteresis with a tiny speed requirement (avoid locking on noise)
+    // Lock hysteresis (avoid locking on weak/slow noise)
     if (!lock) {
-      if (lockStrength > LOCK_ON && speedScore > 0.20) lock = true;
+      if (lockStrength > LOCK_ON && speedScore > 0.15) lock = true;
     } else {
-      if (lockStrength < LOCK_OFF || speedScore < 0.12) lock = false;
+      if (lockStrength < LOCK_OFF || speedScore < 0.08) lock = false;
     }
 
-    // --- SMOOTHNESS
-    const avgJerk = computeAvg(jerkBuf.slice(-Math.min(jerkBuf.length, 50)));
+    // SMOOTHNESS
+    const avgJerk = computeAvg(jerkBuf.slice(-Math.min(jerkBuf.length, 60)));
     const smoothScore = smoothnessFromJerk(avgJerk);
 
-    // --- ORBIT BONUS (multi-axis preference) via covariance isotropy
-    const cov = computeCov(omegaVec);
-    const orbitBonus = orbitBonusFromCov(cov); // [ORBIT_FLOOR..1]
+    // ORBIT bonus (preference) — now based on *unit direction* covariance
+    const dirCov = cov3(omegaDir);
+    const orbitBonus = orbitBonusFromDirCov(dirCov); // [floor..1]
+    const orbitShown = (orbitBonus - ORBIT_FLOOR) / (1 - ORBIT_FLOOR); // 0..1 "extra"
 
-    // --- QUALITY (how “clean” the groove is)
-    // We want: periodicity + smoothness + some orbit preference.
-    // grooveQuality is 0..1
+    // GROOVE QUALITY (clean + repeatable)
+    // - lockStrength: "is there a stable rhythm?"
+    // - smoothScore: "is it controlled / not jittery?"
+    // - orbitShown:  "bonus if axis is wandering (orbit-ish)"
     const grooveQuality = clamp01(
-      0.55 * lockStrength +
-      0.35 * smoothScore +
-      0.10 * ((orbitBonus - ORBIT_FLOOR) / (1 - ORBIT_FLOOR))
+      0.62 * lockStrength +
+      0.30 * smoothScore +
+      0.08 * orbitShown
     );
 
-    // --- ENERGY dynamics
+    // ENERGY (make it possible to climb)
     if (dt > 0) {
       const earnBase = speedScore * grooveQuality * orbitBonus;
-
       const gain = lock ? ENERGY_GAIN_LOCKED : ENERGY_GAIN_FREE;
       const earn = gain * earnBase;
 
-      // earn-decay blend: if earn is small, decay dominates
-      const delta = (earn - ENERGY_DECAY) * dt;
-      energy = clamp01(energy + delta);
+      // Mild extra decay when clearly not moving
+      const decay = (speedScore < 0.06) ? (ENERGY_DECAY * 1.35) : ENERGY_DECAY;
 
+      const delta = (earn - decay) * dt;
+      energy = clamp01(energy + delta);
       energyUI = lerp(energyUI, energy, UI_SMOOTH);
     }
 
     updateUI({
       groove: lockStrength,
-      orbit: (orbitBonus - ORBIT_FLOOR) / (1 - ORBIT_FLOOR), // show "extra" orbit-ness 0..1
+      orbit: orbitShown,
       smooth: smoothScore,
       speed: speedScore,
       energy: energyUI,
@@ -695,13 +691,13 @@
     ensureAudio();
     try { await audioCtx.resume(); } catch(_) {}
 
-    // reset
     running = true;
     lastT = null;
 
     ox=oy=oz=0;
     omegaMag.length = 0;
     omegaVec.length = 0;
+    omegaDir.length = 0;
     jerkBuf.length  = 0;
     dtBuf.length    = 0;
 
