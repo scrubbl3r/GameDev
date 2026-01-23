@@ -157,6 +157,7 @@
       </div>
 
       <!-- 1) Start button now sits one "space" below the energy meter -->
+      <br>
       <button id="startBtn">Start</button>
 
       <div class="small">
@@ -231,7 +232,7 @@
 
   const ENERGY_DECAY       = 0.090;
   const STOP_SPEED_THRESH  = 0.06;
-  const STOP_DECAY_MULT    = 1.0;
+  const STOP_DECAY_MULT    = 1.5;
 
   const COAST_QUALITY_MIN  = 0.28;
   const COAST_DECAY_MULT   = 0.65;
@@ -249,12 +250,17 @@
   const NORM_ALPHA = 0.10;
 
   // ===========================================================================
-  // 2) AUDIO MAPPING — gentler curve, audible by ~10% energy
+  // AUDIO MAPPING — gentler curve, audible by ~10% energy (PRESERVED)
+  // + MASTER GAIN (NEW)
   // ===========================================================================
-  const AUDIO_GATE   = 0.02;  // was 0.06: begin audible sooner
-  const AUDIO_MIN_DB = -42;   // was -50: raise floor slightly
+  const AUDIO_GATE   = 0.02;
+  const AUDIO_MIN_DB = -42;
   const AUDIO_MAX_DB = -6;
-  const AUDIO_EXP    = 1.15;  // was 1.8: gentler curve (less “late bloom”)
+  const AUDIO_EXP    = 1.15;
+
+  // NEW: overall output level
+  // 1.0 = current loudness. Try 2.0–4.0. We clamp to 1.0 before feeding GainNode.
+  const MASTER_GAIN  = 2.0;
 
   const TONE_BASE_HZ    = 180;
   const TONE_MAX_ADD_HZ = 220;
@@ -465,7 +471,9 @@
 
     const gBase = energyToGain(eUI);
     const gGroove = locked ? (0.30 + 0.70*groove) : (0.08 + 0.22*groove);
-    const g = gBase * gGroove;
+
+    // Apply MASTER_GAIN and clamp to [0..1] before feeding GainNode
+    const g = Math.min(1, MASTER_GAIN * gBase * gGroove);
 
     const f = TONE_BASE_HZ
             + TONE_MAX_ADD_HZ * (locked ? groove : 0.30*groove)
@@ -575,7 +583,7 @@
         energy = clamp01(energy - d * dt);
         energyUI = lerp(energyUI, energy, UI_SMOOTH);
       }
-      updateUI({ groove:0, orbit:0, smooth:0, speed:speedScore, energy:energyUI, locked:false, hz:0, mode:'idle' });
+      updateUI({ groove:0, orbit:0, smooth:0, speed:speedScore, energy:energyUI });
       setAudio(energyUI, 0, false);
       return;
     }
