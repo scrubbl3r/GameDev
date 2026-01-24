@@ -1,0 +1,252 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Orb Relay — Game Receiver Test</title>
+  <style>
+    :root{ --g:#7dd35f; }
+    html,body{ margin:0; height:100%; background:#060806; color:var(--g); font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
+    .wrap{ max-width:980px; margin:0 auto; padding:18px 14px 28px; box-sizing:border-box; }
+    h1{ margin:0 0 10px; font-size:18px; letter-spacing:.3px; }
+    .row{ display:flex; gap:14px; flex-wrap:wrap; align-items:flex-start; }
+    .card{ flex:1; min-width:320px; border:1px solid rgba(125,211,95,.25); border-radius:14px; padding:14px; background:rgba(0,0,0,.35); box-shadow:0 18px 60px rgba(0,0,0,.35); }
+    .muted{ opacity:.65; }
+    .kv{ display:flex; gap:10px; flex-wrap:wrap; align-items:baseline; margin:8px 0; }
+    input,button{ font:inherit; color:var(--g); background:transparent; border:1px solid rgba(125,211,95,.5); border-radius:10px; padding:10px 12px; }
+    button{ cursor:pointer; }
+    button:hover{ background:rgba(125,211,95,.08); }
+    .bars{ margin-top:12px; display:grid; gap:10px; }
+    .bar{ height:16px; border:1px solid rgba(125,211,95,.45); border-radius:10px; overflow:hidden; background:rgba(125,211,95,.08); }
+    .fill{ height:100%; width:0%; background:var(--g); transition:width 80ms linear; }
+    #qr{ width:260px; height:260px; background:#000; border-radius:14px; border:1px solid rgba(125,211,95,.25); display:grid; place-items:center; }
+    .big{ font-size:42px; font-weight:900; letter-spacing:-.04em; margin:0; }
+    .ok{ color:#9cffc2; }
+    .bad{ color:#ff6666; }
+    code{ background:rgba(125,211,95,.08); border:1px solid rgba(125,211,95,.25); padding:2px 6px; border-radius:8px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Orb Relay — Receiver Test <span class="muted">(laptop/game side)</span></h1>
+
+    <div class="row">
+      <div class="card">
+        <div class="kv">
+          <div><span class="muted">Worker:</span> <code id="workerUrlLabel"></code></div>
+        </div>
+
+        <div class="kv">
+          <label class="muted">Room</label>
+          <input id="roomInput" style="min-width:240px" />
+          <button id="newRoomBtn">New room</button>
+          <button id="connectBtn">Connect</button>
+        </div>
+
+        <div class="kv">
+          <div class="muted">Status:</div>
+          <div id="status" class="muted">Not connected.</div>
+        </div>
+
+        <div class="kv">
+          <div class="muted">Last message:</div>
+          <div id="lastTs" class="muted">—</div>
+        </div>
+
+        <p class="big" id="energyBig">0%</p>
+        <div class="bars">
+          <div>
+            <div class="muted">Energy</div>
+            <div class="bar"><div id="energyBar" class="fill"></div></div>
+          </div>
+          <div>
+            <div class="muted">Groove</div>
+            <div class="bar"><div id="grooveBar" class="fill"></div></div>
+          </div>
+          <div>
+            <div class="muted">Orbit</div>
+            <div class="bar"><div id="orbitBar" class="fill"></div></div>
+          </div>
+          <div>
+            <div class="muted">Smooth</div>
+            <div class="bar"><div id="smoothBar" class="fill"></div></div>
+          </div>
+          <div>
+            <div class="muted">Speed</div>
+            <div class="bar"><div id="speedBar" class="fill"></div></div>
+          </div>
+        </div>
+
+        <div style="margin-top:12px" class="muted">
+          Tip: open this page on your laptop, scan QR on phone, press <b>Start</b> on the phone controller.
+        </div>
+      </div>
+
+      <div class="card" style="max-width:340px; flex:0 0 340px;">
+        <div class="muted" style="margin-bottom:10px">Scan to pair phone → this room</div>
+        <div id="qr"></div>
+        <div class="muted" style="margin-top:10px; word-break:break-all;">
+          URL: <span id="controllerUrlLabel"></span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Ably (browser) -->
+  <script src="https://cdn.ably.com/lib/ably.min-1.js"></script>
+  <!-- QR generator -->
+  <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+
+  <script>
+  (() => {
+    // ===========================
+    // CONFIG
+    // ===========================
+    const WORKER_BASE = "https://orb-token.mrgarthwilliams.workers.dev";
+    // Your phone controller page (edit if your path differs)
+    const CONTROLLER_BASE_URL = "https://scrubbl3r.github.io/GameDev/mobile-orb-v1.html";
+
+    const workerUrlLabel = document.getElementById("workerUrlLabel");
+    workerUrlLabel.textContent = WORKER_BASE;
+
+    const roomInput = document.getElementById("roomInput");
+    const newRoomBtn = document.getElementById("newRoomBtn");
+    const connectBtn = document.getElementById("connectBtn");
+    const statusEl = document.getElementById("status");
+
+    const qrEl = document.getElementById("qr");
+    const controllerUrlLabel = document.getElementById("controllerUrlLabel");
+
+    const energyBig = document.getElementById("energyBig");
+    const energyBar = document.getElementById("energyBar");
+    const grooveBar = document.getElementById("grooveBar");
+    const orbitBar  = document.getElementById("orbitBar");
+    const smoothBar = document.getElementById("smoothBar");
+    const speedBar  = document.getElementById("speedBar");
+    const lastTs = document.getElementById("lastTs");
+
+    const clamp01 = (x) => Math.max(0, Math.min(1, x));
+    const toPct = (x) => Math.round(clamp01(x) * 100);
+
+    function randomCode(len=6){
+      const abc = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
+      let s = "";
+      for (let i=0;i<len;i++) s += abc[(Math.random()*abc.length)|0];
+      return s;
+    }
+
+    function normalizeRoom(raw){
+      raw = String(raw || "").trim();
+      if (!raw) return "orb:" + randomCode();
+      // always force orb: prefix (matches your Worker behavior)
+      if (!raw.toLowerCase().startsWith("orb:")) raw = "orb:" + raw;
+      // keep the remainder as-is (case sensitive channel names)
+      return raw;
+    }
+
+    let room = normalizeRoom("test"); // start with orb:test if you want
+    roomInput.value = room;
+
+    function updateQR(){
+      const url = CONTROLLER_BASE_URL + "?room=" + encodeURIComponent(room);
+      controllerUrlLabel.textContent = url;
+      qrEl.innerHTML = "";
+      QRCode.toCanvas(document.createElement("canvas"), url, { width: 240, margin: 1 }, (err, canvas) => {
+        if (err) {
+          qrEl.textContent = "QR error: " + err;
+          return;
+        }
+        canvas.style.borderRadius = "12px";
+        qrEl.appendChild(canvas);
+      });
+    }
+    updateQR();
+
+    newRoomBtn.addEventListener("click", () => {
+      room = "orb:" + randomCode();
+      roomInput.value = room;
+      updateQR();
+      statusEl.textContent = "Room updated. Click Connect.";
+      statusEl.className = "muted";
+    });
+
+    roomInput.addEventListener("change", () => {
+      room = normalizeRoom(roomInput.value);
+      roomInput.value = room;
+      updateQR();
+    });
+
+    // ===========================
+    // ABLY
+    // ===========================
+    let realtime = null;
+    let channel = null;
+
+    function setStatus(html, cls){
+      statusEl.innerHTML = html;
+      statusEl.className = cls || "muted";
+    }
+
+    function disconnect(){
+      try { if (channel) channel.unsubscribe(); } catch(_) {}
+      channel = null;
+      try { if (realtime) realtime.close(); } catch(_) {}
+      realtime = null;
+    }
+
+    function connect(){
+      disconnect();
+
+      // authUrl includes room so the token is minted with correct capability
+      const authUrl = WORKER_BASE + "/token?room=" + encodeURIComponent(room);
+
+      realtime = new Ably.Realtime({
+        authUrl,
+        autoConnect: true
+      });
+
+      realtime.connection.on((stateChange) => {
+        const s = stateChange.current;
+        if (s === "connected") setStatus('<span class="ok">Connected.</span> Subscribed to <code>' + room + '</code>', "");
+        else if (s === "failed") setStatus('<span class="bad">Failed.</span> ' + (stateChange.reason ? stateChange.reason.message : ""), "");
+        else setStatus("Connection: " + s, "muted");
+      });
+
+      channel = realtime.channels.get(room);
+
+      channel.subscribe((msg) => {
+        if (!msg || !msg.data) return;
+        const d = msg.data;
+
+        // expected: { energy, groove, orbit, smooth, speed, locked, t }
+        const e = clamp01(Number(d.energy || 0));
+        const g = clamp01(Number(d.groove || 0));
+        const o = clamp01(Number(d.orbit  || 0));
+        const sm= clamp01(Number(d.smooth || 0));
+        const sp= clamp01(Number(d.speed  || 0));
+
+        energyBig.textContent = toPct(e) + "%";
+        energyBar.style.width = toPct(e) + "%";
+        grooveBar.style.width = toPct(g) + "%";
+        orbitBar.style.width  = toPct(o) + "%";
+        smoothBar.style.width = toPct(sm) + "%";
+        speedBar.style.width  = toPct(sp) + "%";
+
+        const ts = d.t ? new Date(d.t).toLocaleTimeString() : new Date().toLocaleTimeString();
+        lastTs.textContent = ts + (d.locked ? " (locked)" : "");
+      });
+
+      setStatus("Connecting…", "muted");
+    }
+
+    connectBtn.addEventListener("click", () => {
+      room = normalizeRoom(roomInput.value);
+      roomInput.value = room;
+      updateQR();
+      connect();
+    });
+
+  })();
+  </script>
+</body>
+</html>
