@@ -9,19 +9,39 @@
       --g:#32ff75;
       --g2:rgba(50,255,117,.60);
       --g3:rgba(50,255,117,.20);
-      --bg:#020402;
+      --bg:#000;
       --panel: rgba(0,0,0,.55);
       --border: rgba(50,255,117,.18);
       --bad:#ff5a5a;
+
+      /* charge-driven (0..1) */
+      --charge: 0;
     }
+
     html,body{
       height:100%;
       margin:0;
-      background:radial-gradient(1200px 700px at 50% 35%, #061306 0%, var(--bg) 55%, #000 100%);
+      background: var(--bg); /* overridden dynamically */
       color:var(--g);
       font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      transition: background-color 80ms linear;
+      overflow-x:hidden;
     }
-    .wrap{max-width:980px;margin:24px auto;padding:0 16px;}
+
+    /* subtle vignette overlay so the orange still feels "ripper-y" */
+    body::before{
+      content:"";
+      position:fixed;
+      inset:0;
+      pointer-events:none;
+      background:
+        radial-gradient(1200px 700px at 50% 35%, rgba(0,0,0,.0) 0%, rgba(0,0,0,.45) 55%, rgba(0,0,0,.75) 100%);
+      opacity:0.95;
+      mix-blend-mode:multiply;
+      z-index:0;
+    }
+
+    .wrap{max-width:980px;margin:24px auto;padding:0 16px; position:relative; z-index:1;}
     h1{margin:0 0 14px 0; font-size:18px; letter-spacing:.6px; text-align:center;}
     .grid{display:grid; grid-template-columns: 1.2fr 1fr; gap:18px; align-items:start;}
     .card{
@@ -32,7 +52,8 @@
       box-shadow: 0 18px 80px rgba(0,0,0,.55);
       overflow:hidden;
     }
-    label{display:block; font-size:12px; opacity:.85; margin:10px 0 6px;}
+
+    label{display:block; font-size:12px; opacity:.92; margin:10px 0 6px;}
     input{
       width:100%;
       box-sizing:border-box;
@@ -43,7 +64,8 @@
       color:var(--g);
       outline:none;
     }
-    .row{display:flex; gap:10px; align-items:center;}
+
+    .row{display:flex; gap:10px; align-items:center; flex-wrap:wrap;}
     button{
       padding:10px 14px;
       border-radius:12px;
@@ -51,51 +73,94 @@
       background:rgba(0,0,0,.45);
       color:var(--g);
       cursor:pointer;
-      font-weight:700;
+      font-weight:800;
       white-space:nowrap;
     }
     button:hover{border-color:rgba(50,255,117,.35)}
-    .stat{margin-top:10px; font-size:13px; line-height:1.5;}
-    .dim{opacity:.6}
-    .big{font-size:42px; font-weight:900; margin:10px 0;}
 
-    /* ===== KEY FIX: fixed-size last-message log (no layout thrash) ===== */
+    .stat{margin-top:10px; font-size:13px; line-height:1.5;}
+    .dim{opacity:.78} /* still green, just dimmer */
+    .bad{color:var(--bad); font-weight:900;}
+    .ok{color:#7dffab; font-weight:900;}
+
+    /* big charge display (glow ramps with energy) */
+    .big{
+      font-size:58px;
+      font-weight:1000;
+      margin:12px 0 8px;
+      letter-spacing:-0.04em;
+      line-height:0.92;
+      text-align:left;
+      text-shadow:
+        0 0 calc(10px + 40px * var(--charge)) rgba(50,255,117, calc(0.12 + 0.38 * var(--charge))),
+        0 0 calc(2px + 18px * var(--charge)) rgba(50,255,117, calc(0.10 + 0.25 * var(--charge)));
+    }
+    .bigSub{
+      margin-top:-2px;
+      font-size:12px;
+      opacity:0.85;
+    }
+
+    .bars{margin-top:10px;}
+    .barLabel{
+      display:flex;
+      align-items:baseline;
+      justify-content:space-between;
+      gap:10px;
+      font-size:12px;
+      opacity:.92;
+    }
+    .barLabel span{
+      opacity:.92;
+    }
+
+    .bar{
+      height:14px;
+      border-radius:999px;
+      border:1px solid rgba(50,255,117,.35);
+      background:rgba(50,255,117,.08);
+      overflow:hidden;
+      margin:8px 0 10px;
+    }
+    .fill{
+      height:100%;
+      width:0%;
+      background: rgba(50,255,117,.85);
+      transition: width 80ms linear;
+    }
+
+    /* ===== fixed-size last-message log (no layout thrash) ===== */
     .logBox{
-      margin-top:8px;
+      margin-top:10px;
       padding:10px 10px;
       border-radius:12px;
-      border:1px solid var(--border);
-      background:rgba(0,0,0,.35);
-      color:rgba(220,255,230,.90);
+      border:1px solid rgba(50,255,117,.22);
+      background:rgba(0,0,0,.30);
+      color: rgba(50,255,117,.92);
       font-size:12px;
       line-height:1.35;
-      max-height:84px;        /* LOCKED */
-      overflow:auto;          /* scroll instead of resize */
+      max-height:84px;
+      overflow:auto;
       word-break:break-word;
       white-space:pre-wrap;
     }
-    .logBox .muted{opacity:.7}
-
-    .bars{margin-top:10px;}
-    .bar{height:14px; border-radius:999px; border:1px solid var(--border); background:rgba(0,0,0,.35); overflow:hidden; margin:8px 0;}
-    .fill{height:100%; width:0%; background:rgba(50,255,117,.55);}
+    .logBox .muted{opacity:.78}
 
     .qrBox{
       width: 280px; height: 280px;
       border-radius: 14px;
       border: 1px solid var(--border);
-      background: #fff;
+      background: #fff; /* QR must be white */
       display:grid; place-items:center;
       overflow:hidden;
       margin-top:10px;
     }
-    .mono{white-space:pre-wrap; word-break:break-word; font-size:12px; opacity:.8; margin-top:10px;}
-    .bad{color:var(--bad); font-weight:800;}
-    .ok{color:#7dffab; font-weight:800;}
+    .mono{white-space:pre-wrap; word-break:break-word; font-size:12px; opacity:.9; margin-top:10px; color: rgba(50,255,117,.90);}
 
     @media (max-width: 900px){
       .grid{grid-template-columns:1fr;}
       .qrBox{width: 240px; height:240px;}
+      .big{font-size:52px;}
     }
   </style>
 
@@ -103,6 +168,7 @@
   <script src="https://cdn.ably.com/lib/ably.min-1.js"></script>
   <script src="./qrcode.min.js"></script>
 </head>
+
 <body>
   <div class="wrap">
     <h1>Orb Relay — Receiver Test (laptop/game side)</h1>
@@ -117,6 +183,7 @@
           <input id="room" value="orb:test" />
           <button id="newRoom">New room</button>
           <button id="connect">Connect</button>
+          <button id="audioBtn">Audio: Off</button>
         </div>
 
         <div class="stat">
@@ -129,17 +196,22 @@
         </div>
 
         <div class="big"><span id="pct">0</span>%</div>
+        <div class="bigSub dim">energy</div>
 
         <div class="bars">
-          <div class="dim">Energy</div>
+          <div class="barLabel"><div>Energy</div><span id="vEnergy">0</span></div>
           <div class="bar"><div id="bEnergy" class="fill"></div></div>
-          <div class="dim">Groove</div>
+
+          <div class="barLabel"><div>Groove</div><span id="vGroove">0</span></div>
           <div class="bar"><div id="bGroove" class="fill"></div></div>
-          <div class="dim">Orbit</div>
+
+          <div class="barLabel"><div>Orbit</div><span id="vOrbit">0</span></div>
           <div class="bar"><div id="bOrbit" class="fill"></div></div>
-          <div class="dim">Smooth</div>
+
+          <div class="barLabel"><div>Smooth</div><span id="vSmooth">0</span></div>
           <div class="bar"><div id="bSmooth" class="fill"></div></div>
-          <div class="dim">Speed</div>
+
+          <div class="barLabel"><div>Speed</div><span id="vSpeed">0</span></div>
           <div class="bar"><div id="bSpeed" class="fill"></div></div>
         </div>
 
@@ -151,7 +223,7 @@ Tip: open this page on your laptop, scan QR on phone, press Start on the phone c
       </div>
 
       <div class="card">
-        <div style="font-weight:800; margin-bottom:8px;">Scan to pair phone → this room</div>
+        <div style="font-weight:900; margin-bottom:8px;">Scan to pair phone → this room</div>
         <div id="qr" class="qrBox"></div>
         <div class="mono">
 URL:
@@ -169,20 +241,32 @@ URL:
       room: $("room"),
       newRoom: $("newRoom"),
       connect: $("connect"),
+      audioBtn: $("audioBtn"),
+
       status: $("status"),
       last: $("last"),
+
       pct: $("pct"),
+
+      vEnergy: $("vEnergy"),
+      vGroove: $("vGroove"),
+      vOrbit: $("vOrbit"),
+      vSmooth: $("vSmooth"),
+      vSpeed: $("vSpeed"),
+
       bEnergy: $("bEnergy"),
       bGroove: $("bGroove"),
       bOrbit: $("bOrbit"),
       bSmooth: $("bSmooth"),
       bSpeed: $("bSpeed"),
+
       qr: $("qr"),
       urlText: $("urlText"),
       fatal: $("fatal"),
     };
 
     function clamp01(x){ x = Number(x); return Math.max(0, Math.min(1, isFinite(x) ? x : 0)); }
+    const toPct = (x01) => Math.round(clamp01(x01) * 100);
 
     function setBar(el, v01){
       const p = clamp01(v01) * 100;
@@ -204,14 +288,11 @@ URL:
     }
 
     function stripOrbPrefix(room){
-      // worker wants the *code*; channel name stays "orb:<code>"
       return String(room || "").startsWith("orb:") ? String(room).slice(4) : String(room || "");
     }
 
     function phoneUrlFor(roomChannel){
-      // your phone page URL
       const base = "https://scrubbl3r.github.io/GameDev/mobile-orb-v1.html";
-      // phone accepts room=XXXX or room=orb:XXXX. give it the code for simplicity.
       const roomCode = stripOrbPrefix(roomChannel);
       return base + "?room=" + encodeURIComponent(roomCode);
     }
@@ -221,7 +302,6 @@ URL:
       const url = phoneUrlFor(roomChannel);
       els.urlText.textContent = url;
 
-      // Guard: if QR library missing, show message instead of crashing
       if (typeof QRCode === "undefined" || !QRCode.toCanvas) {
         els.qr.style.background = "#fff";
         els.qr.textContent = "QR lib failed to load";
@@ -244,10 +324,6 @@ URL:
       }
     }
 
-    // Ably state
-    let realtime = null;
-    let channel = null;
-
     function fatal(msg){
       els.fatal.style.display = "block";
       els.fatal.textContent = msg;
@@ -258,7 +334,116 @@ URL:
       els.status.innerHTML = html;
     }
 
-    // ===== UI update scheduling (prevents jitter if messages are high rate) =====
+    // =========================================================================
+    // CHARGE VISUALS (match phone)
+    // =========================================================================
+    const BG0 = { r: 0,   g: 0,  b: 0  };
+    const BG1 = { r: 255, g: 42, b: 0  }; // bright red-orange
+    function setBgFromEnergy(e01) {
+      const t = clamp01(e01);
+      const r = Math.round(BG0.r + (BG1.r - BG0.r) * t);
+      const g = Math.round(BG0.g + (BG1.g - BG0.g) * t);
+      const b = Math.round(BG0.b + (BG1.b - BG0.b) * t);
+      document.body.style.backgroundColor = `rgb(${r},${g},${b})`;
+
+      // drive CSS glow intensity
+      document.documentElement.style.setProperty("--charge", String(t));
+    }
+    setBgFromEnergy(0);
+
+    // =========================================================================
+    // AUDIO (match phone vibe)
+    // - Note: audio requires a user gesture. We provide Audio toggle + try on Connect.
+    // =========================================================================
+    let audioEnabled = false;
+    let audioCtx = null, osc = null, gainNode = null;
+
+    // mapping constants (copied from phone schema)
+    const AUDIO_GATE   = 0.02;
+    const AUDIO_MIN_DB = -42;
+    const AUDIO_MAX_DB = -6;
+    const AUDIO_EXP    = 1.15;
+
+    const MASTER_GAIN  = 2.2;
+
+    const TONE_BASE_HZ    = 180;
+    const TONE_MAX_ADD_HZ = 220;
+
+    const dbToGain = (db) => Math.pow(10, db/20);
+
+    function energyToGain(e) {
+      if (e <= AUDIO_GATE) return 0;
+      const x = (e - AUDIO_GATE) / (1 - AUDIO_GATE);
+      const shaped = Math.pow(clamp01(x), AUDIO_EXP);
+      const db = AUDIO_MIN_DB + (AUDIO_MAX_DB - AUDIO_MIN_DB) * shaped;
+      return dbToGain(db);
+    }
+
+    function ensureAudio() {
+      if (audioCtx) return;
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+      gainNode = audioCtx.createGain();
+      gainNode.gain.value = 0;
+
+      osc = audioCtx.createOscillator();
+      osc.type = "sine";
+      osc.frequency.value = TONE_BASE_HZ;
+
+      osc.connect(gainNode);
+      gainNode.connect(audioCtx.destination);
+      osc.start();
+    }
+
+    async function enableAudio() {
+      ensureAudio();
+      try { await audioCtx.resume(); } catch(_) {}
+      audioEnabled = true;
+      els.audioBtn.textContent = "Audio: On";
+      els.audioBtn.classList.remove("dim");
+    }
+
+    function disableAudio() {
+      audioEnabled = false;
+      els.audioBtn.textContent = "Audio: Off";
+      if (audioCtx && gainNode) {
+        const now = audioCtx.currentTime;
+        gainNode.gain.cancelScheduledValues(now);
+        gainNode.gain.setTargetAtTime(0, now, 0.06);
+      }
+    }
+
+    function setAudio(eUI, groove, locked) {
+      if (!audioEnabled || !audioCtx || !gainNode || !osc) return;
+
+      const gBase = energyToGain(eUI);
+      const gGroove = locked ? (0.30 + 0.70*groove) : (0.08 + 0.22*groove);
+      const g = MASTER_GAIN * gBase * gGroove;
+
+      const f = TONE_BASE_HZ
+              + TONE_MAX_ADD_HZ * (locked ? groove : 0.30*groove)
+              + 60 * eUI;
+
+      const now = audioCtx.currentTime;
+      gainNode.gain.cancelScheduledValues(now);
+      gainNode.gain.setTargetAtTime(g, now, 0.06);
+
+      osc.frequency.cancelScheduledValues(now);
+      osc.frequency.setTargetAtTime(f, now, 0.06);
+    }
+
+    els.audioBtn.addEventListener("click", async () => {
+      if (!audioEnabled) await enableAudio();
+      else disableAudio();
+    });
+
+    // =========================================================================
+    // ABLY RECEIVER
+    // =========================================================================
+    let realtime = null;
+    let channel = null;
+
+    // UI update scheduling (prevents jitter)
     let lastData = null;
     let rafPending = false;
 
@@ -274,15 +459,14 @@ URL:
     }
 
     function applyDataToUI(d){
-      // tolerate either phone schema:
-      //   new: energy01/groove01/orbit01/smooth01/speed01 in 0..1
-      //   old: energy/groove/orbit/smooth/speed in 0..1 or 0..100
+      // tolerate either schema:
+      // new: energy01/groove01/orbit01/smooth01/speed01 in 0..1
+      // old: energy/groove/orbit/smooth/speed in 0..1 or 0..100
       function pick01(a, b){
-        // prefer "a" if present, else "b"
         const v = (d[a] != null) ? d[a] : d[b];
         const n = Number(v);
         if (!isFinite(n)) return 0;
-        return (n > 1.5) ? (n / 100) : n; // accept 0..100 too
+        return (n > 1.5) ? (n / 100) : n;
       }
 
       const energy = pick01("energy01", "energy");
@@ -290,15 +474,34 @@ URL:
       const orbit  = pick01("orbit01",  "orbit");
       const smooth = pick01("smooth01", "smooth");
       const speed  = pick01("speed01",  "speed");
+      const locked = !!d.locked;
 
-      const pct = Math.round(clamp01(energy) * 100);
-      els.pct.textContent = isFinite(pct) ? pct : 0;
+      // charge visuals
+      setBgFromEnergy(energy);
+
+      // numbers + bars
+      const eP = toPct(energy);
+      const gP = toPct(groove);
+      const oP = toPct(orbit);
+      const sP = toPct(smooth);
+      const sp = toPct(speed);
+
+      els.pct.textContent = isFinite(eP) ? eP : 0;
+
+      els.vEnergy.textContent = `${eP}%`;
+      els.vGroove.textContent = `${gP}%${locked ? " (locked)" : ""}`;
+      els.vOrbit.textContent  = `${oP}%`;
+      els.vSmooth.textContent = `${sP}%`;
+      els.vSpeed.textContent  = `${sp}%`;
 
       setBar(els.bEnergy, energy);
       setBar(els.bGroove, groove);
       setBar(els.bOrbit,  orbit);
       setBar(els.bSmooth, smooth);
       setBar(els.bSpeed,  speed);
+
+      // audio
+      setAudio(energy, groove, locked);
     }
 
     async function connect(){
@@ -306,7 +509,6 @@ URL:
       const roomChannel = normalizeRoom(els.room.value);
       els.room.value = roomChannel;
 
-      // Guards so missing CDN doesn’t silently break the page
       if (typeof Ably === "undefined" || !Ably.Realtime) {
         fatal("Ably library failed to load. Check DevTools → Console/Network for blocked CDN scripts.");
         return;
@@ -314,11 +516,15 @@ URL:
 
       setStatus("Connecting…", "ok");
 
+      // Try to enable audio on connect (user gesture)
+      if (!audioEnabled) {
+        try { await enableAudio(); } catch(_) {}
+      }
+
       // Close any old connection
       try { if (realtime) realtime.close(); } catch(e) {}
       realtime = null; channel = null;
 
-      // Worker token expects room=<code> (NOT "orb:<code>")
       const roomCode = stripOrbPrefix(roomChannel);
       const authUrl = workerBase + "/token?room=" + encodeURIComponent(roomCode) + "&v=" + Date.now();
 
@@ -340,22 +546,17 @@ URL:
         setStatus("Disconnected", "bad");
       });
 
-      // Subscribe on the *channel name* (orb:<code>)
       channel = realtime.channels.get(roomChannel);
 
       channel.subscribe(function(msg){
         const d = (msg && msg.data) ? msg.data : {};
-        // lock log box size; show a short-ish JSON, not megabytes
+
+        // log box: keep it short, never let it destroy layout
         let s = "";
-        try {
-          s = JSON.stringify(d);
-        } catch(_) {
-          s = String(d);
-        }
+        try { s = JSON.stringify(d); } catch(_) { s = String(d); }
         if (s.length > 600) s = s.slice(0, 600) + " …";
         els.last.textContent = s;
 
-        // THIS is the real live UI
         scheduleUIUpdate(d);
       });
     }
