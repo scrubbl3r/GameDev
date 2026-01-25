@@ -3,286 +3,295 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Orb Relay — Receiver Test</title>
+  <title>Orb Relay (Game) — Ably + Worker</title>
   <style>
-    :root{
-      --g:#32ff75;
-      --g2:rgba(50,255,117,.60);
-      --g3:rgba(50,255,117,.20);
-      --bg:#020402;
-      --panel: rgba(0,0,0,.55);
-      --border: rgba(50,255,117,.18);
-      --bad:#ff5a5a;
-    }
-    html,body{height:100%;margin:0;background:radial-gradient(1200px 700px at 50% 35%, #061306 0%, var(--bg) 55%, #000 100%); color:var(--g); font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;}
-    .wrap{max-width:980px;margin:24px auto;padding:0 16px;}
-    h1{margin:0 0 14px 0; font-size:18px; letter-spacing:.6px; text-align:center;}
-    .grid{display:grid; grid-template-columns: 1.2fr 1fr; gap:18px; align-items:start;}
-    .card{background:var(--panel); border:1px solid var(--border); border-radius:16px; padding:14px 14px 16px; box-shadow: 0 18px 80px rgba(0,0,0,.55);}
-    label{display:block; font-size:12px; opacity:.85; margin:10px 0 6px;}
-    input{width:100%; box-sizing:border-box; padding:10px 10px; border-radius:12px; border:1px solid var(--border); background:rgba(0,0,0,.45); color:var(--g); outline:none;}
-    .row{display:flex; gap:10px; align-items:center;}
-    button{padding:10px 14px; border-radius:12px; border:1px solid var(--border); background:rgba(0,0,0,.45); color:var(--g); cursor:pointer; font-weight:700;}
-    button:hover{border-color:rgba(50,255,117,.35)}
-    .stat{margin-top:10px; font-size:13px; line-height:1.5;}
-    .dim{opacity:.6}
-    .big{font-size:42px; font-weight:900; margin:10px 0;}
-    .bars{margin-top:10px;}
-    .bar{height:14px; border-radius:999px; border:1px solid var(--border); background:rgba(0,0,0,.35); overflow:hidden; margin:8px 0;}
-    .fill{height:100%; width:0%; background:rgba(50,255,117,.55);}
-    .qrBox{
-      width: 280px; height: 280px;
+    :root { --green:#7dd35f; --bg:#0b0b0b; }
+    html,body { height:100%; margin:0; background:var(--bg); color:#ddd; font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif; }
+    .wrap { max-width:980px; margin:0 auto; padding:18px; }
+    h1 { margin:0 0 10px; font-size:20px; font-weight:800; letter-spacing:.2px; }
+    .row { display:flex; gap:14px; flex-wrap:wrap; align-items:flex-start; }
+    .card {
+      flex: 1 1 360px;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.08);
       border-radius: 14px;
-      border: 1px solid var(--border);
-      background: #fff; /* IMPORTANT: make QR visible */
-      display:grid; place-items:center;
-      overflow:hidden;
-      margin-top:10px;
+      padding: 14px;
     }
-    .mono{white-space:pre-wrap; word-break:break-word; font-size:12px; opacity:.8; margin-top:10px;}
-    .bad{color:var(--bad); font-weight:800;}
-    .ok{color:#7dffab; font-weight:800;}
-    @media (max-width: 900px){
-      .grid{grid-template-columns:1fr;}
-      .qrBox{width: 240px; height:240px;}
+    .card h2 { margin:0 0 10px; font-size:14px; opacity:.9; }
+    button {
+      font-size:16px; padding:10px 14px; border-radius:12px;
+      border: 1px solid rgba(125,211,95,0.65);
+      background: transparent; color: var(--green); cursor:pointer;
     }
+    button:disabled { opacity:.5; cursor:not-allowed; }
+    .mono { font:12px ui-monospace,SFMono-Regular,Menlo,monospace; opacity:.9; }
+    .kv { display:grid; grid-template-columns: 140px 1fr; gap:8px 10px; margin-top:10px; }
+    .kv div { padding:6px 0; border-bottom:1px solid rgba(255,255,255,0.06); }
+    .pill {
+      display:inline-block; padding:3px 8px; border-radius:999px;
+      border:1px solid rgba(255,255,255,0.14); background:rgba(255,255,255,0.03);
+      font-size:12px; opacity:.95;
+    }
+    #qr { width: 260px; height: 260px; display:flex; align-items:center; justify-content:center; background:#fff; border-radius:12px; overflow:hidden; }
+    #qr img, #qr canvas { width: 100% !important; height: 100% !important; }
+    .muted { opacity:.7; }
+    .good { color: var(--green); }
+    .warn { color: #ffd37a; }
+    .bad  { color: #ff7a7a; }
+    .big { font-size:42px; font-weight:900; letter-spacing:-0.03em; margin:0; }
+    .sub { margin:0; opacity:.75; }
+    a { color: var(--green); }
+    code { background: rgba(125,211,95,0.08); border: 1px solid rgba(125,211,95,0.30); padding: 2px 6px; border-radius: 8px; }
   </style>
-
-  <!-- Ably + QR -->
-  <script src="https://cdn.ably.com/lib/ably.min-1.js"></script>
-  <script src="./qrcode.min.js"></script>
 </head>
 <body>
   <div class="wrap">
-    <h1>Orb Relay — Receiver Test (laptop/game side)</h1>
+    <h1>Orb Relay (Game) — Ably via Worker Token</h1>
 
-    <div class="grid">
+    <div class="row">
       <div class="card">
-        <label>Worker</label>
-        <input id="worker" value="https://orb-token.mrgarthwilliams.workers.dev" />
-
-        <label>Room</label>
-        <div class="row">
-          <input id="room" value="orb:test" />
-          <button id="newRoom">New room</button>
-          <button id="connect">Connect</button>
+        <h2>Controls</h2>
+        <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
+          <button id="connectBtn">Connect + Generate QR</button>
+          <button id="disconnectBtn" disabled>Disconnect</button>
+          <span class="pill mono" id="statusPill">idle</span>
         </div>
 
-        <div class="stat">
-          <div>Status: <span id="status" class="dim">Not connected.</span></div>
-          <div>Last message: <span id="last" class="dim">—</span></div>
+        <div class="kv mono">
+          <div class="muted">Worker</div><div id="workerOut"></div>
+          <div class="muted">Room channel</div><div id="roomOut"></div>
+          <div class="muted">Phone URL</div><div id="phoneUrlOut"></div>
+          <div class="muted">Last msg</div><div id="lastMsgOut" class="muted">—</div>
         </div>
 
-        <div class="big"><span id="pct">0</span>%</div>
+        <p class="mono muted" style="margin-top:10px;">
+          Cache-buster: we append <code>&v=TIMESTAMP</code> so iPhone Chrome loads the newest phone page every scan.
+        </p>
+      </div>
 
-        <div class="bars">
-          <div class="dim">Energy</div>
-          <div class="bar"><div id="bEnergy" class="fill"></div></div>
-          <div class="dim">Groove</div>
-          <div class="bar"><div id="bGroove" class="fill"></div></div>
-          <div class="dim">Orbit</div>
-          <div class="bar"><div id="bOrbit" class="fill"></div></div>
-          <div class="dim">Smooth</div>
-          <div class="bar"><div id="bSmooth" class="fill"></div></div>
-          <div class="dim">Speed</div>
-          <div class="bar"><div id="bSpeed" class="fill"></div></div>
-        </div>
-
-        <div class="mono dim">
-Tip: open this page on your laptop, scan QR on phone, press Start on the phone controller.
-        </div>
-
-        <div id="fatal" class="mono bad" style="display:none;"></div>
+      <div class="card" style="flex:0 0 320px;">
+        <h2>QR (scan on phone)</h2>
+        <div id="qr"></div>
+        <p class="mono muted" style="margin-top:10px;">
+          If QR is blank: open DevTools → Console for errors.
+        </p>
       </div>
 
       <div class="card">
-        <div style="font-weight:800; margin-bottom:8px;">Scan to pair phone → this room</div>
-        <div id="qr" class="qrBox"></div>
-        <div class="mono">
-URL:
-<span id="urlText"></span>
+        <h2>Live Energy</h2>
+        <p class="big" id="energyBig">0%</p>
+        <p class="sub" id="energySub">waiting for messages…</p>
+
+        <div class="kv mono" style="margin-top:14px;">
+          <div class="muted">groove</div><div id="grooveOut">0</div>
+          <div class="muted">orbit</div><div id="orbitOut">0</div>
+          <div class="muted">smooth</div><div id="smoothOut">0</div>
+          <div class="muted">speed</div><div id="speedOut">0</div>
+          <div class="muted">locked</div><div id="lockedOut">false</div>
+          <div class="muted">hz</div><div id="hzOut">0</div>
         </div>
       </div>
     </div>
   </div>
 
+  <!-- Ably (CDN) -->
+  <script src="https://cdn.ably.com/lib/ably.min-1.js"></script>
+
+  <!-- QRCode library (you said you now have this working) -->
+  <!-- Put qrcode.min.js in the same folder as this HTML, or change the src to your path -->
+  <script src="./qrcode.min.js"></script>
+
   <script>
+  (() => {
+    // ========= CONFIG =========
+    const WORKER_BASE = "https://orb-token.mrgarthwilliams.workers.dev";
+    const TOKEN_URL   = WORKER_BASE + "/token";
+
+    // CHANGE THIS to your published mobile page URL:
+    // Example: "https://mrgarthwilliams.github.io/orb/mobile-orb-v1.html"
+    const PHONE_PAGE_URL = "https://scrubbl3r.github.io/GameDev/mobile-orb-connect-v1.html";
+
+    // Room naming strategy:
+    // channel is always "orb:<code>"
+    function makeRoomCode() {
+      return Math.random().toString(36).slice(2, 8).toUpperCase(); // e.g. "7H2K9P"
+    }
+
+    // ========= UI =========
     const $ = (id) => document.getElementById(id);
+    const connectBtn = $("connectBtn");
+    const disconnectBtn = $("disconnectBtn");
+    const statusPill = $("statusPill");
+    const workerOut = $("workerOut");
+    const roomOut = $("roomOut");
+    const phoneUrlOut = $("phoneUrlOut");
+    const lastMsgOut = $("lastMsgOut");
 
-    const els = {
-      worker: $("worker"),
-      room: $("room"),
-      newRoom: $("newRoom"),
-      connect: $("connect"),
-      status: $("status"),
-      last: $("last"),
-      pct: $("pct"),
-      bEnergy: $("bEnergy"),
-      bGroove: $("bGroove"),
-      bOrbit: $("bOrbit"),
-      bSmooth: $("bSmooth"),
-      bSpeed: $("bSpeed"),
-      qr: $("qr"),
-      urlText: $("urlText"),
-      fatal: $("fatal"),
-    };
+    const energyBig = $("energyBig");
+    const energySub = $("energySub");
+    const grooveOut = $("grooveOut");
+    const orbitOut  = $("orbitOut");
+    const smoothOut = $("smoothOut");
+    const speedOut  = $("speedOut");
+    const lockedOut = $("lockedOut");
+    const hzOut     = $("hzOut");
 
-    function setBar(el, v01){
-      const p = Math.max(0, Math.min(1, Number(v01 || 0))) * 100;
-      el.style.width = p.toFixed(1) + "%";
+    workerOut.textContent = WORKER_BASE;
+
+    function setStatus(text, cls) {
+      statusPill.textContent = text;
+      statusPill.classList.remove("good","warn","bad");
+      if (cls) statusPill.classList.add(cls);
     }
 
-    function randCode(n=6){
-      const A="ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-      let s="";
-      for(let i=0;i<n;i++) s += A[(Math.random()*A.length)|0];
-      return s;
+    function pct(x01) {
+      const n = Math.max(0, Math.min(1, Number(x01) || 0));
+      return Math.round(n * 100);
     }
 
-    function phoneUrlFor(room){
-      // adjust path if your phone page filename differs
-      const base = "https://scrubbl3r.github.io/GameDev/mobile-orb-v1.html";
-      return base + "?room=" + encodeURIComponent(room);
-    }
-
-    async function renderQR(room){
-      els.qr.innerHTML = "";
-      const url = phoneUrlFor(room);
-      els.urlText.textContent = url;
-
-      // Guard: if QR library missing, show message instead of crashing
-      if (typeof QRCode === "undefined" || !QRCode.toCanvas) {
-        els.qr.style.background = "#fff";
-        els.qr.textContent = "QR lib failed to load";
-        return;
-      }
-
-      const canvas = document.createElement("canvas");
-      canvas.width = 280; canvas.height = 280;
-      els.qr.appendChild(canvas);
-
-      try{
-        await QRCode.toCanvas(canvas, url, {
+    // ========= QR =========
+    function renderQR(url) {
+      const qrEl = document.getElementById("qr");
+      qrEl.innerHTML = "";
+      // QRCode.js supports either new QRCode(el, opts) or QRCode.toCanvas, depending on build.
+      // This is the common constructor-style build.
+      try {
+        new QRCode(qrEl, {
+          text: url,
           width: 260,
-          margin: 2,
-          color: { dark: "#000000", light: "#ffffff" } // visible on dark UI
+          height: 260,
+          correctLevel: QRCode.CorrectLevel.M
         });
-      }catch(e){
-        els.qr.textContent = "QR render error";
-        console.error("QR render error:", e);
+      } catch (e) {
+        console.error("QR render failed. Check qrcode.min.js.", e);
+        qrEl.innerHTML = "<div class='mono bad'>QR render failed (see console)</div>";
       }
     }
 
-    // Ably state
-    let realtime = null;
+    // ========= Ably =========
+    let ably = null;
     let channel = null;
+    let roomCode = null;
+    let roomChannelName = null;
 
-    function fatal(msg){
-      els.fatal.style.display = "block";
-      els.fatal.textContent = msg;
+    function buildPhoneUrl(roomCode) {
+      // *** THIS IS THE IMPORTANT PART ***
+      // Add a cache-buster query param so iPhone Chrome doesn't use old cached HTML.
+      const v = Date.now(); // unique per connect click
+      const u = new URL(PHONE_PAGE_URL);
+      u.searchParams.set("room", roomCode); // phone will convert to orb:<code> if needed
+      u.searchParams.set("v", String(v));   // cache-buster
+      return u.toString();
     }
 
-    function setStatus(html, cls){
-      els.status.className = cls || "dim";
-      els.status.innerHTML = html;
+    function buildAuthUrl(roomCode) {
+      // Worker expects ?room=<code> and will mint capability for orb:<code>
+      const clientId = "game-" + Math.random().toString(16).slice(2,6);
+      const u = new URL(TOKEN_URL);
+      u.searchParams.set("room", roomCode);
+      u.searchParams.set("clientId", clientId);
+      u.searchParams.set("v", String(Date.now())); // also avoids caching for token fetch
+      return u.toString();
     }
 
-    function normalizeRoom(input){
-      let r = String(input || "").trim();
-      if (!r) r = "orb:test";
-      // If user types "test", make it "orb:test"
-      if (r.indexOf(":") === -1) r = "orb:" + r;
-      return r;
-    }
-
-    async function connect(){
-      const workerBase = String(els.worker.value || "").replace(/\/+$/,"");
-      const room = normalizeRoom(els.room.value);
-      els.room.value = room;
-
-      // Hard guards so a missing CDN doesn’t silently break the page
-      if (typeof Ably === "undefined" || !Ably.Realtime) {
-        fatal("Ably library failed to load. Check DevTools → Console/Network for blocked CDN scripts.");
+    async function connect() {
+      if (!PHONE_PAGE_URL.includes("http")) {
+        alert("Edit PHONE_PAGE_URL at the top of the file to your real GitHub Pages URL.");
         return;
       }
 
-      setStatus("Connecting…", "ok");
+      // Fresh room every time for bulletproof pairing
+      roomCode = makeRoomCode();
+      roomChannelName = "orb:" + roomCode;
 
-      // Close any old connection
-      try { if (realtime) realtime.close(); } catch(e) {}
+      const phoneUrl = buildPhoneUrl(roomCode);
+      const authUrl  = buildAuthUrl(roomCode);
 
-      const authUrl = workerBase + "/token?room=" + encodeURIComponent(room);
+      roomOut.textContent = roomChannelName;
+      phoneUrlOut.innerHTML = `<a href="${phoneUrl}" target="_blank" rel="noopener" class="good">${phoneUrl}</a>`;
+      renderQR(phoneUrl);
 
-      realtime = new Ably.Realtime({
-        authUrl,
-        // helpful when debugging
-        echoMessages: false
+      setStatus("minting token…", "warn");
+
+      // Preflight token fetch so failures show clearly
+      try {
+        const r = await fetch(authUrl, { method: "GET", cache: "no-store" });
+        const j = await r.json();
+        if (!r.ok || !j.token) {
+          console.error("TOKEN ERROR:", r.status, j);
+          setStatus("token FAILED (console)", "bad");
+          return;
+        }
+      } catch (e) {
+        console.error("TOKEN FETCH FAILED:", e);
+        setStatus("token fetch FAILED", "bad");
+        return;
+      }
+
+      setStatus("connecting…", "warn");
+
+      // Clean old connection
+      try { if (channel) channel.detach(); } catch(_) {}
+      try { if (ably) ably.close(); } catch(_) {}
+      ably = null; channel = null;
+
+      ably = new Ably.Realtime({ authUrl, autoConnect: true });
+
+      ably.connection.on("connected", () => setStatus("ably connected ✓", "good"));
+      ably.connection.on("failed", (st) => { console.error("ABLY FAILED:", st); setStatus("ably FAILED", "bad"); });
+      ably.connection.on("disconnected", (st) => { console.warn("ABLY disconnected:", st); setStatus("disconnected", "warn"); });
+
+      channel = ably.channels.get(roomChannelName);
+
+      channel.attach((err) => {
+        if (err) {
+          console.error("CHANNEL ATTACH ERROR:", err);
+          setStatus("channel attach FAILED", "bad");
+          return;
+        }
+        setStatus("channel attached ✓", "good");
+        disconnectBtn.disabled = false;
+        connectBtn.disabled = true;
       });
 
-      realtime.connection.on("connected", function(){
-        setStatus("Connected ✓", "ok");
-      });
+      channel.subscribe("orb", (msg) => {
+        const d = msg.data || {};
+        lastMsgOut.textContent = new Date().toLocaleTimeString() + " • " + JSON.stringify(d).slice(0, 140);
 
-      realtime.connection.on("failed", function(stateChange){
-        console.error("Ably connection failed:", stateChange);
-        setStatus("FAILED — see console", "bad");
-      });
+        const e = pct(d.energy01);
+        energyBig.textContent = e + "%";
+        energySub.textContent = "receiving…";
 
-      realtime.connection.on("disconnected", function(){
-        setStatus("Disconnected", "bad");
-      });
-
-      channel = realtime.channels.get(room);
-
-      channel.subscribe(function(msg){
-        els.last.textContent = (msg && msg.data) ? JSON.stringify(msg.data) : "(no data)";
-        const d = (msg && msg.data) ? msg.data : {};
-
-        // Expect controller to send 0..1 floats; tolerate 0..100 too
-        const energy = (d.energy > 1.5) ? (d.energy / 100) : d.energy;
-        const groove = (d.groove > 1.5) ? (d.groove / 100) : d.groove;
-        const orbit  = (d.orbit  > 1.5) ? (d.orbit  / 100) : d.orbit;
-        const smooth = (d.smooth > 1.5) ? (d.smooth / 100) : d.smooth;
-        const speed  = (d.speed  > 1.5) ? (d.speed  / 100) : d.speed;
-
-        const pct = Math.round((Number(energy||0)) * 100);
-        els.pct.textContent = isFinite(pct) ? pct : 0;
-
-        setBar(els.bEnergy, energy);
-        setBar(els.bGroove, groove);
-        setBar(els.bOrbit, orbit);
-        setBar(els.bSmooth, smooth);
-        setBar(els.bSpeed, speed);
+        grooveOut.textContent = pct(d.groove01);
+        orbitOut.textContent  = pct(d.orbit01);
+        smoothOut.textContent = pct(d.smooth01);
+        speedOut.textContent  = pct(d.speed01);
+        lockedOut.textContent = String(!!d.locked);
+        hzOut.textContent     = (Number(d.hz) || 0).toFixed(2);
       });
     }
 
-    // UI wiring
-    els.newRoom.addEventListener("click", function(){
-      const room = "orb:" + randCode(6);
-      els.room.value = room;
-      renderQR(room);
-    });
+    function disconnect() {
+      try { if (channel) channel.detach(); } catch(_) {}
+      try { if (ably) ably.close(); } catch(_) {}
+      ably = null; channel = null;
 
-    els.connect.addEventListener("click", function(){
-      connect();
-    });
+      setStatus("idle", "");
+      disconnectBtn.disabled = true;
+      connectBtn.disabled = false;
 
-    // Boot
-    (function init(){
-      const room = normalizeRoom(els.room.value);
-      els.room.value = room;
-      renderQR(room);
+      energyBig.textContent = "0%";
+      energySub.textContent = "waiting for messages…";
+      lastMsgOut.textContent = "—";
+    }
 
-      // If either CDN fails, we want a visible warning (instead of “nothing happens”)
-      if (typeof Ably === "undefined") {
-        fatal("Ably CDN did not load yet. If this persists, check DevTools → Network for ably.min-1.js.");
-      } else if (typeof QRCode === "undefined") {
-        fatal("QR CDN did not load yet. If this persists, check DevTools → Network for qrcode.min.js.");
-      } else {
-        // clear fatal if everything is present
-        els.fatal.style.display = "none";
-      }
-    })();
+    connectBtn.addEventListener("click", connect);
+    disconnectBtn.addEventListener("click", disconnect);
+
+    // Optional: auto-connect if URL includes ?autoconnect=1
+    const url = new URL(location.href);
+    if (url.searchParams.get("autoconnect") === "1") connect();
+  })();
   </script>
 </body>
 </html>
