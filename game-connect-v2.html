@@ -292,19 +292,10 @@ URL:
     }
 
     function phoneUrlFor(roomChannel){
-    // ✅ point to the correct phone build
-    const base = "https://scrubbl3r.github.io/GameDev/mobile-orb-connect-v1.html";
-
-    const roomCode = stripOrbPrefix(roomChannel);
-
-    // ✅ cache-buster so iOS Safari won’t “helpfully” serve an older cached HTML
-    const v = Date.now();
-
-    return base
-      + "?room=" + encodeURIComponent(roomCode)
-      + "&v=" + v;
-  }
-
+      const base = "https://scrubbl3r.github.io/GameDev/mobile-orb-v1.html";
+      const roomCode = stripOrbPrefix(roomChannel);
+      return base + "?room=" + encodeURIComponent(roomCode);
+    }
 
     async function renderQR(roomChannel){
       els.qr.innerHTML = "";
