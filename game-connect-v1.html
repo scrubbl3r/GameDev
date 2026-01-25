@@ -14,27 +14,77 @@
       --border: rgba(50,255,117,.18);
       --bad:#ff5a5a;
     }
-    html,body{height:100%;margin:0;background:radial-gradient(1200px 700px at 50% 35%, #061306 0%, var(--bg) 55%, #000 100%); color:var(--g); font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;}
+    html,body{
+      height:100%;
+      margin:0;
+      background:radial-gradient(1200px 700px at 50% 35%, #061306 0%, var(--bg) 55%, #000 100%);
+      color:var(--g);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    }
     .wrap{max-width:980px;margin:24px auto;padding:0 16px;}
     h1{margin:0 0 14px 0; font-size:18px; letter-spacing:.6px; text-align:center;}
     .grid{display:grid; grid-template-columns: 1.2fr 1fr; gap:18px; align-items:start;}
-    .card{background:var(--panel); border:1px solid var(--border); border-radius:16px; padding:14px 14px 16px; box-shadow: 0 18px 80px rgba(0,0,0,.55);}
+    .card{
+      background:var(--panel);
+      border:1px solid var(--border);
+      border-radius:16px;
+      padding:14px 14px 16px;
+      box-shadow: 0 18px 80px rgba(0,0,0,.55);
+      overflow:hidden;
+    }
     label{display:block; font-size:12px; opacity:.85; margin:10px 0 6px;}
-    input{width:100%; box-sizing:border-box; padding:10px 10px; border-radius:12px; border:1px solid var(--border); background:rgba(0,0,0,.45); color:var(--g); outline:none;}
+    input{
+      width:100%;
+      box-sizing:border-box;
+      padding:10px 10px;
+      border-radius:12px;
+      border:1px solid var(--border);
+      background:rgba(0,0,0,.45);
+      color:var(--g);
+      outline:none;
+    }
     .row{display:flex; gap:10px; align-items:center;}
-    button{padding:10px 14px; border-radius:12px; border:1px solid var(--border); background:rgba(0,0,0,.45); color:var(--g); cursor:pointer; font-weight:700;}
+    button{
+      padding:10px 14px;
+      border-radius:12px;
+      border:1px solid var(--border);
+      background:rgba(0,0,0,.45);
+      color:var(--g);
+      cursor:pointer;
+      font-weight:700;
+      white-space:nowrap;
+    }
     button:hover{border-color:rgba(50,255,117,.35)}
     .stat{margin-top:10px; font-size:13px; line-height:1.5;}
     .dim{opacity:.6}
     .big{font-size:42px; font-weight:900; margin:10px 0;}
+
+    /* ===== KEY FIX: fixed-size last-message log (no layout thrash) ===== */
+    .logBox{
+      margin-top:8px;
+      padding:10px 10px;
+      border-radius:12px;
+      border:1px solid var(--border);
+      background:rgba(0,0,0,.35);
+      color:rgba(220,255,230,.90);
+      font-size:12px;
+      line-height:1.35;
+      max-height:84px;        /* LOCKED */
+      overflow:auto;          /* scroll instead of resize */
+      word-break:break-word;
+      white-space:pre-wrap;
+    }
+    .logBox .muted{opacity:.7}
+
     .bars{margin-top:10px;}
     .bar{height:14px; border-radius:999px; border:1px solid var(--border); background:rgba(0,0,0,.35); overflow:hidden; margin:8px 0;}
     .fill{height:100%; width:0%; background:rgba(50,255,117,.55);}
+
     .qrBox{
       width: 280px; height: 280px;
       border-radius: 14px;
       border: 1px solid var(--border);
-      background: #fff; /* IMPORTANT: make QR visible */
+      background: #fff;
       display:grid; place-items:center;
       overflow:hidden;
       margin-top:10px;
@@ -42,6 +92,7 @@
     .mono{white-space:pre-wrap; word-break:break-word; font-size:12px; opacity:.8; margin-top:10px;}
     .bad{color:var(--bad); font-weight:800;}
     .ok{color:#7dffab; font-weight:800;}
+
     @media (max-width: 900px){
       .grid{grid-template-columns:1fr;}
       .qrBox{width: 240px; height:240px;}
@@ -70,7 +121,11 @@
 
         <div class="stat">
           <div>Status: <span id="status" class="dim">Not connected.</span></div>
-          <div>Last message: <span id="last" class="dim">—</span></div>
+        </div>
+
+        <div class="logBox" aria-label="Last message log">
+          <div class="muted">Last message:</div>
+          <div id="last">(none yet)</div>
         </div>
 
         <div class="big"><span id="pct">0</span>%</div>
@@ -127,8 +182,10 @@ URL:
       fatal: $("fatal"),
     };
 
+    function clamp01(x){ x = Number(x); return Math.max(0, Math.min(1, isFinite(x) ? x : 0)); }
+
     function setBar(el, v01){
-      const p = Math.max(0, Math.min(1, Number(v01 || 0))) * 100;
+      const p = clamp01(v01) * 100;
       el.style.width = p.toFixed(1) + "%";
     }
 
@@ -139,15 +196,29 @@ URL:
       return s;
     }
 
-    function phoneUrlFor(room){
-      // adjust path if your phone page filename differs
-      const base = "https://scrubbl3r.github.io/GameDev/mobile-orb-v1.html";
-      return base + "?room=" + encodeURIComponent(room);
+    function normalizeRoom(input){
+      let r = String(input || "").trim();
+      if (!r) r = "orb:test";
+      if (r.indexOf(":") === -1) r = "orb:" + r; // allow "test"
+      return r;
     }
 
-    async function renderQR(room){
+    function stripOrbPrefix(room){
+      // worker wants the *code*; channel name stays "orb:<code>"
+      return String(room || "").startsWith("orb:") ? String(room).slice(4) : String(room || "");
+    }
+
+    function phoneUrlFor(roomChannel){
+      // your phone page URL
+      const base = "https://scrubbl3r.github.io/GameDev/mobile-orb-v1.html";
+      // phone accepts room=XXXX or room=orb:XXXX. give it the code for simplicity.
+      const roomCode = stripOrbPrefix(roomChannel);
+      return base + "?room=" + encodeURIComponent(roomCode);
+    }
+
+    async function renderQR(roomChannel){
       els.qr.innerHTML = "";
-      const url = phoneUrlFor(room);
+      const url = phoneUrlFor(roomChannel);
       els.urlText.textContent = url;
 
       // Guard: if QR library missing, show message instead of crashing
@@ -165,7 +236,7 @@ URL:
         await QRCode.toCanvas(canvas, url, {
           width: 260,
           margin: 2,
-          color: { dark: "#000000", light: "#ffffff" } // visible on dark UI
+          color: { dark: "#000000", light: "#ffffff" }
         });
       }catch(e){
         els.qr.textContent = "QR render error";
@@ -187,20 +258,55 @@ URL:
       els.status.innerHTML = html;
     }
 
-    function normalizeRoom(input){
-      let r = String(input || "").trim();
-      if (!r) r = "orb:test";
-      // If user types "test", make it "orb:test"
-      if (r.indexOf(":") === -1) r = "orb:" + r;
-      return r;
+    // ===== UI update scheduling (prevents jitter if messages are high rate) =====
+    let lastData = null;
+    let rafPending = false;
+
+    function scheduleUIUpdate(data){
+      lastData = data;
+      if (rafPending) return;
+      rafPending = true;
+      requestAnimationFrame(() => {
+        rafPending = false;
+        if (!lastData) return;
+        applyDataToUI(lastData);
+      });
+    }
+
+    function applyDataToUI(d){
+      // tolerate either phone schema:
+      //   new: energy01/groove01/orbit01/smooth01/speed01 in 0..1
+      //   old: energy/groove/orbit/smooth/speed in 0..1 or 0..100
+      function pick01(a, b){
+        // prefer "a" if present, else "b"
+        const v = (d[a] != null) ? d[a] : d[b];
+        const n = Number(v);
+        if (!isFinite(n)) return 0;
+        return (n > 1.5) ? (n / 100) : n; // accept 0..100 too
+      }
+
+      const energy = pick01("energy01", "energy");
+      const groove = pick01("groove01", "groove");
+      const orbit  = pick01("orbit01",  "orbit");
+      const smooth = pick01("smooth01", "smooth");
+      const speed  = pick01("speed01",  "speed");
+
+      const pct = Math.round(clamp01(energy) * 100);
+      els.pct.textContent = isFinite(pct) ? pct : 0;
+
+      setBar(els.bEnergy, energy);
+      setBar(els.bGroove, groove);
+      setBar(els.bOrbit,  orbit);
+      setBar(els.bSmooth, smooth);
+      setBar(els.bSpeed,  speed);
     }
 
     async function connect(){
       const workerBase = String(els.worker.value || "").replace(/\/+$/,"");
-      const room = normalizeRoom(els.room.value);
-      els.room.value = room;
+      const roomChannel = normalizeRoom(els.room.value);
+      els.room.value = roomChannel;
 
-      // Hard guards so a missing CDN doesn’t silently break the page
+      // Guards so missing CDN doesn’t silently break the page
       if (typeof Ably === "undefined" || !Ably.Realtime) {
         fatal("Ably library failed to load. Check DevTools → Console/Network for blocked CDN scripts.");
         return;
@@ -210,12 +316,14 @@ URL:
 
       // Close any old connection
       try { if (realtime) realtime.close(); } catch(e) {}
+      realtime = null; channel = null;
 
-      const authUrl = workerBase + "/token?room=" + encodeURIComponent(room);
+      // Worker token expects room=<code> (NOT "orb:<code>")
+      const roomCode = stripOrbPrefix(roomChannel);
+      const authUrl = workerBase + "/token?room=" + encodeURIComponent(roomCode) + "&v=" + Date.now();
 
       realtime = new Ably.Realtime({
         authUrl,
-        // helpful when debugging
         echoMessages: false
       });
 
@@ -232,35 +340,31 @@ URL:
         setStatus("Disconnected", "bad");
       });
 
-      channel = realtime.channels.get(room);
+      // Subscribe on the *channel name* (orb:<code>)
+      channel = realtime.channels.get(roomChannel);
 
       channel.subscribe(function(msg){
-        els.last.textContent = (msg && msg.data) ? JSON.stringify(msg.data) : "(no data)";
         const d = (msg && msg.data) ? msg.data : {};
+        // lock log box size; show a short-ish JSON, not megabytes
+        let s = "";
+        try {
+          s = JSON.stringify(d);
+        } catch(_) {
+          s = String(d);
+        }
+        if (s.length > 600) s = s.slice(0, 600) + " …";
+        els.last.textContent = s;
 
-        // Expect controller to send 0..1 floats; tolerate 0..100 too
-        const energy = (d.energy > 1.5) ? (d.energy / 100) : d.energy;
-        const groove = (d.groove > 1.5) ? (d.groove / 100) : d.groove;
-        const orbit  = (d.orbit  > 1.5) ? (d.orbit  / 100) : d.orbit;
-        const smooth = (d.smooth > 1.5) ? (d.smooth / 100) : d.smooth;
-        const speed  = (d.speed  > 1.5) ? (d.speed  / 100) : d.speed;
-
-        const pct = Math.round((Number(energy||0)) * 100);
-        els.pct.textContent = isFinite(pct) ? pct : 0;
-
-        setBar(els.bEnergy, energy);
-        setBar(els.bGroove, groove);
-        setBar(els.bOrbit, orbit);
-        setBar(els.bSmooth, smooth);
-        setBar(els.bSpeed, speed);
+        // THIS is the real live UI
+        scheduleUIUpdate(d);
       });
     }
 
     // UI wiring
     els.newRoom.addEventListener("click", function(){
-      const room = "orb:" + randCode(6);
-      els.room.value = room;
-      renderQR(room);
+      const roomChannel = "orb:" + randCode(6);
+      els.room.value = roomChannel;
+      renderQR(roomChannel);
     });
 
     els.connect.addEventListener("click", function(){
@@ -269,17 +373,15 @@ URL:
 
     // Boot
     (function init(){
-      const room = normalizeRoom(els.room.value);
-      els.room.value = room;
-      renderQR(room);
+      const roomChannel = normalizeRoom(els.room.value);
+      els.room.value = roomChannel;
+      renderQR(roomChannel);
 
-      // If either CDN fails, we want a visible warning (instead of “nothing happens”)
       if (typeof Ably === "undefined") {
         fatal("Ably CDN did not load yet. If this persists, check DevTools → Network for ably.min-1.js.");
       } else if (typeof QRCode === "undefined") {
         fatal("QR CDN did not load yet. If this persists, check DevTools → Network for qrcode.min.js.");
       } else {
-        // clear fatal if everything is present
         els.fatal.style.display = "none";
       }
     })();
