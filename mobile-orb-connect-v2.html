@@ -228,6 +228,11 @@
   <script>
   (() => {
     // =========================================================================
+    // BUILD / QR sanity (you mentioned QR is hardcoded to -2 elsewhere)
+    // =========================================================================
+    const EXPECT_PATH_INCLUDES = "-2"; // warn if this page isn't the -2 build
+
+    // =========================================================================
     // Diagnostics helpers
     // =========================================================================
     const $ = (id) => document.getElementById(id);
@@ -277,6 +282,11 @@
     log("boot url=" + window.location.href);
     log("ua=" + navigator.userAgent);
     log("secureContext=" + !!window.isSecureContext);
+
+    if (!String(window.location.pathname || "").includes(EXPECT_PATH_INCLUDES)) {
+      log("WARN: this does not look like the -2 build (QR may point elsewhere)", { pathname: window.location.pathname });
+      setStage("warning: not -2 path", "warn");
+    }
 
     setSecure(!!window.isSecureContext);
     setPerm("unknown", "dim");
@@ -421,7 +431,6 @@
     const PUBLISH_HZ = 25;
     const PUBLISH_DT = 1 / PUBLISH_HZ;
     let publishAcc = 0;
-    let publishOkBlink = 0;
 
     function publishOrb(payload, dt) {
       if (!ablyChannel) return;
@@ -435,14 +444,12 @@
           setRelay("publish error", "bad");
           setErr("publish error (see console)", "bad");
           console.error("PUBLISH ERROR:", err);
-        } else {
-          publishOkBlink = 0.25;
         }
       });
     }
 
     // =========================================================================
-    // DIAL PACK v4 — "FASTER DECAY" (PRESERVED)
+    // DIAL PACK v4 — base detection (PRESERVED)
     // =========================================================================
     const OMEGA_LPF = 0.22;
 
@@ -469,6 +476,13 @@
     const ORBIT_FLOOR      = 0.75;
     const ORBIT_STRICTNESS = 1.0;
 
+    const ENERGY_GAIN_LOCKED = 1.25;
+    const ENERGY_GAIN_FREE   = 0.65;
+
+    const ENERGY_DECAY       = 0.090;
+    const STOP_SPEED_THRESH  = 0.06;
+    const STOP_DECAY_MULT    = 1.0;
+
     const UI_SMOOTH   = 0.10;
     const LOCK_SMOOTH = 0.14;
 
@@ -482,55 +496,30 @@
     const NORM_ALPHA = 0.10;
 
     // =========================================================================
-    // SSOT — ENERGY MODEL 2.0 (Mobile)
+    // SSOT MOBILE 2.0 — ENERGY MODEL (INDEPENDENT PRODUCT METERS)
     // -------------------------------------------------------------------------
-    // Philosophy:
-    //   thrust     = speedScore (shaped)                    [throttle]
-    //   efficiency = grooveScore^A * smoothScore^B          [quality engine]
-    //   orbit      = small multiplier (least relevant)
-    //   dE/dt      = + (EARN_RATE * thrust * efficiency * orbitFactor * lockBoost)
-    //               - (drag(thrust) * dragReduce(efficiency) * lockDragMult)
+    // earnBase = groove * smooth * speed * orbit
+    // - groove   = lockStrength (0..1)
+    // - smooth   = smoothScore  (0..1)
+    // - speed    = speedScore   (0..1)
+    // - orbit    = orbitBonus   (~0.75..1) derived directly from direction covariance
     //
-    // Hierarchy target: Groove > Smooth > Speed > Orbit
+    // Exponents (<1) make mid-values contribute more so the product isn't tiny.
     // =========================================================================
-    const E2 = {
-      MODEL_NAME: "SSOT Mobile 2.0",
+    const GROOVE_EXP = 0.70;
+    const SMOOTH_EXP = 0.70;
+    const SPEED_EXP  = 1.00;
+    const ORBIT_EXP  = 1.00;
 
-      // thrust shaping (makes low-speed “hover control” more usable)
-      THRUST_EXP: 0.85,            // <1 => more thrust at low speed
-      THRUST_FLOOR: 0.00,
+    const EARN_SCALE = 1.00;   // overall earn boost (tweak if needed)
 
-      // efficiency = groove^A * smooth^B (groove most important)
-      GROOVE_EXP: 1.35,
-      SMOOTH_EXP: 1.10,
-      EFF_FLOOR: 0.02,             // prevents hard-zero / keeps audio/UI stable
-
-      // orbit: gentle multiplier (least relevant)
-      ORBIT_MULT_MIN: 0.95,
-      ORBIT_MULT_MAX: 1.08,
-
-      // core earn + drag
-      EARN_RATE: 0.22,             // overall “thrust→energy” conversion
-      DRAG_BASE: 0.060,            // constant “gravity”
-      DRAG_LOW_THRUST_ADD: 0.090,  // extra drag when you back off speed
-      DRAG_LOW_THRUST_POW: 2.00,   // curve for low-thrust drag boost
-
-      // efficiency reduces drag (good groove+smooth lets you coast)
-      DRAG_REDUCE_MAX: 0.60,       // up to 60% drag reduction at high efficiency
-
-      // lock/grace bonuses (feel-good; doesn’t rewrite meters)
-      LOCK_EFF_BOOST: 1.10,        // +10% earn when locked/grace
-      LOCK_DRAG_MULT: 0.85,        // -15% drag when locked/grace
-
-      // “soft clamp” feel near top (optional): reduce earn as E approaches 1
-      TOP_DAMP_START: 0.78,
-      TOP_DAMP_STRENGTH: 0.55,     // 0..1 (how much earn is damped near 100%)
-    };
-
-    log("energy model", E2.MODEL_NAME);
+    // “coast” bonus when you're moving + quality is good
+    // qualityTerm here is groove*smooth (after exponent shaping)
+    const COAST_QUALITY_MIN  = 0.28;
+    const COAST_DECAY_MULT   = 0.65;
 
     // =========================================================================
-    // AUDIO MAPPING — preserved
+    // AUDIO MAPPING — gentler curve, audible by ~10% energy
     // =========================================================================
     const AUDIO_GATE   = 0.02;
     const AUDIO_MIN_DB = -42;
@@ -800,40 +789,6 @@
 
     let motionCount = 0;
 
-    // =========================================================================
-    // Energy Model 2.0 helpers
-    // =========================================================================
-    function thrustFromSpeed(speedScore) {
-      const t = Math.pow(clamp01(speedScore), E2.THRUST_EXP);
-      return Math.max(E2.THRUST_FLOOR, clamp01(t));
-    }
-
-    function efficiencyFromGrooveSmooth(groove01, smooth01) {
-      const g = Math.pow(clamp01(groove01), E2.GROOVE_EXP);
-      const s = Math.pow(clamp01(smooth01), E2.SMOOTH_EXP);
-      return clamp01(Math.max(E2.EFF_FLOOR, g * s));
-    }
-
-    function orbitFactorFromOrbitShown(orbitShown01) {
-      const o = clamp01(orbitShown01);
-      return lerp(E2.ORBIT_MULT_MIN, E2.ORBIT_MULT_MAX, o);
-    }
-
-    function dragFromThrust(thrust01) {
-      const t = clamp01(thrust01);
-      const low = Math.pow(1 - t, E2.DRAG_LOW_THRUST_POW);
-      return E2.DRAG_BASE + E2.DRAG_LOW_THRUST_ADD * low;
-    }
-
-    function topDamp(energy01) {
-      // reduces earn near the top so 100% feels “earned” and easier to modulate
-      const e = clamp01(energy01);
-      if (e <= E2.TOP_DAMP_START) return 1.0;
-      const x = (e - E2.TOP_DAMP_START) / (1 - E2.TOP_DAMP_START);
-      const damp = 1 - (E2.TOP_DAMP_STRENGTH * clamp01(x));
-      return Math.max(0.20, damp);
-    }
-
     function onMotion(e) {
       if (!running) return;
 
@@ -845,8 +800,6 @@
       if (dt > 0) d.dt.textContent = dt.toFixed(3);
       motionCount++;
       d.motion.textContent = String(motionCount);
-
-      if (publishOkBlink > 0) publishOkBlink -= dt;
 
       if (dt > 0) dtBuf.push(dt);
 
@@ -872,7 +825,6 @@
       const dtMean = Math.max(1e-3, computeAvg(dtBuf.slice(-50)));
 
       const speedScore = speedCurve(m / SPEED_NORM);
-      const thrust01 = thrustFromSpeed(speedScore);
 
       if (dt > 0) graceLeft = Math.max(0, graceLeft - dt);
 
@@ -903,18 +855,14 @@
       const windowSec = inStableMode ? STABLE_WINDOW_SEC : HUNT_WINDOW_SEC;
       const nTarget = trimToWindow(dtMean, windowSec, omegaMag, omegaNorm, omegaDir, jerkBuf, dtBuf);
 
-      // -----------------------------------------------------------------------
-      // Not enough history yet -> meters default, energy just drains by drag(thrust)
-      // -----------------------------------------------------------------------
       if (omegaNorm.length < Math.min(MIN_WINDOW_SAMPLES, nTarget)) {
         if (dt > 0) {
-          const drag = dragFromThrust(thrust01);
-          energy = clamp01(energy - drag * dt);
+          const ddec = ENERGY_DECAY * STOP_DECAY_MULT;
+          energy = clamp01(energy - ddec * dt);
           energyUI = lerp(energyUI, energy, UI_SMOOTH);
         }
 
         const lockedNow = false;
-
         const payload = {
           room,
           t: performance.now(),
@@ -924,10 +872,7 @@
           smooth01: 0,
           speed01: speedScore,
           locked: lockedNow,
-          hz: 0,
-          // extra (harmless) debug fields
-          thrust01,
-          eff01: 0
+          hz: 0
         };
         publishOrb(payload, dt);
 
@@ -936,9 +881,6 @@
         return;
       }
 
-      // -----------------------------------------------------------------------
-      // Build raw meters (independent)
-      // -----------------------------------------------------------------------
       const ac = autocorrPeak(omegaNorm, dtMean);
       lockStrength = lerp(lockStrength, ac.peak, LOCK_SMOOTH);
       grooveHz = ac.hz;
@@ -947,12 +889,9 @@
       const smoothScore = smoothnessFromJerk(avgJerk);
 
       const dirCov = cov3(omegaDir);
-      const orbitBonus = orbitBonusFromDirCov(dirCov);
-      const orbitShown = (orbitBonus - ORBIT_FLOOR) / (1 - ORBIT_FLOOR);
+      const orbitBonus = orbitBonusFromDirCov(dirCov);                // ~0.75..1
+      const orbitShown = (orbitBonus - ORBIT_FLOOR) / (1 - ORBIT_FLOOR); // 0..1 for UI
 
-      // -----------------------------------------------------------------------
-      // Lock / Grace logic (preserved)
-      // -----------------------------------------------------------------------
       if (!lock) {
         if (lockStrength > LOCK_ON && speedScore > 0.16) {
           lock = true;
@@ -988,37 +927,36 @@
         }
       }
 
-      const lockedNow = !!(lock || inGrace);
-
-      // -----------------------------------------------------------------------
-      // ENERGY MODEL 2.0
-      // -----------------------------------------------------------------------
-      const eff01 = efficiencyFromGrooveSmooth(lockStrength, smoothScore);
-      const orbitFactor = orbitFactorFromOrbitShown(orbitShown);
-
-      const lockEffBoost = lockedNow ? E2.LOCK_EFF_BOOST : 1.0;
-      const lockDragMult = lockedNow ? E2.LOCK_DRAG_MULT : 1.0;
-
-      // Earn (thrust * efficiency, with small orbit multiplier)
-      let earn = E2.EARN_RATE * thrust01 * eff01 * orbitFactor * lockEffBoost;
-
-      // Damp earn near the top so “100%” is more controllable
-      earn *= topDamp(energy);
-
-      // Drag increases when you back off thrust, but efficiency can reduce drag (coast)
-      let drag = dragFromThrust(thrust01);
-      const dragReduce = 1 - (E2.DRAG_REDUCE_MAX * eff01); // high eff => less drag
-      drag *= dragReduce * lockDragMult;
-
+      // =========================================================================
+      // SSOT MOBILE 2.0: independent earnBase product
+      // =========================================================================
       if (dt > 0) {
-        const dE = (earn - drag) * dt;
-        energy = clamp01(energy + dE);
+        const grooveTerm = Math.pow(clamp01(lockStrength), GROOVE_EXP);
+        const smoothTerm = Math.pow(clamp01(smoothScore), SMOOTH_EXP);
+        const speedTerm  = Math.pow(clamp01(speedScore),  SPEED_EXP);
+        const orbitTerm  = Math.pow(clamp01(orbitBonus),  ORBIT_EXP);
+
+        const qualityTerm = grooveTerm * smoothTerm; // for “coast” logic
+        const earnBase = EARN_SCALE * grooveTerm * smoothTerm * speedTerm * orbitTerm;
+
+        const effectivelyLocked = lock || inGrace;
+        const gain = effectivelyLocked ? ENERGY_GAIN_LOCKED : ENERGY_GAIN_FREE;
+        const earn = gain * earnBase;
+
+        let decay = ENERGY_DECAY;
+        if (speedScore < STOP_SPEED_THRESH) decay *= STOP_DECAY_MULT;
+        if (inGrace) decay *= 0.70;
+
+        if (speedScore >= STOP_SPEED_THRESH && qualityTerm >= COAST_QUALITY_MIN) {
+          decay *= COAST_DECAY_MULT;
+        }
+
+        energy = clamp01(energy + (earn - decay) * dt);
         energyUI = lerp(energyUI, energy, UI_SMOOTH);
       }
 
-      // -----------------------------------------------------------------------
-      // Publish + UI + Audio
-      // -----------------------------------------------------------------------
+      const lockedNow = !!(lock || inGrace);
+
       const payload = {
         room,
         t: performance.now(),
@@ -1028,14 +966,9 @@
         smooth01: smoothScore,
         speed01: speedScore,
         locked: lockedNow,
-        hz: grooveHz,
-
-        // extra debug fields (receiver can ignore)
-        thrust01,
-        eff01,
-        orbitMult: orbitFactor
+        hz: grooveHz
       };
-      if (dt > 0) publishOrb(payload, dt);
+      publishOrb(payload, dt);
 
       updateUI({
         groove: lockStrength,
@@ -1064,7 +997,6 @@
       setPerm("requesting…", "warn");
       log("motion permission: requesting…");
 
-      // IMPORTANT: do not await anything before calling requestPermission()
       const reqs = [];
 
       if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
@@ -1093,7 +1025,7 @@
     }
 
     // =========================================================================
-    // Start/Stop (FIXED ORDER: permission FIRST, then audio, then relay)
+    // Start/Stop (permission FIRST, then audio, then relay)
     // =========================================================================
     async function start() {
       setRun("starting…", "warn");
@@ -1110,7 +1042,6 @@
       startBtn.disabled = true;
 
       try {
-        // ✅ CRITICAL: permission prompt must happen *before* any await that yields (like network).
         setStage("motion permission", "warn");
         const ok = await requestMotionPermissionIfNeeded();
         if (!ok) {
@@ -1120,18 +1051,16 @@
           return;
         }
 
-        // ✅ Audio prefers to be inside the gesture too
         setStage("audio init/resume", "warn");
         ensureAudio();
-        try { await audioCtx.resume(); log("audio: resumed"); } catch(e){ log("audio: resume failed", { message: e?.message || String(e) }); }
+        try { await audioCtx.resume(); log("audio: resumed"); }
+        catch(e){ log("audio: resume failed", { message: e?.message || String(e) }); }
 
-        // ✅ Relay connect happens AFTER permission (safe to await)
         setStage("relay connect", "warn");
         publishAcc = 0;
         const okRelay = await connectRelay();
         if (!okRelay) {
           log("Relay connect failed; running locally only.");
-          // keep going — local motion + audio still run
         }
 
         running = true;
@@ -1170,7 +1099,7 @@
 
         startBtn.textContent = 'Stop';
         setRun("running", "ok");
-        log("start(): running ✓", { energyModel: E2.MODEL_NAME });
+        log("start(): running ✓");
       } catch (e) {
         const msg = e?.message || String(e);
         setRun("error", "bad");
