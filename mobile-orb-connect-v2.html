@@ -473,8 +473,15 @@
     const JERK_TIGHT = 220.0;
     const JERK_LOOSE = 2600.0;
 
+    // -------------------------------------------------------------------------
+    // ORBIT (EASIER + SMOOTHED)
+    // - ORBIT_STRICTNESS < 1 makes orbit easier to charge
+    // - ORBIT_UI_SMOOTH prevents spiky meter + spiky orbit term in earn
+    // - ORBIT_FLOOR sets the minimum orbit multiplier (bonus baseline)
+    // -------------------------------------------------------------------------
     const ORBIT_FLOOR      = 0.25;
-    const ORBIT_STRICTNESS = .50;
+    const ORBIT_STRICTNESS = 0.65;
+    const ORBIT_UI_SMOOTH  = 0.10;
 
     const ENERGY_GAIN_LOCKED = 1.25;
     const ENERGY_GAIN_FREE   = 0.65;
@@ -499,10 +506,6 @@
     // SSOT MOBILE 2.0 — ENERGY MODEL (INDEPENDENT PRODUCT METERS)
     // -------------------------------------------------------------------------
     // earnBase = groove * smooth * speed * orbit
-    // - groove   = lockStrength (0..1)
-    // - smooth   = smoothScore  (0..1)
-    // - speed    = speedScore   (0..1)
-    // - orbit    = orbitBonus   (~0.75..1) derived directly from direction covariance
     //
     // Exponents (<1) make mid-values contribute more so the product isn't tiny.
     // =========================================================================
@@ -514,7 +517,6 @@
     const EARN_SCALE = 1.00;   // overall earn boost (tweak if needed)
 
     // “coast” bonus when you're moving + quality is good
-    // qualityTerm here is groove*smooth (after exponent shaping)
     const COAST_QUALITY_MIN  = 0.28;
     const COAST_DECAY_MULT   = 0.65;
 
@@ -659,13 +661,17 @@
       return {xx,xy,xz,yy,yz,zz, trace:(xx+yy+zz)};
     }
 
-    function orbitBonusFromDirCov(cov) {
+    // Orbit raw 0..1 from direction covariance (easier metric + strictness exponent)
+    function orbitRaw01FromDirCov(cov) {
       const eps = 1e-9;
-      if (cov.trace < 1e-6) return ORBIT_FLOOR;
+      if (cov.trace < 1e-6) return 0;
+
       const [l1,l2,l3] = eigenvaluesSym3(cov.xx,cov.xy,cov.xz,cov.yy,cov.yz,cov.zz);
-      const iso = clamp01(1 - ((l1 - l3) / (l1 + eps)));
-      const shaped = Math.pow(iso, ORBIT_STRICTNESS);
-      return ORBIT_FLOOR + (1 - ORBIT_FLOOR) * shaped;
+
+      // "Disk-friendly" isotropy: rewards 2-axis movement more than the old l3-only test
+      const iso = clamp01((l2 + l3) / (2*l1 + eps)); // 0..1
+
+      return Math.pow(iso, ORBIT_STRICTNESS);
     }
 
     function computeAvg(arr) {
@@ -714,6 +720,9 @@
 
     let energy = 0;
     let energyUI = 0;
+
+    // Orbit smoothing state (0..1)
+    let orbitUI = 0;
 
     let audioCtx = null, osc = null, gainNode = null;
 
@@ -862,13 +871,16 @@
           energyUI = lerp(energyUI, energy, UI_SMOOTH);
         }
 
+        // Keep orbit decaying smoothly even before we have enough samples
+        orbitUI = lerp(orbitUI, 0, ORBIT_UI_SMOOTH);
+
         const lockedNow = false;
         const payload = {
           room,
           t: performance.now(),
           energy01: energyUI,
           groove01: 0,
-          orbit01: 0,
+          orbit01: orbitUI,
           smooth01: 0,
           speed01: speedScore,
           locked: lockedNow,
@@ -876,7 +888,7 @@
         };
         publishOrb(payload, dt);
 
-        updateUI({ groove:0, orbit:0, smooth:0, speed:speedScore, energy:energyUI });
+        updateUI({ groove:0, orbit:orbitUI, smooth:0, speed:speedScore, energy:energyUI });
         setAudio(energyUI, 0, false);
         return;
       }
@@ -888,9 +900,15 @@
       const avgJerk = computeAvg(jerkBuf.slice(-Math.min(jerkBuf.length, 70)));
       const smoothScore = smoothnessFromJerk(avgJerk);
 
+      // -----------------------------------------------------------------------
+      // ORBIT (easier + smoothed): raw 0..1 -> orbitUI 0..1 -> orbitBonus floor..1
+      // -----------------------------------------------------------------------
       const dirCov = cov3(omegaDir);
-      const orbitBonus = orbitBonusFromDirCov(dirCov);                // ~0.75..1
-      const orbitShown = (orbitBonus - ORBIT_FLOOR) / (1 - ORBIT_FLOOR); // 0..1 for UI
+      const orbitRaw01 = orbitRaw01FromDirCov(dirCov);
+      orbitUI = lerp(orbitUI, orbitRaw01, ORBIT_UI_SMOOTH);
+
+      const orbitBonus = ORBIT_FLOOR + (1 - ORBIT_FLOOR) * orbitUI; // multiplier term
+      const orbitShown = orbitUI; // UI + payload orbit01
 
       if (!lock) {
         if (lockStrength > LOCK_ON && speedScore > 0.16) {
@@ -936,7 +954,7 @@
         const speedTerm  = Math.pow(clamp01(speedScore),  SPEED_EXP);
         const orbitTerm  = Math.pow(clamp01(orbitBonus),  ORBIT_EXP);
 
-        const qualityTerm = grooveTerm * smoothTerm; // for “coast” logic
+        const qualityTerm = grooveTerm * smoothTerm;
         const earnBase = EARN_SCALE * grooveTerm * smoothTerm * speedTerm * orbitTerm;
 
         const effectivelyLocked = lock || inGrace;
@@ -1090,6 +1108,8 @@
 
         energy = 0;
         energyUI = 0;
+
+        orbitUI = 0;
 
         setAudio(0,0,false);
         setBgFromEnergy(0);
