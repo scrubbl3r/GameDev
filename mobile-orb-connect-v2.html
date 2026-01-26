@@ -5,7 +5,10 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Groove Orbit</title>
   <style>
-    :root { --green:#7dd35f; }
+    :root {
+      --green:#7dd35f;
+      --over:#ffd400; /* bright yellow for overcharge */
+    }
 
     html, body {
       height: 100%;
@@ -42,6 +45,11 @@
       font-size: 14px;
       opacity: 0.78;
     }
+
+    /* overcharge styling */
+    .over { color: var(--over) !important; }
+    .bigCharge.over { text-shadow: 0 0 18px rgba(255, 212, 0, 0.22); }
+    .fill.over { background: var(--over) !important; }
 
     .panel {
       width: min(560px, 92vw);
@@ -196,7 +204,6 @@
         Relay: pass <code>?room=orb:XXXX</code> or <code>?room=XXXX</code> in the URL to pair with the game.
       </div>
 
-      <!-- Diagnostics injected here -->
       <div id="diag" class="diag" aria-label="Diagnostics">
         <div class="row">
           <span class="k">Run:</span> <span id="dRun" class="v dim">idle</span>
@@ -473,15 +480,8 @@
     const JERK_TIGHT = 220.0;
     const JERK_LOOSE = 2600.0;
 
-    // -------------------------------------------------------------------------
-    // ORBIT (EASIER + SMOOTHED)
-    // - ORBIT_STRICTNESS < 1 makes orbit easier to charge
-    // - ORBIT_UI_SMOOTH prevents spiky meter + spiky orbit term in earn
-    // - ORBIT_FLOOR sets the minimum orbit multiplier (bonus baseline)
-    // -------------------------------------------------------------------------
     const ORBIT_FLOOR      = 0.25;
-    const ORBIT_STRICTNESS = 0.65;
-    const ORBIT_UI_SMOOTH  = 0.10;
+    const ORBIT_STRICTNESS = 1.0;
 
     const ENERGY_GAIN_LOCKED = 1.25;
     const ENERGY_GAIN_FREE   = 0.65;
@@ -504,19 +504,14 @@
 
     // =========================================================================
     // SSOT MOBILE 2.0 — ENERGY MODEL (INDEPENDENT PRODUCT METERS)
-    // -------------------------------------------------------------------------
-    // earnBase = groove * smooth * speed * orbit
-    //
-    // Exponents (<1) make mid-values contribute more so the product isn't tiny.
     // =========================================================================
     const GROOVE_EXP = 0.70;
     const SMOOTH_EXP = 0.70;
     const SPEED_EXP  = 1.00;
     const ORBIT_EXP  = 1.00;
 
-    const EARN_SCALE = 1.00;   // overall earn boost (tweak if needed)
+    const EARN_SCALE = 1.00;
 
-    // “coast” bonus when you're moving + quality is good
     const COAST_QUALITY_MIN  = 0.28;
     const COAST_DECAY_MULT   = 0.65;
 
@@ -661,17 +656,13 @@
       return {xx,xy,xz,yy,yz,zz, trace:(xx+yy+zz)};
     }
 
-    // Orbit raw 0..1 from direction covariance (easier metric + strictness exponent)
-    function orbitRaw01FromDirCov(cov) {
+    function orbitBonusFromDirCov(cov) {
       const eps = 1e-9;
-      if (cov.trace < 1e-6) return 0;
-
+      if (cov.trace < 1e-6) return ORBIT_FLOOR;
       const [l1,l2,l3] = eigenvaluesSym3(cov.xx,cov.xy,cov.xz,cov.yy,cov.yz,cov.zz);
-
-      // "Disk-friendly" isotropy: rewards 2-axis movement more than the old l3-only test
-      const iso = clamp01((l2 + l3) / (2*l1 + eps)); // 0..1
-
-      return Math.pow(iso, ORBIT_STRICTNESS);
+      const iso = clamp01(1 - ((l1 - l3) / (l1 + eps)));
+      const shaped = Math.pow(iso, ORBIT_STRICTNESS);
+      return ORBIT_FLOOR + (1 - ORBIT_FLOOR) * shaped;
     }
 
     function computeAvg(arr) {
@@ -718,11 +709,8 @@
     let graceLeft = 0;
     let recenterBadTime = 0;
 
-    let energy = 0;
-    let energyUI = 0;
-
-    // Orbit smoothing state (0..1)
-    let orbitUI = 0;
+    let energy = 0;    // can exceed 1.0 now
+    let energyUI = 0;  // can exceed 1.0 now
 
     let audioCtx = null, osc = null, gainNode = null;
 
@@ -745,14 +733,15 @@
     function setAudio(eUI, groove, locked) {
       if (!audioCtx || !gainNode || !osc) return;
 
-      const gBase = energyToGain(eUI);
+      // Audio mapping stays safely shaped into 0..1
+      const gBase = energyToGain(clamp01(eUI));
       const gGroove = locked ? (0.30 + 0.70*groove) : (0.08 + 0.22*groove);
 
       const g = MASTER_GAIN * gBase * gGroove;
 
       const f = TONE_BASE_HZ
               + TONE_MAX_ADD_HZ * (locked ? groove : 0.30*groove)
-              + 60 * eUI;
+              + 60 * clamp01(eUI);
 
       const now = audioCtx.currentTime;
       gainNode.gain.cancelScheduledValues(now);
@@ -763,28 +752,38 @@
     }
 
     function updateUI(vals) {
-      const toPct = (x) => Math.round(clamp01(x)*100);
+      const toPct01 = (x) => Math.round(clamp01(x) * 100);      // 0..100
+      const toPctRaw = (x) => Math.round(Math.max(0, x) * 100); // 0..∞
 
-      const grooveP = toPct(vals.groove);
-      const orbitP  = toPct(vals.orbit);
-      const smoothP = toPct(vals.smooth);
-      const speedP  = toPct(vals.speed);
-      const energyP = toPct(vals.energy);
+      const grooveP = toPct01(vals.groove);
+      const orbitP  = toPct01(vals.orbit);
+      const smoothP = toPct01(vals.smooth);
+      const speedP  = toPct01(vals.speed);
+
+      const energyPText = toPctRaw(vals.energy);  // can exceed 100
+      const energyPBar  = toPct01(vals.energy);   // bar stays 0..100
 
       grooveEl.textContent = grooveP;
       orbitEl.textContent  = orbitP;
       smoothEl.textContent = smoothP;
       speedEl.textContent  = speedP;
-      energyEl.textContent = energyP;
+
+      energyEl.textContent = energyPText;
 
       grooveBar.style.width = `${grooveP}%`;
       orbitBar.style.width  = `${orbitP}%`;
       smoothBar.style.width = `${smoothP}%`;
       speedBar.style.width  = `${speedP}%`;
-      energyBar.style.width = `${energyP}%`;
+      energyBar.style.width = `${energyPBar}%`;
 
-      bigChargeEl.textContent = `${energyP}%`;
-      setBgFromEnergy(vals.energy);
+      bigChargeEl.textContent = `${energyPText}%`;
+
+      const over = (vals.energy > 1);
+      bigChargeEl.classList.toggle("over", over);
+      energyEl.classList.toggle("over", over);
+      energyBar.classList.toggle("over", over);
+
+      setBgFromEnergy(clamp01(vals.energy)); // background saturates at 100%
     }
 
     function flushHistorySoft() {
@@ -867,12 +866,9 @@
       if (omegaNorm.length < Math.min(MIN_WINDOW_SAMPLES, nTarget)) {
         if (dt > 0) {
           const ddec = ENERGY_DECAY * STOP_DECAY_MULT;
-          energy = clamp01(energy - ddec * dt);
+          energy = Math.max(0, energy - ddec * dt);
           energyUI = lerp(energyUI, energy, UI_SMOOTH);
         }
-
-        // Keep orbit decaying smoothly even before we have enough samples
-        orbitUI = lerp(orbitUI, 0, ORBIT_UI_SMOOTH);
 
         const lockedNow = false;
         const payload = {
@@ -880,7 +876,7 @@
           t: performance.now(),
           energy01: energyUI,
           groove01: 0,
-          orbit01: orbitUI,
+          orbit01: 0,
           smooth01: 0,
           speed01: speedScore,
           locked: lockedNow,
@@ -888,7 +884,7 @@
         };
         publishOrb(payload, dt);
 
-        updateUI({ groove:0, orbit:orbitUI, smooth:0, speed:speedScore, energy:energyUI });
+        updateUI({ groove:0, orbit:0, smooth:0, speed:speedScore, energy:energyUI });
         setAudio(energyUI, 0, false);
         return;
       }
@@ -900,15 +896,9 @@
       const avgJerk = computeAvg(jerkBuf.slice(-Math.min(jerkBuf.length, 70)));
       const smoothScore = smoothnessFromJerk(avgJerk);
 
-      // -----------------------------------------------------------------------
-      // ORBIT (easier + smoothed): raw 0..1 -> orbitUI 0..1 -> orbitBonus floor..1
-      // -----------------------------------------------------------------------
       const dirCov = cov3(omegaDir);
-      const orbitRaw01 = orbitRaw01FromDirCov(dirCov);
-      orbitUI = lerp(orbitUI, orbitRaw01, ORBIT_UI_SMOOTH);
-
-      const orbitBonus = ORBIT_FLOOR + (1 - ORBIT_FLOOR) * orbitUI; // multiplier term
-      const orbitShown = orbitUI; // UI + payload orbit01
+      const orbitBonus = orbitBonusFromDirCov(dirCov);                  // ~0.25..1
+      const orbitShown = (orbitBonus - ORBIT_FLOOR) / (1 - ORBIT_FLOOR); // 0..1 for UI
 
       if (!lock) {
         if (lockStrength > LOCK_ON && speedScore > 0.16) {
@@ -946,7 +936,7 @@
       }
 
       // =========================================================================
-      // SSOT MOBILE 2.0: independent earnBase product
+      // SSOT MOBILE 2.0: independent earnBase product + OVERCHARGE (no clamp01)
       // =========================================================================
       if (dt > 0) {
         const grooveTerm = Math.pow(clamp01(lockStrength), GROOVE_EXP);
@@ -969,7 +959,8 @@
           decay *= COAST_DECAY_MULT;
         }
 
-        energy = clamp01(energy + (earn - decay) * dt);
+        // ✅ allow energy to exceed 1.0 (overcharge), but never go negative
+        energy = Math.max(0, energy + (earn - decay) * dt);
         energyUI = lerp(energyUI, energy, UI_SMOOTH);
       }
 
@@ -1108,8 +1099,6 @@
 
         energy = 0;
         energyUI = 0;
-
-        orbitUI = 0;
 
         setAudio(0,0,false);
         setBgFromEnergy(0);
