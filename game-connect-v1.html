@@ -182,12 +182,15 @@
         <div class="row">
           <input id="room" value="orb:test" />
           <button id="newRoom">New room</button>
-          <button id="connect">Connect</button>
+          <button id="connect">Reconnect</button>
           <button id="audioBtn">Audio: Off</button>
         </div>
 
         <div class="stat">
-          <div>Status: <span id="status" class="dim">Not connected.</span></div>
+          <div>Status: <span id="status" class="dim">Auto-connecting…</span></div>
+          <div class="dim" style="margin-top:6px;">
+            Note: this page now auto-connects on load. The phone can Start first — order doesn’t matter.
+          </div>
         </div>
 
         <div class="logBox" aria-label="Last message log">
@@ -292,19 +295,10 @@ URL:
     }
 
     function phoneUrlFor(roomChannel){
-    // ✅ point to the correct phone build
-    const base = "https://scrubbl3r.github.io/GameDev/mobile-orb-connect-v1.html";
-
-    const roomCode = stripOrbPrefix(roomChannel);
-
-    // ✅ cache-buster so iOS Safari won’t “helpfully” serve an older cached HTML
-    const v = Date.now();
-
-    return base
-      + "?room=" + encodeURIComponent(roomCode)
-      + "&v=" + v;
-  }
-
+      const base = "https://scrubbl3r.github.io/GameDev/mobile-orb-connect-v1.html";
+      const roomCode = stripOrbPrefix(roomChannel);
+      return base + "?room=" + encodeURIComponent(roomCode);
+    }
 
     async function renderQR(roomChannel){
       els.qr.innerHTML = "";
@@ -361,8 +355,9 @@ URL:
     setBgFromEnergy(0);
 
     // =========================================================================
-    // AUDIO (match phone vibe)
-    // - Note: audio requires a user gesture. We provide Audio toggle + try on Connect.
+    // AUDIO (optional)
+    // - Audio MUST be enabled via a user gesture (Audio button).
+    // - Connection is now independent of audio (auto-connect is allowed).
     // =========================================================================
     let audioEnabled = false;
     let audioCtx = null, osc = null, gainNode = null;
@@ -447,7 +442,7 @@ URL:
     });
 
     // =========================================================================
-    // ABLY RECEIVER
+    // ABLY RECEIVER (AUTO-CONNECT)
     // =========================================================================
     let realtime = null;
     let channel = null;
@@ -509,28 +504,46 @@ URL:
       setBar(els.bSmooth, smooth);
       setBar(els.bSpeed,  speed);
 
-      // audio
+      // audio (optional)
       setAudio(energy, groove, locked);
     }
 
-    async function connect(){
+    function readUrlRoomOrNull(){
+      try{
+        const u = new URL(location.href);
+        const r = (u.searchParams.get("room") || "").trim();
+        if (!r) return null;
+        return normalizeRoom(r);
+      }catch(_){
+        return null;
+      }
+    }
+
+    // Connect lock (avoid overlapping connects)
+    let connecting = false;
+
+    async function connect(opts = {}){
+      if (connecting) return;
+      connecting = true;
+
       const workerBase = String(els.worker.value || "").replace(/\/+$/,"");
       const roomChannel = normalizeRoom(els.room.value);
       els.room.value = roomChannel;
 
+      // Keep QR synced
+      renderQR(roomChannel);
+
       if (typeof Ably === "undefined" || !Ably.Realtime) {
         fatal("Ably library failed to load. Check DevTools → Console/Network for blocked CDN scripts.");
+        setStatus("FAILED — Ably lib missing", "bad");
+        connecting = false;
         return;
       }
 
-      setStatus("Connecting…", "ok");
-
-      // Try to enable audio on connect (user gesture)
-      if (!audioEnabled) {
-        try { await enableAudio(); } catch(_) {}
-      }
+      setStatus(opts.auto ? "Auto-connecting…" : "Reconnecting…", "ok");
 
       // Close any old connection
+      try { if (channel) channel.unsubscribe(); } catch(e) {}
       try { if (realtime) realtime.close(); } catch(e) {}
       realtime = null; channel = null;
 
@@ -543,7 +556,7 @@ URL:
       });
 
       realtime.connection.on("connected", function(){
-        setStatus("Connected ✓", "ok");
+        setStatus("Connected ✓ (listening for phone…)", "ok");
       });
 
       realtime.connection.on("failed", function(stateChange){
@@ -552,12 +565,22 @@ URL:
       });
 
       realtime.connection.on("disconnected", function(){
-        setStatus("Disconnected", "bad");
+        setStatus("Disconnected (will reconnect on refresh / button)", "bad");
       });
 
       channel = realtime.channels.get(roomChannel);
 
-      channel.subscribe(function(msg){
+      // Attach explicitly so we're “ready” immediately
+      channel.attach((err) => {
+        if (err) {
+          console.error("Channel attach failed:", err);
+          setStatus("Channel attach FAILED — see console", "bad");
+          return;
+        }
+        setStatus("Connected ✓ (channel attached, listening…)", "ok");
+      });
+
+      channel.subscribe("orb", function(msg){
         const d = (msg && msg.data) ? msg.data : {};
 
         // log box: keep it short, never let it destroy layout
@@ -568,32 +591,53 @@ URL:
 
         scheduleUIUpdate(d);
       });
+
+      connecting = false;
     }
 
     // UI wiring
-    els.newRoom.addEventListener("click", function(){
+    els.newRoom.addEventListener("click", async function(){
       const roomChannel = "orb:" + randCode(6);
       els.room.value = roomChannel;
-      renderQR(roomChannel);
+      await connect({ auto:false });
     });
 
     els.connect.addEventListener("click", function(){
-      connect();
+      connect({ auto:false });
     });
 
+    // Make room edits “just work” without needing the button
+    els.room.addEventListener("change", () => connect({ auto:false }));
+    els.worker.addEventListener("change", () => connect({ auto:false }));
+
     // Boot
-    (function init(){
+    (async function init(){
+      // allow receiver to be opened as:
+      // receiver.html?room=test  or  ?room=orb:test
+      const urlRoom = readUrlRoomOrNull();
+      if (urlRoom) els.room.value = urlRoom;
+
       const roomChannel = normalizeRoom(els.room.value);
       els.room.value = roomChannel;
-      renderQR(roomChannel);
 
+      // Initial QR
+      await renderQR(roomChannel);
+
+      // Basic lib checks
       if (typeof Ably === "undefined") {
         fatal("Ably CDN did not load yet. If this persists, check DevTools → Network for ably.min-1.js.");
-      } else if (typeof QRCode === "undefined") {
+        setStatus("FAILED — Ably missing", "bad");
+        return;
+      }
+      if (typeof QRCode === "undefined") {
         fatal("QR CDN did not load yet. If this persists, check DevTools → Network for qrcode.min.js.");
+        // Still connect even if QR fails
       } else {
         els.fatal.style.display = "none";
       }
+
+      // AUTO-CONNECT (Option 1)
+      connect({ auto:true });
     })();
   </script>
 </body>
