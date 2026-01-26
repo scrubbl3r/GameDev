@@ -109,41 +109,40 @@
       border-radius: 10px;
       width: min(560px, 92vw);
     }
-    button[disabled]{
-      opacity: .6;
+    button:disabled {
+      opacity: 0.55;
     }
 
-    /* ====== DIAGNOSTICS PANEL ====== */
+    /* ============================================================
+       DIAGNOSTICS HUD (in-app “console”)
+       ============================================================ */
     .diag {
       width: min(560px, 92vw);
-      margin-top: 8px;
-      padding: 10px 10px;
+      border: 1px solid rgba(125,211,95,0.35);
+      background: rgba(0,0,0,0.28);
       border-radius: 12px;
-      border: 1px solid rgba(125,211,95,0.28);
-      background: rgba(0,0,0,0.32);
+      padding: 10px 10px;
       text-align: left;
       font: 12px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
       line-height: 1.35;
-      overflow: hidden;
     }
-    .diag .row { display:flex; gap:10px; flex-wrap:wrap; align-items:baseline; }
-    .diag .k { opacity:.78; }
+    .diag .row { display:flex; flex-wrap:wrap; gap:10px; align-items:baseline; }
+    .diag .k { opacity:0.80; }
     .diag .v { font-weight:800; }
-    .diag .good { color: #7dffab; }
-    .diag .bad { color: #ff6b6b; }
-    .diag .warn { color: #ffd27d; }
-    .diag pre {
-      margin: 8px 0 0;
-      max-height: 140px;
+    .diag .ok { color:#7dffab; font-weight:900; }
+    .diag .warn { color:#ffd37d; font-weight:900; }
+    .diag .bad { color:#ff6b6b; font-weight:900; }
+    .diag .log {
+      margin-top: 8px;
+      padding-top: 8px;
+      border-top: 1px solid rgba(125,211,95,0.18);
+      max-height: 180px;
       overflow: auto;
-      padding: 8px;
-      border-radius: 10px;
-      background: rgba(0,0,0,0.28);
-      border: 1px solid rgba(125,211,95,0.18);
-      color: rgba(125,211,95,0.92);
       white-space: pre-wrap;
       word-break: break-word;
+      color: rgba(125,211,95,0.92);
     }
+    .diag .log .muted { opacity:0.70; }
   </style>
 </head>
 <body>
@@ -198,6 +197,30 @@
         Requires <code>https</code> + motion permission + audio started from the button (iOS).<br>
         Relay: pass <code>?room=orb:XXXX</code> or <code>?room=XXXX</code> in the URL to pair with the game.
       </div>
+
+      <!-- Diagnostics injected here -->
+      <div id="diag" class="diag" aria-label="Diagnostics">
+        <div class="row">
+          <span class="k">Run:</span> <span id="dRun" class="v dim">idle</span>
+          <span class="k">Secure:</span> <span id="dSecure" class="v dim">?</span>
+          <span class="k">Permission:</span> <span id="dPerm" class="v dim">?</span>
+        </div>
+        <div class="row" style="margin-top:6px;">
+          <span class="k">Relay:</span> <span id="dRelay" class="v dim">idle</span>
+          <span class="k">Motion:</span> <span id="dMotion" class="v dim">0</span>
+          <span class="k">Last dt:</span> <span id="dDt" class="v dim">0</span>
+        </div>
+        <div class="row" style="margin-top:6px;">
+          <span class="k">Last rr:</span> <span id="dRR" class="v dim">none</span>
+        </div>
+        <div class="row" style="margin-top:6px;">
+          <span class="k">Start stage:</span> <span id="dStage" class="v dim">—</span>
+        </div>
+        <div class="row" style="margin-top:6px;">
+          <span class="k">Last error:</span> <span id="dErr" class="v dim">—</span>
+        </div>
+        <div id="dLog" class="log"><span class="muted">(log)</span></div>
+      </div>
     </section>
   </main>
 
@@ -206,6 +229,64 @@
 
   <script>
   (() => {
+    // =========================================================================
+    // Diagnostics helpers
+    // =========================================================================
+    const $ = (id) => document.getElementById(id);
+
+    const d = {
+      run: $("dRun"),
+      secure: $("dSecure"),
+      perm: $("dPerm"),
+      relay: $("dRelay"),
+      motion: $("dMotion"),
+      dt: $("dDt"),
+      rr: $("dRR"),
+      stage: $("dStage"),
+      err: $("dErr"),
+      log: $("dLog"),
+    };
+
+    const t0 = performance.now();
+    function nowMs(){ return Math.round(performance.now() - t0); }
+
+    function cls(el, c){
+      el.classList.remove("ok","warn","bad","dim");
+      if (c) el.classList.add(c);
+    }
+
+    function setRun(text, level="dim"){ d.run.textContent = text; cls(d.run, level); }
+    function setSecure(v){ d.secure.textContent = v ? "yes" : "no"; cls(d.secure, v ? "ok" : "bad"); }
+    function setPerm(text, level="dim"){ d.perm.textContent = text; cls(d.perm, level); }
+    function setRelay(text, level="dim"){ d.relay.textContent = text; cls(d.relay, level); }
+    function setStage(text, level="dim"){ d.stage.textContent = text; cls(d.stage, level); }
+    function setErr(text, level="dim"){ d.err.textContent = text; cls(d.err, level); }
+
+    function log(msg, obj){
+      let line = `[${nowMs()}ms] ${msg}`;
+      if (obj !== undefined) {
+        try { line += " " + JSON.stringify(obj); }
+        catch(e){ line += " " + String(obj); }
+      }
+      const div = document.createElement("div");
+      div.textContent = line;
+      d.log.appendChild(div);
+      d.log.scrollTop = d.log.scrollHeight;
+      console.log(line);
+    }
+
+    // Log boot info
+    log("boot url=" + window.location.href);
+    log("ua=" + navigator.userAgent);
+    log("secureContext=" + !!window.isSecureContext);
+
+    setSecure(!!window.isSecureContext);
+    setPerm("unknown", "dim");
+    setRelay("idle", "dim");
+    setRun("idle", "dim");
+    setStage("—", "dim");
+    setErr("—", "dim");
+
     // =========================================================================
     // UI
     // =========================================================================
@@ -237,134 +318,7 @@
     setBgFromEnergy(0);
 
     // =========================================================================
-    // DIAGNOSTICS (console + on-screen)
-    // =========================================================================
-    const DIAG = {
-      enabled: true,
-      t0: performance.now(),
-      motionEvents: 0,
-      lastMotionMs: 0,
-      lastDT: 0,
-      lastRR: null,
-      lastError: "",
-      lastStartStage: "idle",
-      lastPermission: "unknown",
-      lastSecure: String(!!window.isSecureContext),
-      relay: "idle",
-    };
-
-    function msSinceStart(){
-      return Math.round(performance.now() - DIAG.t0);
-    }
-
-    function log(...args){
-      console.log("[ORB]", ...args);
-      pushLog(args.map(a => {
-        try { return (typeof a === "string") ? a : JSON.stringify(a); }
-        catch(_) { return String(a); }
-      }).join(" "));
-    }
-
-    function warn(...args){
-      console.warn("[ORB]", ...args);
-      pushLog("⚠ " + args.map(String).join(" "));
-    }
-
-    function err(...args){
-      console.error("[ORB]", ...args);
-      pushLog("✖ " + args.map(a => {
-        try { return (typeof a === "string") ? a : JSON.stringify(a); }
-        catch(_) { return String(a); }
-      }).join(" "));
-    }
-
-    // On-screen diagnostics panel
-    const diagEl = document.createElement("div");
-    diagEl.className = "diag";
-    diagEl.innerHTML = `
-      <div class="row"><span class="k">Run:</span> <span id="dRun" class="v">idle</span></div>
-      <div class="row"><span class="k">Secure:</span> <span id="dSecure" class="v">?</span>
-        <span class="k">Permission:</span> <span id="dPerm" class="v">?</span>
-      </div>
-      <div class="row"><span class="k">Relay:</span> <span id="dRelay" class="v">idle</span>
-        <span class="k">Motion:</span> <span id="dMotion" class="v">0</span>
-        <span class="k">Last dt:</span> <span id="dDT" class="v">0</span>
-      </div>
-      <div class="row"><span class="k">Last rr:</span> <span id="dRR" class="v">none</span></div>
-      <div class="row"><span class="k">Start stage:</span> <span id="dStage" class="v">idle</span></div>
-      <div class="row"><span class="k">Last error:</span> <span id="dErr" class="v">none</span></div>
-      <pre id="dLog"></pre>
-    `;
-    document.querySelector(".panel").appendChild(diagEl);
-
-    const d = {
-      run:   document.getElementById("dRun"),
-      secure:document.getElementById("dSecure"),
-      perm:  document.getElementById("dPerm"),
-      relay: document.getElementById("dRelay"),
-      motion:document.getElementById("dMotion"),
-      dt:    document.getElementById("dDT"),
-      rr:    document.getElementById("dRR"),
-      stage: document.getElementById("dStage"),
-      err:   document.getElementById("dErr"),
-      log:   document.getElementById("dLog"),
-    };
-
-    const logBuf = [];
-    function pushLog(line){
-      if (!DIAG.enabled) return;
-      const s = `[${msSinceStart()}ms] ${String(line)}`;
-      logBuf.push(s);
-      while (logBuf.length > 60) logBuf.shift();
-      d.log.textContent = logBuf.join("\n");
-    }
-
-    function setDiagRun(text, cls){
-      d.run.textContent = text;
-      d.run.className = "v " + (cls || "");
-    }
-    function setDiagRelay(text, cls){
-      DIAG.relay = text;
-      d.relay.textContent = text;
-      d.relay.className = "v " + (cls || "");
-    }
-    function setDiagPerm(text, cls){
-      DIAG.lastPermission = text;
-      d.perm.textContent = text;
-      d.perm.className = "v " + (cls || "");
-    }
-    function setDiagStage(text, cls){
-      DIAG.lastStartStage = text;
-      d.stage.textContent = text;
-      d.stage.className = "v " + (cls || "");
-    }
-    function setDiagErr(text, cls){
-      DIAG.lastError = text;
-      d.err.textContent = text;
-      d.err.className = "v " + (cls || "");
-    }
-
-    // Baseline info
-    d.secure.textContent = window.isSecureContext ? "yes" : "NO";
-    d.secure.className = "v " + (window.isSecureContext ? "good" : "bad");
-    pushLog(`boot url=${location.href}`);
-    pushLog(`ua=${navigator.userAgent}`);
-    pushLog(`secureContext=${window.isSecureContext}`);
-
-    // Global error hooks
-    window.addEventListener("error", (e) => {
-      const msg = e && e.message ? e.message : "window error";
-      setDiagErr(msg, "bad");
-      err("window.error:", msg, e && e.filename, e && e.lineno, e && e.colno);
-    });
-    window.addEventListener("unhandledrejection", (e) => {
-      const msg = (e && e.reason && (e.reason.message || String(e.reason))) || "unhandled rejection";
-      setDiagErr(msg, "bad");
-      err("unhandledrejection:", msg, e && e.reason);
-    });
-
-    // =========================================================================
-    // RELAY (Ably via Cloudflare Worker token) — BULLETPROOF + DEBUG
+    // RELAY (Ably via Cloudflare Worker token)
     // =========================================================================
     const WORKER_BASE = "https://orb-token.mrgarthwilliams.workers.dev";
     const TOKEN_URL = WORKER_BASE + "/token";
@@ -384,27 +338,17 @@
     const room = roomInfo.channelName;   // publish channel, e.g. "orb:test"
     const roomCode = roomInfo.roomCode;  // token param, e.g. "test"
 
-    // add an on-screen relay status line (so you can see token/connect/publish issues)
-    const statusLine = document.createElement("div");
-    statusLine.className = "small";
-    statusLine.style.opacity = "0.9";
-    statusLine.style.marginTop = "10px";
-    statusLine.innerHTML =
-      `Room: <code>${room}</code><br>` +
-      `Relay: <code>${WORKER_BASE}</code><br>` +
-      `Status: <span id="relayStatus">idle</span>`;
-    document.querySelector(".panel").appendChild(statusLine);
-    const relayStatusEl = document.getElementById("relayStatus");
+    log("room parsed", { room, roomCode });
 
     async function connectRelay() {
+      log("connectRelay: begin", { room, roomCode });
+
       // Safe reconnect
       try { if (ablyChannel) ablyChannel.detach(); } catch(e) {}
       try { if (ably) ably.close(); } catch(e) {}
       ably = null; ablyChannel = null;
 
-      relayStatusEl.textContent = "minting token…";
-      setDiagRelay("minting token…", "warn");
-      log("connectRelay: begin", {room, roomCode});
+      setRelay("minting token…", "warn");
 
       const authUrl =
         TOKEN_URL +
@@ -417,64 +361,50 @@
       try {
         const r = await fetch(authUrl, { method: "GET", cache: "no-store" });
         const j = await r.json();
-        log("token preflight", {ok:r.ok, status:r.status, keys:Object.keys(j||{})});
+        log("token preflight", { ok: r.ok, status: r.status, keys: Object.keys(j || {}) });
+
         if (!r.ok || !j.token) {
-          relayStatusEl.textContent = "token FAILED (console)";
-          setDiagRelay("token FAILED", "bad");
+          setRelay("token FAILED", "bad");
           console.error("TOKEN ERROR:", r.status, j);
+          setErr("token FAILED (see console)", "bad");
           return false;
         }
-        relayStatusEl.textContent = "token ok, connecting…";
-        setDiagRelay("token ok, connecting…", "good");
+        setRelay("token ok, connecting…", "warn");
       } catch (e) {
-        relayStatusEl.textContent = "token fetch FAILED";
-        setDiagRelay("token fetch FAILED", "bad");
+        setRelay("token fetch FAILED", "bad");
         console.error("TOKEN FETCH FAILED:", e);
-        return false;
-      }
-
-      if (typeof Ably === "undefined" || !Ably.Realtime) {
-        relayStatusEl.textContent = "Ably lib missing";
-        setDiagRelay("Ably lib missing", "bad");
-        err("Ably library did not load (cdn blocked?)");
+        setErr("token fetch FAILED: " + (e?.message || String(e)), "bad");
         return false;
       }
 
       ably = new Ably.Realtime({ authUrl, autoConnect: true });
 
-      ably.connection.on("connecting", () => {
-        relayStatusEl.textContent = "ably connecting…";
-        setDiagRelay("ably connecting…", "warn");
-      });
-
       ably.connection.on("connected", () => {
-        relayStatusEl.textContent = "ably connected ✓";
-        setDiagRelay("ably connected ✓", "good");
         log("ably connected");
+        setRelay("ably connected ✓", "ok");
       });
-
       ably.connection.on("failed", (st) => {
-        relayStatusEl.textContent = "ably FAILED (console)";
-        setDiagRelay("ably FAILED", "bad");
+        log("ably FAILED", st);
+        setRelay("ably FAILED", "bad");
+        setErr("ably FAILED (see console)", "bad");
         console.error("ABLY FAILED:", st);
       });
-
       ably.connection.on("disconnected", (st) => {
-        relayStatusEl.textContent = "ably disconnected";
-        setDiagRelay("ably disconnected", "warn");
+        log("ably disconnected", st);
+        setRelay("ably disconnected", "warn");
         console.warn("ABLY disconnected:", st);
       });
 
       ablyChannel = ably.channels.get(room);
-      ablyChannel.attach((errAttach) => {
-        if (errAttach) {
-          relayStatusEl.textContent = "channel attach FAILED";
-          setDiagRelay("attach FAILED", "bad");
-          console.error("CHANNEL ATTACH ERROR:", errAttach);
+      ablyChannel.attach((err) => {
+        if (err) {
+          log("channel attach FAILED", err);
+          setRelay("channel attach FAILED", "bad");
+          setErr("channel attach FAILED (see console)", "bad");
+          console.error("CHANNEL ATTACH ERROR:", err);
         } else {
-          relayStatusEl.textContent = "channel attached ✓";
-          setDiagRelay("channel attached ✓", "good");
-          log("channel attached", room);
+          log("channel attached " + room);
+          setRelay("channel attached ✓", "ok");
         }
       });
 
@@ -485,9 +415,8 @@
       try { if (ablyChannel) ablyChannel.detach(); } catch(e) {}
       try { if (ably) ably.close(); } catch(e) {}
       ably = null; ablyChannel = null;
-      relayStatusEl.textContent = "idle";
-      setDiagRelay("idle", "");
-      log("relay disconnected");
+      setRelay("idle", "dim");
+      log("disconnectRelay");
     }
 
     // Publish throttle (~25 Hz)
@@ -503,11 +432,11 @@
       if (publishAcc < PUBLISH_DT) return;
       publishAcc = 0;
 
-      ablyChannel.publish("orb", payload, (errPub) => {
-        if (errPub) {
-          relayStatusEl.textContent = "publish error (console)";
-          setDiagRelay("publish error", "bad");
-          console.error("PUBLISH ERROR:", errPub);
+      ablyChannel.publish("orb", payload, (err) => {
+        if (err) {
+          setRelay("publish error", "bad");
+          setErr("publish error (see console)", "bad");
+          console.error("PUBLISH ERROR:", err);
         } else {
           publishOkBlink = 0.25;
         }
@@ -573,7 +502,7 @@
     const AUDIO_MAX_DB = -6;
     const AUDIO_EXP    = 1.15;
 
-    const MASTER_GAIN  = 2.2;  // overall loudness (try 1.5 .. 3.5)
+    const MASTER_GAIN  = 2.2;
 
     const TONE_BASE_HZ    = 180;
     const TONE_MAX_ADD_HZ = 220;
@@ -834,42 +763,38 @@
       dtBuf.splice(0, Math.max(0, dtBuf.length - keep));
     }
 
+    let motionCount = 0;
+
     function onMotion(e) {
       if (!running) return;
-
-      DIAG.motionEvents++;
-      DIAG.lastMotionMs = performance.now();
-      d.motion.textContent = String(DIAG.motionEvents);
 
       const t = performance.now() / 1000;
       const dt = (lastT == null) ? 0 : (t - lastT);
       lastT = t;
-      DIAG.lastDT = dt;
-      d.dt.textContent = dt.toFixed(3);
 
-      const rr = e.rotationRate;
-      DIAG.lastRR = rr ? {beta: rr.beta, gamma: rr.gamma, alpha: rr.alpha} : null;
-      if (rr) {
-        d.rr.textContent = `b=${(rr.beta??0).toFixed(1)} g=${(rr.gamma??0).toFixed(1)} a=${(rr.alpha??0).toFixed(1)}`;
-      } else {
-        d.rr.textContent = "rotationRate=null";
-      }
+      // diagnostics UI
+      if (dt > 0) d.dt.textContent = dt.toFixed(3);
+      motionCount++;
+      d.motion.textContent = String(motionCount);
 
-      // tiny status pulse if publishes are succeeding
       if (publishOkBlink > 0) {
         publishOkBlink -= dt;
-        if (publishOkBlink <= 0 && relayStatusEl.textContent.startsWith("channel attached")) {
-          relayStatusEl.textContent = "channel attached ✓ (sending…)";
-        }
+        // no-op; we keep relay text driven by connection/attach
       }
 
       if (dt > 0) dtBuf.push(dt);
 
-      if (!rr) return;
+      const rr = e.rotationRate;
+      if (!rr) {
+        d.rr.textContent = "none";
+        return;
+      }
 
       const x = rr.beta ?? 0;
       const y = rr.gamma ?? 0;
       const z = rr.alpha ?? 0;
+
+      d.rr.textContent = `β:${x.toFixed(2)} γ:${y.toFixed(2)} α:${z.toFixed(2)}`;
 
       const prevOx=ox, prevOy=oy, prevOz=oz;
 
@@ -913,8 +838,8 @@
 
       if (omegaNorm.length < Math.min(MIN_WINDOW_SAMPLES, nTarget)) {
         if (dt > 0) {
-          const dE = ENERGY_DECAY * STOP_DECAY_MULT;
-          energy = clamp01(energy - dE * dt);
+          const ddec = ENERGY_DECAY * STOP_DECAY_MULT;
+          energy = clamp01(energy - ddec * dt);
           energyUI = lerp(energyUI, energy, UI_SMOOTH);
         }
 
@@ -1033,77 +958,98 @@
       setAudio(energyUI, lockStrength, lockedNow);
     }
 
+    // =========================================================================
+    // iOS permission gate (MUST run as first awaited action inside click gesture)
+    // =========================================================================
     async function requestMotionPermissionIfNeeded() {
       const needs = (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function')
                  || (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function');
+
       if (!needs) {
-        setDiagPerm("not needed", "good");
-        log("motion permission: not needed (non-iOS or already allowed)");
+        setPerm("not required", "ok");
+        log("motion permission: not required");
         return true;
       }
 
-      setDiagPerm("requesting…", "warn");
+      setPerm("requesting…", "warn");
       log("motion permission: requesting…");
 
+      // IMPORTANT: do not await anything before calling requestPermission()
       const reqs = [];
+
       if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
-        reqs.push(DeviceMotionEvent.requestPermission().then(s => {
-          log("DeviceMotionEvent permission:", s);
-          return s === 'granted';
-        }));
+        reqs.push(
+          DeviceMotionEvent.requestPermission()
+            .then(s => (log("DeviceMotionEvent permission result", { s }), s === 'granted'))
+            .catch(e => (log("DeviceMotionEvent permission error", { message: e?.message || String(e) }), false))
+        );
       }
+
       if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
-        reqs.push(DeviceOrientationEvent.requestPermission().then(s => {
-          log("DeviceOrientationEvent permission:", s);
-          return s === 'granted';
-        }));
+        reqs.push(
+          DeviceOrientationEvent.requestPermission()
+            .then(s => (log("DeviceOrientationEvent permission result", { s }), s === 'granted'))
+            .catch(e => (log("DeviceOrientationEvent permission error", { message: e?.message || String(e) }), false))
+        );
       }
 
       const results = await Promise.all(reqs);
       const ok = results.every(Boolean);
-      setDiagPerm(ok ? "granted" : "DENIED", ok ? "good" : "bad");
+
+      if (ok) setPerm("granted", "ok");
+      else setPerm("denied", "bad");
+
       return ok;
     }
 
+    // =========================================================================
+    // Start/Stop (FIXED ORDER: permission FIRST, then audio, then relay)
+    // =========================================================================
     async function start() {
+      setRun("starting…", "warn");
+      setStage("start(): click", "warn");
+      setErr("—", "dim");
+
+      if (!window.isSecureContext) {
+        setRun("error", "bad");
+        setErr("Not a secure context (https required)", "bad");
+        log("start(): blocked (not secure)");
+        return;
+      }
+
       startBtn.disabled = true;
-      setDiagStage("start(): begin", "warn");
-      setDiagRun("starting…", "warn");
-      setDiagErr("none", "");
 
       try {
-        log("start(): click", {secure: window.isSecureContext, href: location.href});
-
-        if (!window.isSecureContext) {
-          setDiagStage("blocked: insecure context", "bad");
-          setDiagRun("blocked", "bad");
-          err("Blocked: not a secure context. Need https:// (or localhost).");
-          return;
-        }
-
-        // Connect relay on start (so you only pair when running)
-        publishAcc = 0;
-        setDiagStage("connecting relay…", "warn");
-        const okRelay = await connectRelay();
-        if (!okRelay) {
-          warn("Relay connect failed; running locally only.");
-        }
-
-        setDiagStage("requesting motion permission…", "warn");
+        // ✅ CRITICAL: permission prompt must happen *before* any await that yields (like network).
+        setStage("motion permission", "warn");
         const ok = await requestMotionPermissionIfNeeded();
         if (!ok) {
-          setDiagStage("blocked: motion permission denied", "bad");
-          setDiagRun("blocked", "bad");
-          err("Motion permission denied or not shown.");
+          setRun("error", "bad");
+          setStage("start(): permission denied", "bad");
+          setErr("Motion permission denied", "bad");
           return;
         }
 
-        setDiagStage("starting audio…", "warn");
+        // ✅ Audio prefers to be inside the gesture too
+        setStage("audio init/resume", "warn");
         ensureAudio();
-        try { await audioCtx.resume(); log("audio: resumed"); } catch(e) { warn("audio resume failed", e); }
+        try { await audioCtx.resume(); log("audio: resumed"); } catch(e){ log("audio: resume failed", { message: e?.message || String(e) }); }
+
+        // ✅ Relay connect happens AFTER permission (safe to await)
+        setStage("relay connect", "warn");
+        publishAcc = 0;
+        const okRelay = await connectRelay();
+        if (!okRelay) {
+          log("Relay connect failed; running locally only.");
+          // keep going — local motion + audio still run
+        }
 
         running = true;
         lastT = null;
+        motionCount = 0;
+        d.motion.textContent = "0";
+        d.dt.textContent = "0";
+        d.rr.textContent = "none";
 
         ox=oy=oz=0;
 
@@ -1129,28 +1075,26 @@
         setAudio(0,0,false);
         setBgFromEnergy(0);
 
-        setDiagStage("adding devicemotion listener…", "warn");
+        setStage("listening devicemotion", "ok");
         window.addEventListener('devicemotion', onMotion, { passive: true });
 
         startBtn.textContent = 'Stop';
-        setDiagStage("running ✓", "good");
-        setDiagRun("running ✓", "good");
-        pushLog("RUNNING: devicemotion listener attached");
+        setRun("running", "ok");
+        log("start(): running ✓");
       } catch (e) {
-        setDiagStage("start(): exception", "bad");
-        setDiagRun("error", "bad");
-        setDiagErr((e && (e.message || String(e))) || "error", "bad");
-        err("START FAILED:", e);
+        const msg = e?.message || String(e);
+        setRun("error", "bad");
+        setStage("start(): exception", "bad");
+        setErr(msg, "bad");
+        log("✖ START FAILED:", { message: msg, name: e?.name, stack: e?.stack ? String(e.stack).slice(0, 280) : undefined });
+        console.error("START FAILED:", e);
       } finally {
         startBtn.disabled = false;
       }
     }
 
     function stop() {
-      log("stop()");
-      setDiagStage("stop(): begin", "warn");
-      setDiagRun("stopping…", "warn");
-
+      setStage("stop()", "warn");
       running = false;
       window.removeEventListener('devicemotion', onMotion);
 
@@ -1162,12 +1106,13 @@
 
       disconnectRelay();
       startBtn.textContent = 'Start';
-
-      setDiagStage("stopped", "");
-      setDiagRun("idle", "");
+      setRun("idle", "dim");
+      setStage("—", "dim");
+      log("stop(): idle");
     }
 
     startBtn.addEventListener('click', () => {
+      log("start(): click", { secure: !!window.isSecureContext, href: window.location.href });
       if (!running) start();
       else stop();
     });
