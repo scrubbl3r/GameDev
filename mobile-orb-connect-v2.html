@@ -186,7 +186,7 @@
       <div class="metric">
         <div class="label">
           Speed <span id="speed">0</span>
-          <span class="muted">(soft-saturated)</span>
+          <span class="muted">(stabilized)</span>
         </div>
         <div class="bar"><div id="speedBar" class="fill"></div></div>
       </div>
@@ -471,6 +471,12 @@
     const SPEED_NORM  = 140.0;
     const SPEED_SHAPE = 0.85;
 
+    // --- SPEED STABILITY (One Euro filter on omega magnitude) ---
+    const SPEED_MIN_CUTOFF = 0.85;  // Hz (lower = smoother, higher = snappier)
+    const SPEED_BETA       = 0.020; // responsiveness (higher = follows changes more)
+    const SPEED_D_CUTOFF   = 1.20;  // Hz derivative cutoff
+    const SPEED_LOW_EXP    = 0.60;  // <1 gives more control at low speeds
+
     const LOCK_ON  = 0.30;
     const LOCK_OFF = 0.22;
 
@@ -539,6 +545,33 @@
     function speedCurve(norm01) {
       const x = Math.max(0, norm01);
       return clamp01(1 - Math.exp(-SPEED_SHAPE * x));
+    }
+
+    function alphaFromCutoff(dt, cutoffHz){
+      const tau = 1 / (2 * Math.PI * cutoffHz);
+      return 1 / (1 + tau / Math.max(1e-4, dt));
+    }
+
+    // One Euro step for a scalar signal (omega magnitude)
+    function oneEuroStep(x, dt, state){
+      const dtSafe = Math.max(1e-3, dt);
+
+      // derivative
+      const dx = (state.xPrev == null) ? 0 : (x - state.xPrev) / dtSafe;
+      state.xPrev = x;
+
+      // filter derivative
+      const aD = alphaFromCutoff(dtSafe, SPEED_D_CUTOFF);
+      state.dxHat = (state.dxHat == null) ? dx : (1 - aD) * state.dxHat + aD * dx;
+
+      // adaptive cutoff
+      const cutoff = SPEED_MIN_CUTOFF + SPEED_BETA * Math.abs(state.dxHat);
+
+      // filter signal
+      const aX = alphaFromCutoff(dtSafe, cutoff);
+      state.xHat = (state.xHat == null) ? x : (1 - aX) * state.xHat + aX * x;
+
+      return state.xHat;
     }
 
     function energyToGain(e) {
@@ -712,6 +745,9 @@
     let energy = 0;    // can exceed 1.0 now
     let energyUI = 0;  // can exceed 1.0 now
 
+    // One Euro filter state for speed
+    const speedFilter = { xPrev: null, xHat: null, dxHat: null };
+
     let audioCtx = null, osc = null, gainNode = null;
 
     function ensureAudio() {
@@ -832,7 +868,11 @@
       const m = mag3(ox,oy,oz);
       const dtMean = Math.max(1e-3, computeAvg(dtBuf.slice(-50)));
 
-      const speedScore = speedCurve(m / SPEED_NORM);
+      // --- SPEED: stabilize omega magnitude (One Euro) + low-end shaping ---
+      const dtForFilter = (dt > 0) ? dt : dtMean;
+      const mFilt = oneEuroStep(m, dtForFilter, speedFilter);
+      const speedNorm = Math.max(0, mFilt / SPEED_NORM);
+      const speedScore = speedCurve(Math.pow(speedNorm, SPEED_LOW_EXP));
 
       if (dt > 0) graceLeft = Math.max(0, graceLeft - dt);
 
@@ -1099,6 +1139,11 @@
 
         energy = 0;
         energyUI = 0;
+
+        // reset speed filter state
+        speedFilter.xPrev = null;
+        speedFilter.xHat  = null;
+        speedFilter.dxHat = null;
 
         setAudio(0,0,false);
         setBgFromEnergy(0);
