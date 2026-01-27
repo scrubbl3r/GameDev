@@ -468,14 +468,14 @@
 
     const MIN_OMEGA = 0.08;
 
-    const SPEED_NORM  = 140.0;
-    const SPEED_SHAPE = 0.85;
+    const SPEED_NORM  = 120.0; // 140.
+    const SPEED_SHAPE = 1.20; // .85
 
     // --- SPEED STABILITY (One Euro filter on omega magnitude) ---
     const SPEED_MIN_CUTOFF = 0.20;  // .85  Hz (lower = smoother, higher = snappier)
     const SPEED_BETA       = 0.015; // .020 responsiveness (higher = follows changes more)
     const SPEED_D_CUTOFF   = 1.20;  // 1.20 Hz derivative cutoff
-    const SPEED_LOW_EXP    = 0.20;  // 0.60 <1 gives more control at low speeds
+    const SPEED_LOW_EXP    = 0.70;  // 0.20 <1 gives more control at low speeds
 
     // --- FAST RELEASE (keeps smoothness but lets the meter fall quickly) ---
     const SPEED_RELEASE_CUTOFF = 8.0;  // Hz (higher = faster decay when slowing)
