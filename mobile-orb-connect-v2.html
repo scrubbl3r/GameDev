@@ -526,6 +526,13 @@
     const COAST_DECAY_MULT   = 0.65;
 
     // =========================================================================
+    // ✅ ANTI-EXPLOIT: SMOOTH KILL SWITCH (deal-breaker)
+    // =========================================================================
+    const SMOOTH_KILL_THRESH     = 0.12; // below this: NO earn, energy drains
+    const SMOOTH_KILL_DECAY_MULT = 3.25; // how hard to drain when below thresh
+    const SMOOTH_KILL_UNLOCK     = true; // drop lock/grace when below thresh
+
+    // =========================================================================
     // AUDIO MAPPING — gentler curve, audible by ~10% energy
     // =========================================================================
     const AUDIO_GATE   = 0.02;
@@ -1106,6 +1113,7 @@
 
       // =========================================================================
       // SSOT MOBILE 2.0: independent earnBase product + OVERCHARGE (no clamp01)
+      // + ✅ SMOOTH KILL SWITCH (deal-breaker)
       // =========================================================================
       if (dt > 0) {
         const grooveTerm = Math.pow(clamp01(lockStrength), GROOVE_EXP);
@@ -1118,14 +1126,30 @@
 
         const effectivelyLocked = lock || inGrace;
         const gain = effectivelyLocked ? ENERGY_GAIN_LOCKED : ENERGY_GAIN_FREE;
-        const earn = gain * earnBase;
 
+        // ✅ Smooth is a deal-breaker:
+        const smoothKill = (smoothScore < SMOOTH_KILL_THRESH);
+
+        // earn stops entirely when smooth is too low
+        const earn = smoothKill ? 0 : (gain * earnBase);
+
+        // decay rules + kill-drain
         let decay = ENERGY_DECAY;
         if (speedScore < STOP_SPEED_THRESH) decay *= STOP_DECAY_MULT;
         if (inGrace) decay *= 0.70;
 
         if (speedScore >= STOP_SPEED_THRESH && qualityTerm >= COAST_QUALITY_MIN) {
           decay *= COAST_DECAY_MULT;
+        }
+
+        if (smoothKill) {
+          decay *= SMOOTH_KILL_DECAY_MULT;
+
+          // optional: shake-lock can’t “coast”
+          if (SMOOTH_KILL_UNLOCK) {
+            lock = false;
+            graceLeft = 0;
+          }
         }
 
         // ✅ allow energy to exceed 1.0 (overcharge), but never go negative
