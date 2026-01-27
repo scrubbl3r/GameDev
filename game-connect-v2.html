@@ -20,9 +20,9 @@
       /* charge-driven (0..1) */
       --charge: 0;
 
-      /* message strip indigo */
-      --msgBg: rgba(14, 12, 44, 0.88);     /* deep indigo */
-      --msgBorder: rgba(90, 80, 200, 0.18);/* subtle violet edge */
+      /* message stream color (bright indigo, readable) */
+      --stream: rgba(140, 130, 255, 0.95);
+      --streamGlow: rgba(140, 130, 255, 0.32);
     }
 
     html,body{
@@ -86,7 +86,7 @@
     button:hover{border-color:rgba(50,255,117,.35)}
 
     .stat{margin-top:10px; font-size:13px; line-height:1.5;}
-    .dim{opacity:.78} /* still green, just dimmer */
+    .dim{opacity:.78}
     .bad{color:var(--bad); font-weight:900;}
     .ok{color:#7dffab; font-weight:900;}
 
@@ -144,13 +144,13 @@
       transition: width 80ms linear;
     }
 
-    /* ===== one-line last-message ticker (deep indigo) ===== */
+    /* ===== one-line last-message ticker (BLACK BOX, INDIGO DATA TEXT) ===== */
     .logLine{
       margin-top:10px;
       padding:8px 10px;
       border-radius:12px;
-      border:1px solid var(--msgBorder);
-      background: var(--msgBg);
+      border:1px solid rgba(50,255,117,.22);
+      background:rgba(0,0,0,.30); /* keep it black-ish as before */
       color: rgba(50,255,117,.92);
       font-size:11px;
       line-height:1;
@@ -165,17 +165,21 @@
       opacity:.78;
       flex:0 0 auto;
     }
+    /* the live stream text only */
     .lastText{
       flex:1 1 auto;
       overflow:hidden;
       text-overflow:ellipsis;
+      color: var(--stream);
+      text-shadow: 0 0 10px var(--streamGlow);
+      opacity: 1;
     }
 
     .qrBox{
       width: 280px; height: 280px;
       border-radius: 14px;
       border: 1px solid var(--border);
-      background: #fff; /* QR must be white */
+      background: #fff;
       display:grid; place-items:center;
       overflow:hidden;
       margin-top:10px;
@@ -289,8 +293,8 @@ URL:
     };
 
     function clamp01(x){ x = Number(x); return Math.max(0, Math.min(1, isFinite(x) ? x : 0)); }
-    const toPct01  = (x01) => Math.round(clamp01(x01) * 100);               // 0..100
-    const toPctRaw = (x)   => Math.round(Math.max(0, Number(x) || 0) * 100); // 0..∞
+    const toPct01  = (x01) => Math.round(clamp01(x01) * 100);
+    const toPctRaw = (x)   => Math.round(Math.max(0, Number(x) || 0) * 100);
 
     function setBar(el, v01){
       const p = clamp01(v01) * 100;
@@ -307,7 +311,7 @@ URL:
     function normalizeRoom(input){
       let r = String(input || "").trim();
       if (!r) r = "orb:test";
-      if (r.indexOf(":") === -1) r = "orb:" + r; // allow "test"
+      if (r.indexOf(":") === -1) r = "orb:" + r;
       return r;
     }
 
@@ -359,18 +363,16 @@ URL:
     }
 
     // =========================================================================
-    // CHARGE VISUALS (match phone)
+    // CHARGE VISUALS
     // =========================================================================
     const BG0 = { r: 0,   g: 0,  b: 0  };
-    const BG1 = { r: 255, g: 42, b: 0  }; // bright red-orange
+    const BG1 = { r: 255, g: 42, b: 0  };
     function setBgFromEnergy(e01) {
-      const t = clamp01(e01); // background/glow saturate at 100%
+      const t = clamp01(e01);
       const r = Math.round(BG0.r + (BG1.r - BG0.r) * t);
       const g = Math.round(BG0.g + (BG1.g - BG0.g) * t);
       const b = Math.round(BG0.b + (BG1.b - BG0.b) * t);
       document.body.style.backgroundColor = `rgb(${r},${g},${b})`;
-
-      // drive CSS glow intensity
       document.documentElement.style.setProperty("--charge", String(t));
     }
     setBgFromEnergy(0);
@@ -381,7 +383,6 @@ URL:
     let audioEnabled = false;
     let audioCtx = null, osc = null, gainNode = null;
 
-    // mapping constants (copied from phone schema)
     const AUDIO_GATE   = 0.02;
     const AUDIO_MIN_DB = -42;
     const AUDIO_MAX_DB = -6;
@@ -405,7 +406,6 @@ URL:
     function ensureAudio() {
       if (audioCtx) return;
       audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-
       gainNode = audioCtx.createGain();
       gainNode.gain.value = 0;
 
@@ -438,8 +438,6 @@ URL:
 
     function setAudio(eUI, groove, locked) {
       if (!audioEnabled || !audioCtx || !gainNode || !osc) return;
-
-      // keep audio safely shaped into 0..1 like the phone
       const e01 = clamp01(eUI);
 
       const gBase = energyToGain(e01);
@@ -469,7 +467,6 @@ URL:
     let realtime = null;
     let channel = null;
 
-    // UI update scheduling (prevents jitter)
     let lastData = null;
     let rafPending = false;
 
@@ -485,43 +482,36 @@ URL:
     }
 
     function applyDataToUI(d){
-      // Parse 0..∞ energy correctly:
-      // - Prefer new schema energy01 (0..∞, can exceed 1)
-      // - Fall back to old energy which might be 0..1 OR 0..100
       function pick01NewOrOld(newKey, oldKey){
         if (d[newKey] != null) {
           const n = Number(d[newKey]);
-          return isFinite(n) ? n : 0; // allow > 1 (overcharge)
-        }
-        const n = Number(d[oldKey]);
-        if (!isFinite(n)) return 0;
-        return (n > 1.5) ? (n / 100) : n; // legacy heuristic only
-      }
-
-      // Groove/orbit/smooth/speed should remain 0..1, but keep legacy fallback.
-      function pick01Bounded(newKey, oldKey){
-        if (d[newKey] != null) {
-          const n = Number(d[newKey]);
-          return isFinite(n) ? n : 0; // expected 0..1
+          return isFinite(n) ? n : 0;
         }
         const n = Number(d[oldKey]);
         if (!isFinite(n)) return 0;
         return (n > 1.5) ? (n / 100) : n;
       }
 
-      const energy = pick01NewOrOld("energy01", "energy");   // overcharge-safe
+      function pick01Bounded(newKey, oldKey){
+        if (d[newKey] != null) {
+          const n = Number(d[newKey]);
+          return isFinite(n) ? n : 0;
+        }
+        const n = Number(d[oldKey]);
+        if (!isFinite(n)) return 0;
+        return (n > 1.5) ? (n / 100) : n;
+      }
+
+      const energy = pick01NewOrOld("energy01", "energy");
       const groove = pick01Bounded("groove01", "groove");
       const orbit  = pick01Bounded("orbit01",  "orbit");
       const smooth = pick01Bounded("smooth01", "smooth");
       const speed  = pick01Bounded("speed01",  "speed");
       const locked = !!d.locked;
 
-      // visuals
       setBgFromEnergy(energy);
 
-      const eText = toPctRaw(energy); // can exceed 100
-      const eBar  = toPct01(energy);  // bar stays 0..100
-
+      const eText = toPctRaw(energy);
       const gP = toPct01(groove);
       const oP = toPct01(orbit);
       const sP = toPct01(smooth);
@@ -560,7 +550,6 @@ URL:
       }
     }
 
-    // Connect lock (avoid overlapping connects)
     let connecting = false;
 
     async function connect(opts = {}){
@@ -571,7 +560,6 @@ URL:
       const roomChannel = normalizeRoom(els.room.value);
       els.room.value = roomChannel;
 
-      // Keep QR synced
       renderQR(roomChannel);
 
       if (typeof Ably === "undefined" || !Ably.Realtime) {
@@ -583,7 +571,6 @@ URL:
 
       setStatus(opts.auto ? "Auto-connecting…" : "Reconnecting…", "ok");
 
-      // Close any old connection
       try { if (channel) channel.unsubscribe(); } catch(e) {}
       try { if (realtime) realtime.close(); } catch(e) {}
       realtime = null; channel = null;
@@ -591,40 +578,23 @@ URL:
       const roomCode = stripOrbPrefix(roomChannel);
       const authUrl = workerBase + "/token?room=" + encodeURIComponent(roomCode) + "&v=" + Date.now();
 
-      realtime = new Ably.Realtime({
-        authUrl,
-        echoMessages: false
-      });
+      realtime = new Ably.Realtime({ authUrl, echoMessages:false });
 
-      realtime.connection.on("connected", function(){
-        setStatus("Connected ✓ (listening for phone…)", "ok");
-      });
-
-      realtime.connection.on("failed", function(stateChange){
-        console.error("Ably connection failed:", stateChange);
-        setStatus("FAILED — see console", "bad");
-      });
-
-      realtime.connection.on("disconnected", function(){
-        setStatus("Disconnected (will reconnect on refresh / button)", "bad");
-      });
+      realtime.connection.on("connected", () => setStatus("Connected ✓ (listening for phone…)", "ok"));
+      realtime.connection.on("failed", (st) => { console.error("Ably failed:", st); setStatus("FAILED — see console", "bad"); });
+      realtime.connection.on("disconnected", () => setStatus("Disconnected (refresh / reconnect)", "bad"));
 
       channel = realtime.channels.get(roomChannel);
 
-      // Attach explicitly so we're “ready” immediately
       channel.attach((err) => {
-        if (err) {
-          console.error("Channel attach failed:", err);
-          setStatus("Channel attach FAILED — see console", "bad");
-          return;
-        }
+        if (err) { console.error("Channel attach failed:", err); setStatus("Channel attach FAILED — see console", "bad"); return; }
         setStatus("Connected ✓ (channel attached, listening…)", "ok");
       });
 
-      channel.subscribe("orb", function(msg){
+      channel.subscribe("orb", (msg) => {
         const d = (msg && msg.data) ? msg.data : {};
 
-        // One-line ticker: short + stable.
+        // one-line stream
         let s = "";
         try { s = JSON.stringify(d); } catch(_) { s = String(d); }
         if (s.length > 240) s = s.slice(0, 240) + " …";
@@ -636,48 +606,36 @@ URL:
       connecting = false;
     }
 
-    // UI wiring
-    els.newRoom.addEventListener("click", async function(){
+    els.newRoom.addEventListener("click", async () => {
       const roomChannel = "orb:" + randCode(6);
       els.room.value = roomChannel;
       await connect({ auto:false });
     });
 
-    els.connect.addEventListener("click", function(){
-      connect({ auto:false });
-    });
-
-    // Make room edits “just work” without needing the button
+    els.connect.addEventListener("click", () => connect({ auto:false }));
     els.room.addEventListener("change", () => connect({ auto:false }));
     els.worker.addEventListener("change", () => connect({ auto:false }));
 
-    // Boot
     (async function init(){
-      // allow receiver to be opened as:
-      // receiver.html?room=test  or  ?room=orb:test
       const urlRoom = readUrlRoomOrNull();
       if (urlRoom) els.room.value = urlRoom;
 
       const roomChannel = normalizeRoom(els.room.value);
       els.room.value = roomChannel;
 
-      // Initial QR
       await renderQR(roomChannel);
 
-      // Basic lib checks
       if (typeof Ably === "undefined") {
-        fatal("Ably CDN did not load yet. If this persists, check DevTools → Network for ably.min-1.js.");
+        fatal("Ably CDN did not load yet. Check DevTools → Network for ably.min-1.js.");
         setStatus("FAILED — Ably missing", "bad");
         return;
       }
       if (typeof QRCode === "undefined") {
-        fatal("QR CDN did not load yet. If this persists, check DevTools → Network for qrcode.min.js.");
-        // Still connect even if QR fails
+        fatal("QR lib did not load yet. Check DevTools → Network for qrcode.min.js.");
       } else {
         els.fatal.style.display = "none";
       }
 
-      // AUTO-CONNECT
       connect({ auto:true });
     })();
   </script>
