@@ -44,23 +44,24 @@
       z-index:0;
     }
 
-    .wrap{max-width:980px;margin:24px auto;padding:0 16px; position:relative; z-index:1;}
-    h1{margin:0 0 14px 0; font-size:18px; letter-spacing:.6px; text-align:center;}
-    .grid{display:grid; grid-template-columns: 1.2fr 1fr; gap:18px; align-items:start;}
+    /* ===== TIGHTER LAYOUT PASS ===== */
+    .wrap{max-width:980px;margin:18px auto;padding:0 14px; position:relative; z-index:1;}
+    h1{margin:0 0 10px 0; font-size:16px; letter-spacing:.6px; text-align:center; opacity:.92;}
+    .grid{display:grid; grid-template-columns: 1.2fr 1fr; gap:14px; align-items:start;}
     .card{
       background:var(--panel);
       border:1px solid var(--border);
-      border-radius:16px;
-      padding:14px 14px 16px;
+      border-radius:14px;
+      padding:12px 12px 12px;
       box-shadow: 0 18px 80px rgba(0,0,0,.55);
       overflow:hidden;
     }
 
-    label{display:block; font-size:12px; opacity:.92; margin:10px 0 6px;}
+    label{display:block; font-size:11px; opacity:.90; margin:8px 0 5px;}
     input{
       width:100%;
       box-sizing:border-box;
-      padding:10px 10px;
+      padding:9px 10px;
       border-radius:12px;
       border:1px solid var(--border);
       background:rgba(0,0,0,.45);
@@ -68,9 +69,9 @@
       outline:none;
     }
 
-    .row{display:flex; gap:10px; align-items:center; flex-wrap:wrap;}
+    .row{display:flex; gap:8px; align-items:center; flex-wrap:wrap;}
     button{
-      padding:10px 14px;
+      padding:9px 12px;
       border-radius:12px;
       border:1px solid var(--border);
       background:rgba(0,0,0,.45);
@@ -81,7 +82,7 @@
     }
     button:hover{border-color:rgba(50,255,117,.35)}
 
-    .stat{margin-top:10px; font-size:13px; line-height:1.5;}
+    .stat{margin-top:8px; font-size:12px; line-height:1.4;}
     .dim{opacity:.78} /* still green, just dimmer */
     .bad{color:var(--bad); font-weight:900;}
     .ok{color:#7dffab; font-weight:900;}
@@ -92,9 +93,9 @@
 
     /* big charge display (glow ramps with energy) */
     .big{
-      font-size:58px;
+      font-size:52px;
       font-weight:1000;
-      margin:12px 0 8px;
+      margin:10px 0 6px;
       letter-spacing:-0.04em;
       line-height:0.92;
       text-align:left;
@@ -110,30 +111,27 @@
 
     .bigSub{
       margin-top:-2px;
-      font-size:12px;
-      opacity:0.85;
+      font-size:11px;
+      opacity:0.82;
     }
 
-    .bars{margin-top:10px;}
+    .bars{margin-top:8px;}
     .barLabel{
       display:flex;
       align-items:baseline;
       justify-content:space-between;
       gap:10px;
-      font-size:12px;
-      opacity:.92;
-    }
-    .barLabel span{
-      opacity:.92;
+      font-size:11px;
+      opacity:.90;
     }
 
     .bar{
-      height:14px;
+      height:12px;
       border-radius:999px;
       border:1px solid rgba(50,255,117,.35);
       background:rgba(50,255,117,.08);
       overflow:hidden;
-      margin:8px 0 10px;
+      margin:6px 0 8px;
     }
     .fill{
       height:100%;
@@ -144,15 +142,15 @@
 
     /* ===== fixed-size last-message log (no layout thrash) ===== */
     .logBox{
-      margin-top:10px;
-      padding:10px 10px;
+      margin-top:8px;
+      padding:8px 9px;
       border-radius:12px;
       border:1px solid rgba(50,255,117,.22);
       background:rgba(0,0,0,.30);
       color: rgba(50,255,117,.92);
-      font-size:12px;
-      line-height:1.35;
-      max-height:84px;
+      font-size:11px;
+      line-height:1.32;
+      max-height:72px;
       overflow:auto;
       word-break:break-word;
       white-space:pre-wrap;
@@ -160,20 +158,20 @@
     .logBox .muted{opacity:.78}
 
     .qrBox{
-      width: 280px; height: 280px;
+      width: 270px; height: 270px;
       border-radius: 14px;
       border: 1px solid var(--border);
       background: #fff; /* QR must be white */
       display:grid; place-items:center;
       overflow:hidden;
-      margin-top:10px;
+      margin-top:8px;
     }
-    .mono{white-space:pre-wrap; word-break:break-word; font-size:12px; opacity:.9; margin-top:10px; color: rgba(50,255,117,.90);}
+    .mono{white-space:pre-wrap; word-break:break-word; font-size:11px; opacity:.9; margin-top:8px; color: rgba(50,255,117,.90);}
 
     @media (max-width: 900px){
       .grid{grid-template-columns:1fr;}
       .qrBox{width: 240px; height:240px;}
-      .big{font-size:52px;}
+      .big{font-size:48px;}
     }
   </style>
 
@@ -201,9 +199,6 @@
 
         <div class="stat">
           <div>Status: <span id="status" class="dim">Auto-connecting…</span></div>
-          <div class="dim" style="margin-top:6px;">
-            Note: this page now auto-connects on load. The phone can Start first — order doesn’t matter.
-          </div>
         </div>
 
         <div class="logBox" aria-label="Last message log">
@@ -231,15 +226,11 @@
           <div class="bar"><div id="bSpeed" class="fill"></div></div>
         </div>
 
-        <div class="mono dim">
-Tip: open this page on your laptop, scan QR on phone, press Start on the phone controller.
-        </div>
-
         <div id="fatal" class="mono bad" style="display:none;"></div>
       </div>
 
       <div class="card">
-        <div style="font-weight:900; margin-bottom:8px;">Scan to pair phone → this room</div>
+        <div style="font-weight:900; margin-bottom:6px;">Scan to pair phone → this room</div>
         <div id="qr" class="qrBox"></div>
         <div class="mono">
 URL:
@@ -479,70 +470,69 @@ URL:
     }
 
     function applyDataToUI(d){
-  // Parse 0..∞ energy correctly:
-  // - Prefer new schema energy01 (0..∞, can exceed 1)
-  // - Fall back to old energy which might be 0..1 OR 0..100
-  function pick01NewOrOld(newKey, oldKey){
-    if (d[newKey] != null) {
-      const n = Number(d[newKey]);
-      return isFinite(n) ? n : 0; // ✅ allow > 1 (overcharge)
-    }
-    const n = Number(d[oldKey]);
-    if (!isFinite(n)) return 0;
-    return (n > 1.5) ? (n / 100) : n; // legacy heuristic only
-  }
-
-  // Groove/orbit/smooth/speed should remain 0..1, but keep legacy fallback.
-  function pick01Bounded(newKey, oldKey){
-      if (d[newKey] != null) {
-        const n = Number(d[newKey]);
-        return isFinite(n) ? n : 0; // expected 0..1
+      // Parse 0..∞ energy correctly:
+      // - Prefer new schema energy01 (0..∞, can exceed 1)
+      // - Fall back to old energy which might be 0..1 OR 0..100
+      function pick01NewOrOld(newKey, oldKey){
+        if (d[newKey] != null) {
+          const n = Number(d[newKey]);
+          return isFinite(n) ? n : 0; // ✅ allow > 1 (overcharge)
+        }
+        const n = Number(d[oldKey]);
+        if (!isFinite(n)) return 0;
+        return (n > 1.5) ? (n / 100) : n; // legacy heuristic only
       }
-      const n = Number(d[oldKey]);
-      if (!isFinite(n)) return 0;
-      return (n > 1.5) ? (n / 100) : n;
+
+      // Groove/orbit/smooth/speed should remain 0..1, but keep legacy fallback.
+      function pick01Bounded(newKey, oldKey){
+        if (d[newKey] != null) {
+          const n = Number(d[newKey]);
+          return isFinite(n) ? n : 0; // expected 0..1
+        }
+        const n = Number(d[oldKey]);
+        if (!isFinite(n)) return 0;
+        return (n > 1.5) ? (n / 100) : n;
+      }
+
+      const energy = pick01NewOrOld("energy01", "energy");   // ✅ overcharge-safe
+      const groove = pick01Bounded("groove01", "groove");
+      const orbit  = pick01Bounded("orbit01",  "orbit");
+      const smooth = pick01Bounded("smooth01", "smooth");
+      const speed  = pick01Bounded("speed01",  "speed");
+      const locked = !!d.locked;
+
+      // visuals
+      setBgFromEnergy(energy);
+
+      const eText = toPctRaw(energy); // can exceed 100
+      const eBar  = toPct01(energy);  // bar stays 0..100
+
+      const gP = toPct01(groove);
+      const oP = toPct01(orbit);
+      const sP = toPct01(smooth);
+      const sp = toPct01(speed);
+
+      els.pct.textContent = isFinite(eText) ? eText : 0;
+
+      els.vEnergy.textContent = `${isFinite(eText) ? eText : 0}%`;
+      els.vGroove.textContent = `${gP}%${locked ? " (locked)" : ""}`;
+      els.vOrbit.textContent  = `${oP}%`;
+      els.vSmooth.textContent = `${sP}%`;
+      els.vSpeed.textContent  = `${sp}%`;
+
+      setBar(els.bEnergy, energy);
+      setBar(els.bGroove, groove);
+      setBar(els.bOrbit,  orbit);
+      setBar(els.bSmooth, smooth);
+      setBar(els.bSpeed,  speed);
+
+      const over = (energy > 1);
+      els.bigCharge.classList.toggle("over", over);
+      els.vEnergy.classList.toggle("over", over);
+      els.bEnergy.classList.toggle("over", over);
+
+      setAudio(energy, groove, locked);
     }
-
-    const energy = pick01NewOrOld("energy01", "energy");   // ✅ overcharge-safe
-    const groove = pick01Bounded("groove01", "groove");
-    const orbit  = pick01Bounded("orbit01",  "orbit");
-    const smooth = pick01Bounded("smooth01", "smooth");
-    const speed  = pick01Bounded("speed01",  "speed");
-    const locked = !!d.locked;
-
-    // visuals
-    setBgFromEnergy(energy);
-
-    const eText = toPctRaw(energy); // can exceed 100
-    const eBar  = toPct01(energy);  // bar stays 0..100
-
-    const gP = toPct01(groove);
-    const oP = toPct01(orbit);
-    const sP = toPct01(smooth);
-    const sp = toPct01(speed);
-
-    els.pct.textContent = isFinite(eText) ? eText : 0;
-
-    els.vEnergy.textContent = `${isFinite(eText) ? eText : 0}%`;
-    els.vGroove.textContent = `${gP}%${locked ? " (locked)" : ""}`;
-    els.vOrbit.textContent  = `${oP}%`;
-    els.vSmooth.textContent = `${sP}%`;
-    els.vSpeed.textContent  = `${sp}%`;
-
-    setBar(els.bEnergy, energy);
-    setBar(els.bGroove, groove);
-    setBar(els.bOrbit,  orbit);
-    setBar(els.bSmooth, smooth);
-    setBar(els.bSpeed,  speed);
-
-    const over = (energy > 1);
-    els.bigCharge.classList.toggle("over", over);
-    els.vEnergy.classList.toggle("over", over);
-    els.bEnergy.classList.toggle("over", over);
-
-    setAudio(energy, groove, locked);
-  }
-
 
     function readUrlRoomOrNull(){
       try{
