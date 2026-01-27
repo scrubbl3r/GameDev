@@ -14,6 +14,9 @@
       --border: rgba(50,255,117,.18);
       --bad:#ff5a5a;
 
+      /* overcharge */
+      --over:#ffd400;
+
       /* charge-driven (0..1) */
       --charge: 0;
     }
@@ -83,6 +86,10 @@
     .bad{color:var(--bad); font-weight:900;}
     .ok{color:#7dffab; font-weight:900;}
 
+    /* overcharge styling */
+    .over{ color: var(--over) !important; }
+    .fill.over{ background: var(--over) !important; }
+
     /* big charge display (glow ramps with energy) */
     .big{
       font-size:58px;
@@ -95,6 +102,12 @@
         0 0 calc(10px + 40px * var(--charge)) rgba(50,255,117, calc(0.12 + 0.38 * var(--charge))),
         0 0 calc(2px + 18px * var(--charge)) rgba(50,255,117, calc(0.10 + 0.25 * var(--charge)));
     }
+    .big.over{
+      text-shadow:
+        0 0 calc(10px + 40px * var(--charge)) rgba(255,212,0, calc(0.14 + 0.42 * var(--charge))),
+        0 0 calc(2px + 18px * var(--charge)) rgba(255,212,0, calc(0.10 + 0.28 * var(--charge)));
+    }
+
     .bigSub{
       margin-top:-2px;
       font-size:12px;
@@ -198,7 +211,7 @@
           <div id="last">(none yet)</div>
         </div>
 
-        <div class="big"><span id="pct">0</span>%</div>
+        <div id="bigCharge" class="big"><span id="pct">0</span>%</div>
         <div class="bigSub dim">energy</div>
 
         <div class="bars">
@@ -249,6 +262,7 @@ URL:
       status: $("status"),
       last: $("last"),
 
+      bigCharge: $("bigCharge"),
       pct: $("pct"),
 
       vEnergy: $("vEnergy"),
@@ -269,7 +283,8 @@ URL:
     };
 
     function clamp01(x){ x = Number(x); return Math.max(0, Math.min(1, isFinite(x) ? x : 0)); }
-    const toPct = (x01) => Math.round(clamp01(x01) * 100);
+    const toPct01  = (x01) => Math.round(clamp01(x01) * 100);               // 0..100
+    const toPctRaw = (x)   => Math.round(Math.max(0, Number(x) || 0) * 100); // 0..∞
 
     function setBar(el, v01){
       const p = clamp01(v01) * 100;
@@ -343,7 +358,7 @@ URL:
     const BG0 = { r: 0,   g: 0,  b: 0  };
     const BG1 = { r: 255, g: 42, b: 0  }; // bright red-orange
     function setBgFromEnergy(e01) {
-      const t = clamp01(e01);
+      const t = clamp01(e01); // background/glow saturate at 100%
       const r = Math.round(BG0.r + (BG1.r - BG0.r) * t);
       const g = Math.round(BG0.g + (BG1.g - BG0.g) * t);
       const b = Math.round(BG0.b + (BG1.b - BG0.b) * t);
@@ -356,8 +371,6 @@ URL:
 
     // =========================================================================
     // AUDIO (optional)
-    // - Audio MUST be enabled via a user gesture (Audio button).
-    // - Connection is now independent of audio (auto-connect is allowed).
     // =========================================================================
     let audioEnabled = false;
     let audioCtx = null, osc = null, gainNode = null;
@@ -420,13 +433,16 @@ URL:
     function setAudio(eUI, groove, locked) {
       if (!audioEnabled || !audioCtx || !gainNode || !osc) return;
 
-      const gBase = energyToGain(eUI);
+      // keep audio safely shaped into 0..1 like the phone
+      const e01 = clamp01(eUI);
+
+      const gBase = energyToGain(e01);
       const gGroove = locked ? (0.30 + 0.70*groove) : (0.08 + 0.22*groove);
       const g = MASTER_GAIN * gBase * gGroove;
 
       const f = TONE_BASE_HZ
               + TONE_MAX_ADD_HZ * (locked ? groove : 0.30*groove)
-              + 60 * eUI;
+              + 60 * e01;
 
       const now = audioCtx.currentTime;
       gainNode.gain.cancelScheduledValues(now);
@@ -464,7 +480,7 @@ URL:
 
     function applyDataToUI(d){
       // tolerate either schema:
-      // new: energy01/groove01/orbit01/smooth01/speed01 in 0..1
+      // new: energy01/groove01/orbit01/smooth01/speed01 in 0..1 (energy may exceed 1 now)
       // old: energy/groove/orbit/smooth/speed in 0..1 or 0..100
       function pick01(a, b){
         const v = (d[a] != null) ? d[a] : d[b];
@@ -480,29 +496,38 @@ URL:
       const speed  = pick01("speed01",  "speed");
       const locked = !!d.locked;
 
-      // charge visuals
+      // charge visuals (background/glow saturate at 100%)
       setBgFromEnergy(energy);
 
       // numbers + bars
-      const eP = toPct(energy);
-      const gP = toPct(groove);
-      const oP = toPct(orbit);
-      const sP = toPct(smooth);
-      const sp = toPct(speed);
+      const eText = toPctRaw(energy); // can exceed 100
+      const eBar  = toPct01(energy);  // bar stays 0..100
 
-      els.pct.textContent = isFinite(eP) ? eP : 0;
+      const gP = toPct01(groove);
+      const oP = toPct01(orbit);
+      const sP = toPct01(smooth);
+      const sp = toPct01(speed);
 
-      els.vEnergy.textContent = `${eP}%`;
+      els.pct.textContent = isFinite(eText) ? eText : 0;
+
+      els.vEnergy.textContent = `${isFinite(eText) ? eText : 0}%`;
       els.vGroove.textContent = `${gP}%${locked ? " (locked)" : ""}`;
       els.vOrbit.textContent  = `${oP}%`;
       els.vSmooth.textContent = `${sP}%`;
       els.vSpeed.textContent  = `${sp}%`;
 
+      // bars (width clamped in setBar)
       setBar(els.bEnergy, energy);
       setBar(els.bGroove, groove);
       setBar(els.bOrbit,  orbit);
       setBar(els.bSmooth, smooth);
       setBar(els.bSpeed,  speed);
+
+      // overcharge styling
+      const over = (energy > 1);
+      els.bigCharge.classList.toggle("over", over);
+      els.vEnergy.classList.toggle("over", over);
+      els.bEnergy.classList.toggle("over", over);
 
       // audio (optional)
       setAudio(energy, groove, locked);
@@ -636,7 +661,7 @@ URL:
         els.fatal.style.display = "none";
       }
 
-      // AUTO-CONNECT (Option 1)
+      // AUTO-CONNECT
       connect({ auto:true });
     })();
   </script>
