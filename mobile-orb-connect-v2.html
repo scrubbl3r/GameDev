@@ -469,17 +469,17 @@
     const MIN_OMEGA = 0.08;
 
     const SPEED_NORM  = 120.0; // 140.
-    const SPEED_SHAPE = 1.20; // .85
+    const SPEED_SHAPE = 1.20;  // .85
 
     // --- SPEED STABILITY (One Euro filter on omega magnitude) ---
-    const SPEED_MIN_CUTOFF = 0.20;  // .85  Hz (lower = smoother, higher = snappier)
-    const SPEED_BETA       = 0.015; // .020 responsiveness (higher = follows changes more)
-    const SPEED_D_CUTOFF   = 1.20;  // 1.20 Hz derivative cutoff
-    const SPEED_LOW_EXP    = 0.70;  // 0.20 <1 gives more control at low speeds
+    const SPEED_MIN_CUTOFF = 0.20;  // Hz (lower = smoother, higher = snappier)
+    const SPEED_BETA       = 0.015; // responsiveness (higher = follows changes more)
+    const SPEED_D_CUTOFF   = 1.20;  // derivative cutoff
+    const SPEED_LOW_EXP    = 0.70;  // <1 gives more control at low speeds
 
     // --- FAST RELEASE (keeps smoothness but lets the meter fall quickly) ---
     const SPEED_RELEASE_CUTOFF = 8.0;  // Hz (higher = faster decay when slowing)
-    const SPEED_STOP_SNAP      = 1.0; // snap-to-zero factor vs MIN_OMEGA (0..1)
+    const SPEED_STOP_SNAP      = 1.0;  // snap-to-zero factor vs MIN_OMEGA (0..1)
 
     const LOCK_ON  = 0.30;
     const LOCK_OFF = 0.22;
@@ -732,6 +732,12 @@
     }
 
     // =========================================================================
+    // ✅ Meter continuity (prevents shared “dump to zero” on transient gaps)
+    // =========================================================================
+    const METER_HOLD_SEC = 0.55; // how long to “hold last good” after analysis drops out
+    const METER_FADE_HZ  = 3.0;  // how quickly to fade toward 0 once hold expires
+
+    // =========================================================================
     // State
     // =========================================================================
     let running = false;
@@ -761,6 +767,13 @@
     // One Euro filter state for speed
     const speedFilter = { xPrev: null, xHat: null, dxHat: null };
 
+    // ✅ continuity memory for meters (including speed)
+    let meterHoldLeft = 0;
+    let lastGrooveUI = 0;
+    let lastOrbitUI  = 0;
+    let lastSmoothUI = 0;
+    let lastSpeedUI  = 0;
+
     let audioCtx = null, osc = null, gainNode = null;
 
     function ensureAudio() {
@@ -779,11 +792,15 @@
       log("audio: created");
     }
 
+    function energyToGainSafe(eUI) {
+      // Audio mapping stays safely shaped into 0..1
+      return energyToGain(clamp01(eUI));
+    }
+
     function setAudio(eUI, groove, locked) {
       if (!audioCtx || !gainNode || !osc) return;
 
-      // Audio mapping stays safely shaped into 0..1
-      const gBase = energyToGain(clamp01(eUI));
+      const gBase = energyToGainSafe(eUI);
       const gGroove = locked ? (0.30 + 0.70*groove) : (0.08 + 0.22*groove);
 
       const g = MASTER_GAIN * gBase * gGroove;
@@ -844,6 +861,31 @@
       dtBuf.splice(0, Math.max(0, dtBuf.length - keep));
     }
 
+    function meterHoldOrFade(dt, fallbackSpeed) {
+      if (dt > 0) meterHoldLeft = Math.max(0, meterHoldLeft - dt);
+
+      const dtFade = Math.max(1e-3, dt || computeAvg(dtBuf.slice(-50)) || 1/60);
+      const aFade = alphaFromCutoff(dtFade, METER_FADE_HZ);
+      const holding = meterHoldLeft > 0;
+
+      const grooveOut = holding ? lastGrooveUI : (1 - aFade) * lastGrooveUI;
+      const orbitOut  = holding ? lastOrbitUI  : (1 - aFade) * lastOrbitUI;
+      const smoothOut = holding ? lastSmoothUI : (1 - aFade) * lastSmoothUI;
+      const speedOut  = holding ? lastSpeedUI  : (1 - aFade) * lastSpeedUI;
+
+      lastGrooveUI = grooveOut;
+      lastOrbitUI  = orbitOut;
+      lastSmoothUI = smoothOut;
+      lastSpeedUI  = speedOut;
+
+      return {
+        grooveOut,
+        orbitOut,
+        smoothOut,
+        speedOut: (fallbackSpeed != null ? fallbackSpeed : speedOut)
+      };
+    }
+
     let motionCount = 0;
 
     function onMotion(e) {
@@ -861,8 +903,42 @@
       if (dt > 0) dtBuf.push(dt);
 
       const rr = e.rotationRate;
+
+      // ✅ IMPORTANT: don't hard-return on missing rr (that makes everything “dump”)
       if (!rr) {
         d.rr.textContent = "none";
+
+        // decay energy normally
+        if (dt > 0) {
+          const ddec = ENERGY_DECAY * STOP_DECAY_MULT;
+          energy = Math.max(0, energy - ddec * dt);
+          energyUI = lerp(energyUI, energy, UI_SMOOTH);
+        }
+
+        // hold+fade all meters, and publish/update consistently
+        const held = meterHoldOrFade(dt, null);
+
+        const payload = {
+          room,
+          t: performance.now(),
+          energy01: energyUI,
+          groove01: held.grooveOut,
+          orbit01: held.orbitOut,
+          smooth01: held.smoothOut,
+          speed01: held.speedOut,
+          locked: false,
+          hz: 0
+        };
+        publishOrb(payload, dt);
+
+        updateUI({
+          groove: held.grooveOut,
+          orbit: held.orbitOut,
+          smooth: held.smoothOut,
+          speed: held.speedOut,
+          energy: energyUI
+        });
+        setAudio(energyUI, held.grooveOut, false);
         return;
       }
 
@@ -935,6 +1011,8 @@
       const windowSec = inStableMode ? STABLE_WINDOW_SEC : HUNT_WINDOW_SEC;
       const nTarget = trimToWindow(dtMean, windowSec, omegaMag, omegaNorm, omegaDir, jerkBuf, dtBuf);
 
+      // ✅ If analysis window is too small, DO NOT dump groove/orbit/smooth to 0.
+      // Hold last-good briefly, then fade gently. Speed continues live.
       if (omegaNorm.length < Math.min(MIN_WINDOW_SAMPLES, nTarget)) {
         if (dt > 0) {
           const ddec = ENERGY_DECAY * STOP_DECAY_MULT;
@@ -942,22 +1020,32 @@
           energyUI = lerp(energyUI, energy, UI_SMOOTH);
         }
 
-        const lockedNow = false;
+        // keep speed “owned” by the system too
+        lastSpeedUI = speedScore;
+
+        const held = meterHoldOrFade(dt, speedScore);
+
         const payload = {
           room,
           t: performance.now(),
           energy01: energyUI,
-          groove01: 0,
-          orbit01: 0,
-          smooth01: 0,
-          speed01: speedScore,
-          locked: lockedNow,
+          groove01: held.grooveOut,
+          orbit01: held.orbitOut,
+          smooth01: held.smoothOut,
+          speed01: held.speedOut,
+          locked: false,
           hz: 0
         };
         publishOrb(payload, dt);
 
-        updateUI({ groove:0, orbit:0, smooth:0, speed:speedScore, energy:energyUI });
-        setAudio(energyUI, 0, false);
+        updateUI({
+          groove: held.grooveOut,
+          orbit: held.orbitOut,
+          smooth: held.smoothOut,
+          speed: held.speedOut,
+          energy: energyUI
+        });
+        setAudio(energyUI, held.grooveOut, false);
         return;
       }
 
@@ -973,6 +1061,13 @@
       const dirCov = cov3(omegaDir);
       const orbitBonus = orbitBonusFromDirCov(dirCov);                  // ~0.25..1
       const orbitShown = (orbitBonus - ORBIT_FLOOR) / (1 - ORBIT_FLOOR); // 0..1 for UI
+
+      // ✅ refresh “last good” meters (this is what gets held on brief gaps)
+      meterHoldLeft = METER_HOLD_SEC;
+      lastGrooveUI = lockStrength;
+      lastOrbitUI  = orbitShown;
+      lastSmoothUI = smoothScore;
+      lastSpeedUI  = speedScore;
 
       if (!lock) {
         if (lockStrength > LOCK_ON && speedScore > 0.16) {
@@ -1178,6 +1273,13 @@
         speedFilter.xPrev = null;
         speedFilter.xHat  = null;
         speedFilter.dxHat = null;
+
+        // ✅ reset meter continuity state
+        meterHoldLeft = 0;
+        lastGrooveUI = 0;
+        lastOrbitUI  = 0;
+        lastSmoothUI = 0;
+        lastSpeedUI  = 0;
 
         setAudio(0,0,false);
         setBgFromEnergy(0);
