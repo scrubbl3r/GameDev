@@ -578,6 +578,15 @@
       return state.xHat;
     }
 
+    // --- Robust statistics helpers for Smooth meter ---
+    function median(arr) {
+      if (!arr.length) return 0;
+      const a = arr.slice().sort((x,y) => x - y);
+      const mid = (a.length - 1) / 2;
+      const lo = Math.floor(mid), hi = Math.ceil(mid);
+      return (a[lo] + a[hi]) / 2;
+    }
+
     function energyToGain(e) {
       if (e <= AUDIO_GATE) return 0;
       const x = (e - AUDIO_GATE) / (1 - AUDIO_GATE);
@@ -910,7 +919,11 @@
         const inv = 1/m;
         omegaDir.push({x:ox*inv, y:oy*inv, z:oz*inv});
 
-        if (dt > 0) jerkBuf.push(mag3(ox-prevOx, oy-prevOy, oz-prevOz) / dt);
+        // ✅ Smooth robustness: dt glitches can cause gigantic jerk spikes
+        if (dt > 0) {
+          const dtSafe = Math.max(dt, dtMean * 0.5, 1/120);
+          jerkBuf.push(mag3(ox-prevOx, oy-prevOy, oz-prevOz) / dtSafe);
+        }
       } else {
         if (omegaMag.length) omegaMag.shift();
         if (omegaNorm.length) omegaNorm.shift();
@@ -952,7 +965,9 @@
       lockStrength = lerp(lockStrength, ac.peak, LOCK_SMOOTH);
       grooveHz = ac.hz;
 
-      const avgJerk = computeAvg(jerkBuf.slice(-Math.min(jerkBuf.length, 70)));
+      // ✅ Smooth robustness: use MEDIAN of jerk window (ignores one-off spikes)
+      const jerkWindow = jerkBuf.slice(-Math.min(jerkBuf.length, 70));
+      const avgJerk = median(jerkWindow);
       const smoothScore = smoothnessFromJerk(avgJerk);
 
       const dirCov = cov3(omegaDir);
