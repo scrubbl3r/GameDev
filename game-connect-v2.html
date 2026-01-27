@@ -186,6 +186,23 @@
     }
     .mono{white-space:pre-wrap; word-break:break-word; font-size:12px; opacity:.9; margin-top:10px; color: rgba(50,255,117,.90);}
 
+    /* ============================================================
+       AUDIO BUTTON PROMPT (red by default, turns green when enabled)
+       ============================================================ */
+    #audioBtn{
+      border-color: rgba(255,90,90,.55);
+      color: rgba(255,90,90,.95);
+      text-shadow: 0 0 10px rgba(255,90,90,.18);
+    }
+    #audioBtn:hover{
+      border-color: rgba(255,90,90,.78);
+    }
+    #audioBtn.on{
+      border-color: rgba(50,255,117,.35);
+      color: var(--g);
+      text-shadow: none;
+    }
+
     @media (max-width: 900px){
       .grid{grid-template-columns:1fr;}
       .qrBox{width: 240px; height:240px;}
@@ -210,9 +227,10 @@
         <label>Room</label>
         <div class="row">
           <input id="room" value="orb:test" />
-          <button id="newRoom">New room</button>
-          <button id="connect">Reconnect</button>
+          <!-- audio FIRST -->
           <button id="audioBtn">Audio: Off</button>
+          <button id="connect">Reconnect</button>
+          <button id="newRoom">New room</button>
         </div>
 
         <div class="stat">
@@ -423,12 +441,14 @@ URL:
       try { await audioCtx.resume(); } catch(_) {}
       audioEnabled = true;
       els.audioBtn.textContent = "Audio: On";
+      els.audioBtn.classList.add("on");      // <-- green state
       els.audioBtn.classList.remove("dim");
     }
 
     function disableAudio() {
       audioEnabled = false;
       els.audioBtn.textContent = "Audio: Off";
+      els.audioBtn.classList.remove("on");   // <-- back to red state
       if (audioCtx && gainNode) {
         const now = audioCtx.currentTime;
         gainNode.gain.cancelScheduledValues(now);
@@ -455,6 +475,9 @@ URL:
       osc.frequency.cancelScheduledValues(now);
       osc.frequency.setTargetAtTime(f, now, 0.06);
     }
+
+    // ensure initial red state
+    disableAudio();
 
     els.audioBtn.addEventListener("click", async () => {
       if (!audioEnabled) await enableAudio();
