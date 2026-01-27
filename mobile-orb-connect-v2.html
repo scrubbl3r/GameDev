@@ -472,10 +472,14 @@
     const SPEED_SHAPE = 0.85;
 
     // --- SPEED STABILITY (One Euro filter on omega magnitude) ---
-    const SPEED_MIN_CUTOFF = 0.20;  // .85  Hz (lower = smoother, higher = snappier) 
+    const SPEED_MIN_CUTOFF = 0.20;  // .85  Hz (lower = smoother, higher = snappier)
     const SPEED_BETA       = 0.015; // .020 responsiveness (higher = follows changes more)
     const SPEED_D_CUTOFF   = 1.20;  // 1.20 Hz derivative cutoff
     const SPEED_LOW_EXP    = 0.20;  // 0.60 <1 gives more control at low speeds
+
+    // --- FAST RELEASE (keeps smoothness but lets the meter fall quickly) ---
+    const SPEED_RELEASE_CUTOFF = 6.0;  // Hz (higher = faster decay when slowing)
+    const SPEED_STOP_SNAP      = 0.85; // snap-to-zero factor vs MIN_OMEGA (0..1)
 
     const LOCK_ON  = 0.30;
     const LOCK_OFF = 0.22;
@@ -868,9 +872,24 @@
       const m = mag3(ox,oy,oz);
       const dtMean = Math.max(1e-3, computeAvg(dtBuf.slice(-50)));
 
-      // --- SPEED: stabilize omega magnitude (One Euro) + low-end shaping ---
+      // --- SPEED: stabilize omega magnitude (One Euro) + FAST-RELEASE on slowdown ---
       const dtForFilter = (dt > 0) ? dt : dtMean;
-      const mFilt = oneEuroStep(m, dtForFilter, speedFilter);
+
+      // base one-euro smoothing (keeps spikes down)
+      let mFilt = oneEuroStep(m, dtForFilter, speedFilter);
+
+      // FAST RELEASE: if raw drops below filtered, follow downward faster
+      if (m < mFilt) {
+        const aRel = alphaFromCutoff(dtForFilter, SPEED_RELEASE_CUTOFF);
+        mFilt = (1 - aRel) * mFilt + aRel * m;
+      }
+
+      // Near motionless: help it settle to zero instead of hovering
+      if (m < (MIN_OMEGA * SPEED_STOP_SNAP)) {
+        const aRel2 = alphaFromCutoff(dtForFilter, SPEED_RELEASE_CUTOFF * 1.25);
+        mFilt = (1 - aRel2) * mFilt; // decay toward 0
+      }
+
       const speedNorm = Math.max(0, mFilt / SPEED_NORM);
       const speedScore = speedCurve(Math.pow(speedNorm, SPEED_LOW_EXP));
 
