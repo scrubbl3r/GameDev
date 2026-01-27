@@ -479,59 +479,70 @@ URL:
     }
 
     function applyDataToUI(d){
-      // tolerate either schema:
-      // new: energy01/groove01/orbit01/smooth01/speed01 in 0..1 (energy may exceed 1 now)
-      // old: energy/groove/orbit/smooth/speed in 0..1 or 0..100
-      function pick01(a, b){
-        const v = (d[a] != null) ? d[a] : d[b];
-        const n = Number(v);
-        if (!isFinite(n)) return 0;
-        return (n > 1.5) ? (n / 100) : n;
-      }
-
-      const energy = pick01("energy01", "energy");
-      const groove = pick01("groove01", "groove");
-      const orbit  = pick01("orbit01",  "orbit");
-      const smooth = pick01("smooth01", "smooth");
-      const speed  = pick01("speed01",  "speed");
-      const locked = !!d.locked;
-
-      // charge visuals (background/glow saturate at 100%)
-      setBgFromEnergy(energy);
-
-      // numbers + bars
-      const eText = toPctRaw(energy); // can exceed 100
-      const eBar  = toPct01(energy);  // bar stays 0..100
-
-      const gP = toPct01(groove);
-      const oP = toPct01(orbit);
-      const sP = toPct01(smooth);
-      const sp = toPct01(speed);
-
-      els.pct.textContent = isFinite(eText) ? eText : 0;
-
-      els.vEnergy.textContent = `${isFinite(eText) ? eText : 0}%`;
-      els.vGroove.textContent = `${gP}%${locked ? " (locked)" : ""}`;
-      els.vOrbit.textContent  = `${oP}%`;
-      els.vSmooth.textContent = `${sP}%`;
-      els.vSpeed.textContent  = `${sp}%`;
-
-      // bars (width clamped in setBar)
-      setBar(els.bEnergy, energy);
-      setBar(els.bGroove, groove);
-      setBar(els.bOrbit,  orbit);
-      setBar(els.bSmooth, smooth);
-      setBar(els.bSpeed,  speed);
-
-      // overcharge styling
-      const over = (energy > 1);
-      els.bigCharge.classList.toggle("over", over);
-      els.vEnergy.classList.toggle("over", over);
-      els.bEnergy.classList.toggle("over", over);
-
-      // audio (optional)
-      setAudio(energy, groove, locked);
+  // Parse 0..∞ energy correctly:
+  // - Prefer new schema energy01 (0..∞, can exceed 1)
+  // - Fall back to old energy which might be 0..1 OR 0..100
+  function pick01NewOrOld(newKey, oldKey){
+    if (d[newKey] != null) {
+      const n = Number(d[newKey]);
+      return isFinite(n) ? n : 0; // ✅ allow > 1 (overcharge)
     }
+    const n = Number(d[oldKey]);
+    if (!isFinite(n)) return 0;
+    return (n > 1.5) ? (n / 100) : n; // legacy heuristic only
+  }
+
+  // Groove/orbit/smooth/speed should remain 0..1, but keep legacy fallback.
+  function pick01Bounded(newKey, oldKey){
+      if (d[newKey] != null) {
+        const n = Number(d[newKey]);
+        return isFinite(n) ? n : 0; // expected 0..1
+      }
+      const n = Number(d[oldKey]);
+      if (!isFinite(n)) return 0;
+      return (n > 1.5) ? (n / 100) : n;
+    }
+
+    const energy = pick01NewOrOld("energy01", "energy");   // ✅ overcharge-safe
+    const groove = pick01Bounded("groove01", "groove");
+    const orbit  = pick01Bounded("orbit01",  "orbit");
+    const smooth = pick01Bounded("smooth01", "smooth");
+    const speed  = pick01Bounded("speed01",  "speed");
+    const locked = !!d.locked;
+
+    // visuals
+    setBgFromEnergy(energy);
+
+    const eText = toPctRaw(energy); // can exceed 100
+    const eBar  = toPct01(energy);  // bar stays 0..100
+
+    const gP = toPct01(groove);
+    const oP = toPct01(orbit);
+    const sP = toPct01(smooth);
+    const sp = toPct01(speed);
+
+    els.pct.textContent = isFinite(eText) ? eText : 0;
+
+    els.vEnergy.textContent = `${isFinite(eText) ? eText : 0}%`;
+    els.vGroove.textContent = `${gP}%${locked ? " (locked)" : ""}`;
+    els.vOrbit.textContent  = `${oP}%`;
+    els.vSmooth.textContent = `${sP}%`;
+    els.vSpeed.textContent  = `${sp}%`;
+
+    setBar(els.bEnergy, energy);
+    setBar(els.bGroove, groove);
+    setBar(els.bOrbit,  orbit);
+    setBar(els.bSmooth, smooth);
+    setBar(els.bSpeed,  speed);
+
+    const over = (energy > 1);
+    els.bigCharge.classList.toggle("over", over);
+    els.vEnergy.classList.toggle("over", over);
+    els.bEnergy.classList.toggle("over", over);
+
+    setAudio(energy, groove, locked);
+  }
+
 
     function readUrlRoomOrNull(){
       try{
