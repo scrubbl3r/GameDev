@@ -19,6 +19,10 @@
 
       /* charge-driven (0..1) */
       --charge: 0;
+
+      /* message strip indigo */
+      --msgBg: rgba(14, 12, 44, 0.88);     /* deep indigo */
+      --msgBorder: rgba(90, 80, 200, 0.18);/* subtle violet edge */
     }
 
     html,body{
@@ -44,24 +48,23 @@
       z-index:0;
     }
 
-    /* ===== TIGHTER LAYOUT PASS ===== */
-    .wrap{max-width:980px;margin:18px auto;padding:0 14px; position:relative; z-index:1;}
-    h1{margin:0 0 10px 0; font-size:16px; letter-spacing:.6px; text-align:center; opacity:.92;}
-    .grid{display:grid; grid-template-columns: 1.2fr 1fr; gap:14px; align-items:start;}
+    .wrap{max-width:980px;margin:24px auto;padding:0 16px; position:relative; z-index:1;}
+    h1{margin:0 0 14px 0; font-size:18px; letter-spacing:.6px; text-align:center;}
+    .grid{display:grid; grid-template-columns: 1.2fr 1fr; gap:18px; align-items:start;}
     .card{
       background:var(--panel);
       border:1px solid var(--border);
-      border-radius:14px;
-      padding:12px 12px 12px;
+      border-radius:16px;
+      padding:14px 14px 16px;
       box-shadow: 0 18px 80px rgba(0,0,0,.55);
       overflow:hidden;
     }
 
-    label{display:block; font-size:11px; opacity:.90; margin:8px 0 5px;}
+    label{display:block; font-size:12px; opacity:.92; margin:10px 0 6px;}
     input{
       width:100%;
       box-sizing:border-box;
-      padding:9px 10px;
+      padding:10px 10px;
       border-radius:12px;
       border:1px solid var(--border);
       background:rgba(0,0,0,.45);
@@ -69,9 +72,9 @@
       outline:none;
     }
 
-    .row{display:flex; gap:8px; align-items:center; flex-wrap:wrap;}
+    .row{display:flex; gap:10px; align-items:center; flex-wrap:wrap;}
     button{
-      padding:9px 12px;
+      padding:10px 14px;
       border-radius:12px;
       border:1px solid var(--border);
       background:rgba(0,0,0,.45);
@@ -82,7 +85,7 @@
     }
     button:hover{border-color:rgba(50,255,117,.35)}
 
-    .stat{margin-top:8px; font-size:12px; line-height:1.4;}
+    .stat{margin-top:10px; font-size:13px; line-height:1.5;}
     .dim{opacity:.78} /* still green, just dimmer */
     .bad{color:var(--bad); font-weight:900;}
     .ok{color:#7dffab; font-weight:900;}
@@ -93,9 +96,9 @@
 
     /* big charge display (glow ramps with energy) */
     .big{
-      font-size:52px;
+      font-size:58px;
       font-weight:1000;
-      margin:10px 0 6px;
+      margin:12px 0 8px;
       letter-spacing:-0.04em;
       line-height:0.92;
       text-align:left;
@@ -111,27 +114,28 @@
 
     .bigSub{
       margin-top:-2px;
-      font-size:11px;
-      opacity:0.82;
+      font-size:12px;
+      opacity:0.85;
     }
 
-    .bars{margin-top:8px;}
+    .bars{margin-top:10px;}
     .barLabel{
       display:flex;
       align-items:baseline;
       justify-content:space-between;
       gap:10px;
-      font-size:11px;
-      opacity:.90;
+      font-size:12px;
+      opacity:.92;
     }
+    .barLabel span{ opacity:.92; }
 
     .bar{
-      height:12px;
+      height:14px;
       border-radius:999px;
       border:1px solid rgba(50,255,117,.35);
       background:rgba(50,255,117,.08);
       overflow:hidden;
-      margin:6px 0 8px;
+      margin:8px 0 10px;
     }
     .fill{
       height:100%;
@@ -140,38 +144,48 @@
       transition: width 80ms linear;
     }
 
-    /* ===== fixed-size last-message log (no layout thrash) ===== */
-    .logBox{
-      margin-top:8px;
-      padding:8px 9px;
+    /* ===== one-line last-message ticker (deep indigo) ===== */
+    .logLine{
+      margin-top:10px;
+      padding:8px 10px;
       border-radius:12px;
-      border:1px solid rgba(50,255,117,.22);
-      background:rgba(0,0,0,.30);
+      border:1px solid var(--msgBorder);
+      background: var(--msgBg);
       color: rgba(50,255,117,.92);
       font-size:11px;
-      line-height:1.32;
-      max-height:72px;
-      overflow:auto;
-      word-break:break-word;
-      white-space:pre-wrap;
+      line-height:1;
+      display:flex;
+      align-items:center;
+      gap:8px;
+      white-space:nowrap;
+      overflow:hidden;
+      box-shadow: inset 0 0 0 1px rgba(0,0,0,.25);
     }
-    .logBox .muted{opacity:.78}
+    .logLine .muted{
+      opacity:.78;
+      flex:0 0 auto;
+    }
+    .lastText{
+      flex:1 1 auto;
+      overflow:hidden;
+      text-overflow:ellipsis;
+    }
 
     .qrBox{
-      width: 270px; height: 270px;
+      width: 280px; height: 280px;
       border-radius: 14px;
       border: 1px solid var(--border);
       background: #fff; /* QR must be white */
       display:grid; place-items:center;
       overflow:hidden;
-      margin-top:8px;
+      margin-top:10px;
     }
-    .mono{white-space:pre-wrap; word-break:break-word; font-size:11px; opacity:.9; margin-top:8px; color: rgba(50,255,117,.90);}
+    .mono{white-space:pre-wrap; word-break:break-word; font-size:12px; opacity:.9; margin-top:10px; color: rgba(50,255,117,.90);}
 
     @media (max-width: 900px){
       .grid{grid-template-columns:1fr;}
       .qrBox{width: 240px; height:240px;}
-      .big{font-size:48px;}
+      .big{font-size:52px;}
     }
   </style>
 
@@ -201,9 +215,10 @@
           <div>Status: <span id="status" class="dim">Auto-connecting…</span></div>
         </div>
 
-        <div class="logBox" aria-label="Last message log">
-          <div class="muted">Last message:</div>
-          <div id="last">(none yet)</div>
+        <!-- one-line ticker -->
+        <div class="logLine" aria-label="Last message">
+          <span class="muted">Last message:</span>
+          <span id="last" class="lastText">(none yet)</span>
         </div>
 
         <div id="bigCharge" class="big"><span id="pct">0</span>%</div>
@@ -230,7 +245,7 @@
       </div>
 
       <div class="card">
-        <div style="font-weight:900; margin-bottom:6px;">Scan to pair phone → this room</div>
+        <div style="font-weight:900; margin-bottom:8px;">Scan to pair phone → this room</div>
         <div id="qr" class="qrBox"></div>
         <div class="mono">
 URL:
@@ -476,7 +491,7 @@ URL:
       function pick01NewOrOld(newKey, oldKey){
         if (d[newKey] != null) {
           const n = Number(d[newKey]);
-          return isFinite(n) ? n : 0; // ✅ allow > 1 (overcharge)
+          return isFinite(n) ? n : 0; // allow > 1 (overcharge)
         }
         const n = Number(d[oldKey]);
         if (!isFinite(n)) return 0;
@@ -494,7 +509,7 @@ URL:
         return (n > 1.5) ? (n / 100) : n;
       }
 
-      const energy = pick01NewOrOld("energy01", "energy");   // ✅ overcharge-safe
+      const energy = pick01NewOrOld("energy01", "energy");   // overcharge-safe
       const groove = pick01Bounded("groove01", "groove");
       const orbit  = pick01Bounded("orbit01",  "orbit");
       const smooth = pick01Bounded("smooth01", "smooth");
@@ -609,10 +624,10 @@ URL:
       channel.subscribe("orb", function(msg){
         const d = (msg && msg.data) ? msg.data : {};
 
-        // log box: keep it short, never let it destroy layout
+        // One-line ticker: short + stable.
         let s = "";
         try { s = JSON.stringify(d); } catch(_) { s = String(d); }
-        if (s.length > 600) s = s.slice(0, 600) + " …";
+        if (s.length > 240) s = s.slice(0, 240) + " …";
         els.last.textContent = s;
 
         scheduleUIUpdate(d);
