@@ -897,14 +897,16 @@
         const cap  = SPEED_CAP_DPS;
         const wCap = Math.min(wRaw, cap);
 
-        // Deg/s after deadzone
+        // deg/s after deadzone (THIS WAS MISSING)
+        const wDz = Math.max(0, wCap - SPEED_DEAD_DPS);
+
         // Adaptive EMA cutoff: fast at low speed, slow at high speed
         const denom = Math.max(1e-6, (SPEED_ADAPT_END_DPS - SPEED_ADAPT_START_DPS));
-        let t = (wDz - SPEED_ADAPT_START_DPS) / denom; // 0..1 across the adapt range
-        t = clamp01(t);
-        t = Math.pow(t, SPEED_ADAPT_POW);              // high-speed weighted (later ramp-in)
+        let tAdapt = (wDz - SPEED_ADAPT_START_DPS) / denom; // 0..1 across the adapt range
+        tAdapt = clamp01(tAdapt);
+        tAdapt = Math.pow(tAdapt, SPEED_ADAPT_POW);         // high-speed weighted (later ramp-in)
 
-        const cutoffHz = lerp(SPEED_EMA_CUTOFF_FAST_HZ, SPEED_EMA_CUTOFF_SLOW_HZ, t);
+        const cutoffHz = lerp(SPEED_EMA_CUTOFF_FAST_HZ, SPEED_EMA_CUTOFF_SLOW_HZ, tAdapt);
         const aE = alphaFromCutoff(dtSafe, cutoffHz);
 
         mSpeedEMA = (mSpeedEMA === 0) ? wDz : ((1 - aE) * mSpeedEMA + aE * wDz);
@@ -914,14 +916,15 @@
         const n = clamp01(wFilt / SPEED_NORM_DPS);
         const target = Math.pow(n, SPEED_MAP_POW);
 
-        // Envelope (keeps “meter feel” stable)
+        // Envelope
         const aAtk = alphaFromCutoff(dtSafe, SPEED_ATTACK_HZ);
         const aRel = alphaFromCutoff(dtSafe, SPEED_RELEASE_HZ);
         const a = (target >= speedOut) ? aAtk : aRel;
         speedOut = (1 - a) * speedOut + a * target;
 
-        return { cap, dt: dtSafe, wRaw, wCap, wFilt, speed: speedOut, cutoffHz, tAdapt, wDz };
+        return { cap, dt: dtSafe, wRaw, wCap, wDz, wFilt, speed: speedOut, cutoffHz, tAdapt };
     }
+
 
 
     function updateShake(e, t, dt){
