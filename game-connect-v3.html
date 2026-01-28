@@ -23,10 +23,6 @@
       /* message stream color (bright indigo, readable) */
       --stream: rgba(140, 130, 255, 0.95);
       --streamGlow: rgba(140, 130, 255, 0.32);
-
-      /* shake lamp */
-      --lamp: rgba(255, 212, 0, 1.0);
-      --lampGlow: rgba(255, 212, 0, 0.50);
     }
 
     html,body{
@@ -54,7 +50,10 @@
 
     .wrap{max-width:980px;margin:24px auto;padding:0 16px; position:relative; z-index:1;}
     h1{margin:0 0 14px 0; font-size:18px; letter-spacing:.6px; text-align:center;}
-    .grid{display:grid; grid-template-columns: 1.2fr 1fr; gap:18px; align-items:start;}
+
+    /* single column now (QR card removed) */
+    .grid{display:grid; grid-template-columns: 1fr; gap:18px; align-items:start;}
+
     .card{
       background:var(--panel);
       border:1px solid var(--border);
@@ -62,6 +61,7 @@
       padding:14px 14px 16px;
       box-shadow: 0 18px 80px rgba(0,0,0,.55);
       overflow:hidden;
+      position:relative;
     }
 
     label{display:block; font-size:12px; opacity:.92; margin:10px 0 6px;}
@@ -179,16 +179,26 @@
       opacity: 1;
     }
 
+    /* ============================================================
+       QR moved into left card (upper-left, above Worker/Room)
+       ============================================================ */
+    .qrInline{
+      display:flex;
+      flex-direction:column;
+      align-items:flex-start;
+      gap:8px;
+      margin-bottom:10px;
+    }
     .qrBox{
-      width: 280px; height: 280px;
+      width: 220px; height: 220px;
       border-radius: 14px;
       border: 1px solid var(--border);
       background: #fff;
       display:grid; place-items:center;
       overflow:hidden;
-      margin-top:10px;
     }
-    .mono{white-space:pre-wrap; word-break:break-word; font-size:12px; opacity:.9; margin-top:10px; color: rgba(50,255,117,.90);}
+    .mono{white-space:pre-wrap; word-break:break-word; font-size:12px; opacity:.9; margin-top:6px; color: rgba(50,255,117,.90);}
+    .mono .labelDim{opacity:.78;}
 
     /* ============================================================
        AUDIO BUTTON PROMPT (red by default, turns green when enabled)
@@ -222,45 +232,10 @@
       min-width:220px;
     }
 
-    /* ============================================================
-       DISRUPTOR: SHAKE METER (short bar + round lamp)
-       ============================================================ */
-    .groupGap{ height:10px; } /* single space between groups */
-
-    .meterRow{
-      display:flex;
-      align-items:center;
-      gap:10px;
-    }
-    .barShort{
-      flex:1 1 auto;
-      max-width: 430px; /* shorter than other bars to make room for lamp */
-      margin:8px 0 10px;
-    }
-
-    .lamp{
-      width:16px;
-      height:16px;
-      border-radius:999px;
-      border:1px solid rgba(50,255,117,.35);
-      background: rgba(0,0,0,.30);
-      box-shadow: inset 0 0 0 1px rgba(0,0,0,.25);
-      flex:0 0 auto;
-    }
-    .lamp.on{
-      border-color: rgba(255,212,0,0.85);
-      background: var(--lamp);
-      box-shadow:
-        0 0 12px var(--lampGlow),
-        0 0 28px rgba(255,212,0,0.26);
-    }
-
     @media (max-width: 900px){
-      .grid{grid-template-columns:1fr;}
-      .qrBox{width: 240px; height:240px;}
       .big{font-size:52px;}
       .inlineLabel{min-width:56px;}
-      .barShort{ max-width: 360px; }
+      .qrBox{ width: 200px; height: 200px; }
     }
   </style>
 
@@ -275,6 +250,15 @@
 
     <div class="grid">
       <div class="card">
+
+        <!-- QR now lives here, upper-left, above Worker/Room -->
+        <div class="qrInline">
+          <div id="qr" class="qrBox"></div>
+          <div class="mono">
+            <span class="labelDim">URL:</span>
+            <span id="urlText"></span>
+          </div>
+        </div>
 
         <!-- Worker inline -->
         <div class="row fieldRow">
@@ -320,28 +304,9 @@
 
           <div class="barLabel"><div>Speed</div><span id="vSpeed">0</span></div>
           <div class="bar"><div id="bSpeed" class="fill"></div></div>
-
-          <!-- single blank spacer between groups -->
-          <div class="groupGap"></div>
-
-          <!-- DISRUPTOR: SHAKE -->
-          <div class="barLabel"><div>Shake</div><span id="vShake">0</span></div>
-          <div class="meterRow">
-            <div class="bar barShort"><div id="bShake" class="fill"></div></div>
-            <div id="shakeLamp" class="lamp" aria-label="Shake trigger lamp"></div>
-          </div>
         </div>
 
         <div id="fatal" class="mono bad" style="display:none;"></div>
-      </div>
-
-      <div class="card">
-        <div style="font-weight:900; margin-bottom:8px;">Scan to pair phone → this room</div>
-        <div id="qr" class="qrBox"></div>
-        <div class="mono">
-URL:
-<span id="urlText"></span>
-        </div>
       </div>
     </div>
   </div>
@@ -367,16 +332,12 @@ URL:
       vOrbit: $("vOrbit"),
       vSmooth: $("vSmooth"),
       vSpeed: $("vSpeed"),
-      vShake: $("vShake"),
 
       bEnergy: $("bEnergy"),
       bGroove: $("bGroove"),
       bOrbit: $("bOrbit"),
       bSmooth: $("bSmooth"),
       bSpeed: $("bSpeed"),
-      bShake: $("bShake"),
-
-      shakeLamp: $("shakeLamp"),
 
       qr: $("qr"),
       urlText: $("urlText"),
@@ -427,13 +388,17 @@ URL:
         return;
       }
 
+      // match the box size (responsive)
+      const box = els.qr.getBoundingClientRect();
+      const size = Math.max(160, Math.min(280, Math.floor(Math.min(box.width, box.height) || 220)));
+
       const canvas = document.createElement("canvas");
-      canvas.width = 280; canvas.height = 280;
+      canvas.width = size; canvas.height = size;
       els.qr.appendChild(canvas);
 
       try{
         await QRCode.toCanvas(canvas, url, {
-          width: 260,
+          width: Math.max(140, size - 20),
           margin: 2,
           color: { dark: "#000000", light: "#ffffff" }
         });
@@ -558,23 +523,6 @@ URL:
     });
 
     // =========================================================================
-    // SHAKE LAMP (500ms strobe)
-    // - Flash triggers when we receive:
-    //    - d.shakeHit === true  OR
-    //    - d.shakeEvent is truthy OR
-    //    - d.verb === "shake" (future-proof)
-    // =========================================================================
-    let lampTO = null;
-    function flashShakeLamp(ms = 500){
-      els.shakeLamp.classList.add("on");
-      if (lampTO) clearTimeout(lampTO);
-      lampTO = setTimeout(() => {
-        els.shakeLamp.classList.remove("on");
-        lampTO = null;
-      }, ms);
-    }
-
-    // =========================================================================
     // ABLY RECEIVER (AUTO-CONNECT)
     // =========================================================================
     let realtime = null;
@@ -620,7 +568,6 @@ URL:
       const orbit  = pick01Bounded("orbit01",  "orbit");
       const smooth = pick01Bounded("smooth01", "smooth");
       const speed  = pick01Bounded("speed01",  "speed");
-      const shake  = pick01Bounded("shake01",  "shake");
       const locked = !!d.locked;
 
       setBgFromEnergy(energy);
@@ -630,7 +577,6 @@ URL:
       const oP = toPct01(orbit);
       const sP = toPct01(smooth);
       const sp = toPct01(speed);
-      const sh = toPct01(shake);
 
       els.pct.textContent = isFinite(eText) ? eText : 0;
 
@@ -639,30 +585,17 @@ URL:
       els.vOrbit.textContent  = `${oP}%`;
       els.vSmooth.textContent = `${sP}%`;
       els.vSpeed.textContent  = `${sp}%`;
-      els.vShake.textContent  = `${sh}%`;
 
       setBar(els.bEnergy, energy);
       setBar(els.bGroove, groove);
       setBar(els.bOrbit,  orbit);
       setBar(els.bSmooth, smooth);
       setBar(els.bSpeed,  speed);
-      setBar(els.bShake,  shake);
 
       const over = (energy > 1);
       els.bigCharge.classList.toggle("over", over);
       els.vEnergy.classList.toggle("over", over);
       els.bEnergy.classList.toggle("over", over);
-
-      // shake lamp trigger (tolerant to future payload variations)
-      const shakeHit =
-        d.shakeHit === true ||
-        d.shakeEvent === true ||
-        (typeof d.shakeEvent === "string" && d.shakeEvent) ||
-        (d.verb === "shake") ||
-        (d.action === "shock") ||
-        (d.kind === "shock");
-
-      if (shakeHit) flashShakeLamp(500);
 
       setAudio(energy, groove, locked);
     }
