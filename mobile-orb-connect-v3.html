@@ -218,6 +218,14 @@
         <div class="row" style="margin-top:6px;">
           <span class="k">Last rr:</span> <span id="dRR" class="v dim">none</span>
         </div>
+
+        <!-- ✅ NEW: speed debug row (no devtools needed) -->
+        <div class="row" style="margin-top:6px;">
+          <span class="k">ω raw:</span> <span id="dOmega" class="v dim">0</span>
+          <span class="k">ω filt:</span> <span id="dOmegaF" class="v dim">0</span>
+          <span class="k">speed:</span> <span id="dSpeed" class="v dim">0</span>
+        </div>
+
         <div class="row" style="margin-top:6px;">
           <span class="k">Start stage:</span> <span id="dStage" class="v dim">—</span>
         </div>
@@ -250,6 +258,11 @@
       stage: $("dStage"),
       err: $("dErr"),
       log: $("dLog"),
+
+      // ✅ NEW debug outputs
+      omega: $("dOmega"),
+      omegaF: $("dOmegaF"),
+      speed: $("dSpeed"),
     };
 
     const t0 = performance.now();
@@ -493,9 +506,6 @@
     const UI_SMOOTH   = 0.10;
     const LOCK_SMOOTH = 0.14;
 
-    // ✅ CONTROL SIGNAL: publish raw energy (no UI smoothing) for physics/thrust
-    const PUBLISH_RAW_ENERGY = true;
-
     const GRACE_SEC = 0.75;
     const GRACE_SPEED_MIN = 0.12;
 
@@ -528,15 +538,15 @@
     // =========================================================================
     // DISRUPTOR METER v1 — SHAKE (high-frequency / high-amplitude impulse)
     // =========================================================================
-    const SHAKE_BASELINE_HZ   = 0.65;  // slow baseline tracking (gravity + slow drift)
-    const SHAKE_DEADZONE     = 0.85;  // m/s^2 (ignore tiny bumps)
-    const SHAKE_GAIN         = 3.20;  // how fast shake01 fills
-    const SHAKE_DECAY        = 2.10;  // how fast shake01 decays per second
-    const SHAKE_HIT_THRESH   = 0.85;  // crossing this emits shakeHit
-    const SHAKE_ARM_THRESH   = 0.65;  // must be above this to be "armed"
-    const SHAKE_COOLDOWN_SEC = 0.55;  // min time between shakeHit events
-    const SHAKE_CADENCE_SEC  = 0.28;  // require two spikes within this window to count as a "real shake"
-    const SHAKE_SPIKE_GATE   = 2.2;   // m/s^2 spike that counts as a "spike" for cadence
+    const SHAKE_BASELINE_HZ   = 0.65;
+    const SHAKE_DEADZONE     = 0.85;
+    const SHAKE_GAIN         = 3.20;
+    const SHAKE_DECAY        = 2.10;
+    const SHAKE_HIT_THRESH   = 0.85;
+    const SHAKE_ARM_THRESH   = 0.65;
+    const SHAKE_COOLDOWN_SEC = 0.55;
+    const SHAKE_CADENCE_SEC  = 0.28;
+    const SHAKE_SPIKE_GATE   = 2.2;
 
     // =========================================================================
     // AUDIO MAPPING — gentler curve, audible by ~10% energy
@@ -745,7 +755,7 @@
     }
 
     // =========================================================================
-    // ✅ Meter continuity
+    // ✅ Meter continuity (prevents shared “dump to zero” on transient gaps)
     // =========================================================================
     const METER_HOLD_SEC = 0.55;
     const METER_FADE_HZ  = 3.0;
@@ -774,13 +784,13 @@
     let graceLeft = 0;
     let recenterBadTime = 0;
 
-    let energy = 0;    // raw integrator (can exceed 1.0)
-    let energyUI = 0;  // smoothed UI
+    let energy = 0;    // can exceed 1.0 now
+    let energyUI = 0;  // can exceed 1.0 now
 
     // One Euro filter state for speed
     const speedFilter = { xPrev: null, xHat: null, dxHat: null };
 
-    // continuity memory for meters
+    // ✅ continuity memory for meters (including speed)
     let meterHoldLeft = 0;
     let lastGrooveUI = 0;
     let lastOrbitUI  = 0;
@@ -983,16 +993,10 @@
 
         const held = meterHoldOrFade(dt, null);
 
-        // ✅ publish RAW energy for control + UI energy separately
-        const eRaw = energy;
-        const eUI  = energyUI;
-
         const payload = {
           room,
           t: performance.now(),
-          energy01: (PUBLISH_RAW_ENERGY ? eRaw : eUI),
-          energyUI01: eUI,
-
+          energy01: energyUI,
           groove01: held.grooveOut,
           orbit01: held.orbitOut,
           smooth01: held.smoothOut,
@@ -1047,6 +1051,11 @@
       const speedNorm = Math.max(0, mFilt / SPEED_NORM);
       const speedScore = speedCurve(Math.pow(speedNorm, SPEED_LOW_EXP));
 
+      // ✅ NEW: show raw vs filtered omega + speed score (no devtools)
+      d.omega.textContent  = m.toFixed(2);
+      d.omegaF.textContent = mFilt.toFixed(2);
+      d.speed.textContent  = speedScore.toFixed(3);
+
       if (dt > 0) graceLeft = Math.max(0, graceLeft - dt);
 
       if (m > MIN_OMEGA) {
@@ -1087,18 +1096,13 @@
         }
 
         lastSpeedUI = speedScore;
-        const held = meterHoldOrFade(dt, speedScore);
 
-        // ✅ publish RAW energy for control + UI energy separately
-        const eRaw = energy;
-        const eUI  = energyUI;
+        const held = meterHoldOrFade(dt, speedScore);
 
         const payload = {
           room,
           t: performance.now(),
-          energy01: (PUBLISH_RAW_ENERGY ? eRaw : eUI),
-          energyUI01: eUI,
-
+          energy01: energyUI,
           groove01: held.grooveOut,
           orbit01: held.orbitOut,
           smooth01: held.smoothOut,
@@ -1187,6 +1191,7 @@
         const gain = effectivelyLocked ? ENERGY_GAIN_LOCKED : ENERGY_GAIN_FREE;
 
         const smoothKill = (smoothScore < SMOOTH_KILL_THRESH);
+
         const earn = smoothKill ? 0 : (gain * earnBase);
 
         let decay = ENERGY_DECAY;
@@ -1199,7 +1204,6 @@
 
         if (smoothKill) {
           decay *= SMOOTH_KILL_DECAY_MULT;
-
           if (SMOOTH_KILL_UNLOCK) {
             lock = false;
             graceLeft = 0;
@@ -1212,16 +1216,10 @@
 
       const lockedNow = !!(lock || inGrace);
 
-      // ✅ publish RAW energy for control + UI energy separately
-      const eRaw = energy;
-      const eUI  = energyUI;
-
       const payload = {
         room,
         t: performance.now(),
-        energy01: (PUBLISH_RAW_ENERGY ? eRaw : eUI),
-        energyUI01: eUI,
-
+        energy01: energyUI,
         groove01: lockStrength,
         orbit01: orbitShown,
         smooth01: smoothScore,
@@ -1332,6 +1330,11 @@
         d.motion.textContent = "0";
         d.dt.textContent = "0";
         d.rr.textContent = "none";
+
+        // reset debug row
+        d.omega.textContent = "0";
+        d.omegaF.textContent = "0";
+        d.speed.textContent = "0";
 
         ox=oy=oz=0;
 
