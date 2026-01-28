@@ -39,7 +39,6 @@
       overflow-x:hidden;
     }
 
-    /* subtle vignette overlay so the orange still feels "ripper-y" */
     body::before{
       content:"";
       position:fixed;
@@ -53,7 +52,6 @@
     }
 
     .wrap{max-width:980px;margin:24px auto;padding:0 16px; position:relative; z-index:1;}
-    h1{margin:0 0 14px 0; font-size:18px; letter-spacing:.6px; text-align:center;}
 
     .grid{
       display:grid;
@@ -97,11 +95,9 @@
     .bad{color:var(--bad); font-weight:900;}
     .ok{color:#7dffab; font-weight:900;}
 
-    /* overcharge styling */
     .over{ color: var(--over) !important; }
     .fill.over{ background: var(--over) !important; }
 
-    /* big charge display (glow ramps with energy) */
     .big{
       font-size:58px;
       font-weight:1000;
@@ -150,7 +146,6 @@
       transition: width 80ms linear;
     }
 
-    /* ===== one-line last-message ticker (BLACK BOX, INDIGO DATA TEXT) ===== */
     .logLine{
       margin-top:10px;
       padding:8px 10px;
@@ -182,9 +177,6 @@
 
     .mono{white-space:pre-wrap; word-break:break-word; font-size:12px; opacity:.9; margin-top:10px; color: rgba(50,255,117,.90);}
 
-    /* ============================================================
-       AUDIO BUTTON PROMPT (red by default, turns green when enabled)
-       ============================================================ */
     #audioBtn{
       border-color: rgba(255,90,90,.55);
       color: rgba(255,90,90,.95);
@@ -208,7 +200,6 @@
       box-shadow: 0 0 18px rgba(50,255,117,.14);
     }
 
-    /* ✅ Reconnect + New room dimmer */
     #connect,
     #newRoom{
       opacity: 0.72;
@@ -219,9 +210,6 @@
       opacity: 0.92;
     }
 
-    /* ============================================================
-       DISRUPTOR: SHAKE METER (short bar + round lamp)
-       ============================================================ */
     .groupGap{ height:10px; }
 
     .meterRow{
@@ -281,18 +269,38 @@
     }
     .orb{
       position:absolute;
-      width:100px;
+      width:100px;             /* ✅ physics orb is 100px */
       height:100px;
       border-radius:999px;
       border:2px solid var(--g);
       background: rgba(50,255,117,.06);
       left:50%;
       transform: translateX(-50%);
-      /* ✅ resting on ground line */
-      bottom: calc(200px + 2px);
       box-shadow:
         0 0 20px rgba(50,255,117,.12),
         inset 0 0 0 1px rgba(0,0,0,.30);
+      will-change: transform;
+    }
+
+    /* ✅ slider area under the stage */
+    .physControls{
+      margin-top:12px;
+      padding-top:12px;
+      border-top:1px solid rgba(50,255,117,.14);
+    }
+    .sliderRow{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:12px;
+      font-size:12px;
+      opacity:.92;
+    }
+    .sliderRow strong{ font-weight: 1000; opacity:1; }
+    input[type="range"]{
+      width:100%;
+      margin-top:8px;
+      accent-color: var(--g);
     }
 
     /* ============================================================
@@ -397,8 +405,8 @@
     <div class="grid">
       <!-- LEFT: meters window -->
       <div class="card cardTall">
-    <div class="physHeader">Orb Relay/Receiver</div>
-        <!-- Buttons row -->
+        <div class="physHeader">Orb Relay/Receiver</div>
+
         <div class="row">
           <button id="pairBtn">Pair Phone</button>
           <button id="audioBtn">Audio: Off</button>
@@ -410,7 +418,6 @@
           <div>Status: <span id="status" class="dim">Auto-connecting…</span></div>
         </div>
 
-        <!-- one-line ticker -->
         <div class="logLine" aria-label="Last message">
           <span class="muted">Last message:</span>
           <span id="last" class="lastText">(none yet)</span>
@@ -437,7 +444,6 @@
 
           <div class="groupGap"></div>
 
-          <!-- DISRUPTOR: SHAKE -->
           <div class="barLabel"><div>Shake</div><span id="vShake">0</span></div>
           <div class="meterRow">
             <div class="bar barShort"><div id="bShake" class="fill"></div></div>
@@ -451,9 +457,22 @@
       <!-- RIGHT: physics window -->
       <div class="card cardTall">
         <div class="physHeader">Game Physics Tester</div>
+
         <div id="physStage" class="physStage" aria-label="Physics test stage">
           <div class="groundLine" aria-label="Ground"></div>
-          <div class="orb" aria-label="Orb"></div>
+          <div id="orb" class="orb" aria-label="Orb"></div>
+        </div>
+
+        <!-- ✅ Gravity slider under the ground plane (under the stage) -->
+        <div class="physControls">
+          <div class="sliderRow">
+            <span>Gravity</span>
+            <strong><span id="gVal">1.00</span>x</strong>
+          </div>
+          <input id="gSlider" type="range" min="0" max="3" value="1" step="0.01" />
+          <div class="mono dim" style="margin-top:8px;">
+            Honest model: hover happens when <span style="opacity:1;">thrust(energy)</span> ≈ <span style="opacity:1;">gravity</span>.
+          </div>
         </div>
       </div>
     </div>
@@ -510,8 +529,13 @@
       bShake: $("bShake"),
 
       shakeLamp: $("shakeLamp"),
-
       fatal: $("fatal"),
+
+      // physics
+      orb: $("orb"),
+      physStage: $("physStage"),
+      gSlider: $("gSlider"),
+      gVal: $("gVal"),
 
       // modal
       pairModal: $("pairModal"),
@@ -756,6 +780,129 @@
     let currentRoomChannel = normalizeRoom(readUrlRoomOrNull() || "orb:test");
 
     // =========================================================================
+    // ✅ PHYSICS: Option 1 (honest)
+    // - energy => upward thrust (acceleration)
+    // - gravity slider => downward acceleration
+    // - bounce off ceiling; clamp at ground
+    // =========================================================================
+    const PHYS = {
+      // geometry
+      groundFromBottomPx: 200, // matches CSS bottom:200px line
+      groundLinePx: 2,
+      orbRadiusPx: 50,         // 100px orb
+
+      // dynamics
+      gBase: 2200,             // px/s^2 at gravity=1.00 (tweak if you want)
+      thrustMax: 2200,         // px/s^2 at energy=1.00 (same as gBase => hover ~100% at g=1)
+      // If you want hover ~50% at g=1, set thrustMax ~ 2*gBase (we're NOT doing that here).
+
+      linearDrag: 2.8,         // 1/s
+      bounce: 0.35,            // coefficient for ceiling bounce
+      maxUpSpeed: 2200,
+      maxDownSpeed: 2800,
+    };
+
+    let physState = {
+      y: 0,        // orb center Y in stage space
+      v: 0,        // px/s (positive down)
+      lastTs: null,
+      gravityMul: 1.0,
+      energy01: 0,
+    };
+
+    function clamp(v, lo, hi){ return Math.max(lo, Math.min(hi, v)); }
+
+    function readStageMetrics(){
+      const rect = els.physStage.getBoundingClientRect();
+      const stageH = rect.height;
+
+      const groundY = stageH - PHYS.groundFromBottomPx - PHYS.groundLinePx; // y of the ground line (top edge)
+      const yGroundCenter = groundY - PHYS.orbRadiusPx;                      // center sits radius above line
+
+      const yCeilCenter = PHYS.orbRadiusPx;                                  // center can't go above radius
+      return { stageH, yGroundCenter, yCeilCenter };
+    }
+
+    function resetOrbToGround(){
+      const { yGroundCenter } = readStageMetrics();
+      physState.y = yGroundCenter;
+      physState.v = 0;
+      applyOrbTransform();
+    }
+
+    function applyOrbTransform(){
+      // orb element uses translateX(-50%) already in CSS; we add translateY
+      const { yCeilCenter } = readStageMetrics();
+      // Convert centerY to top-left translate:
+      const top = physState.y - PHYS.orbRadiusPx;
+      // Keep X centering intact:
+      els.orb.style.transform = `translate(-50%, ${top.toFixed(2)}px)`;
+    }
+
+    // gravity slider UI
+    function setGravityMul(m){
+      physState.gravityMul = clamp(Number(m) || 0, 0, 3);
+      els.gVal.textContent = physState.gravityMul.toFixed(2);
+    }
+    setGravityMul(els.gSlider.value);
+    els.gSlider.addEventListener("input", (e) => setGravityMul(e.target.value));
+
+    // start with orb resting on ground
+    // (need layout ready)
+    requestAnimationFrame(resetOrbToGround);
+    window.addEventListener("resize", () => {
+      // keep it sane on resize (snap to ground if below)
+      resetOrbToGround();
+    });
+
+    function energyToThrustAccel(e01){
+      // Honest + simple: linear mapping
+      // thrustAccel is UP, so we return positive magnitude; we'll subtract in update.
+      return PHYS.thrustMax * clamp01(e01);
+    }
+
+    function physicsStep(ts){
+      if (physState.lastTs == null) physState.lastTs = ts;
+      let dt = (ts - physState.lastTs) / 1000;
+      physState.lastTs = ts;
+
+      // clamp dt to avoid huge jumps if tab was backgrounded
+      dt = clamp(dt, 0, 0.05);
+
+      const { yGroundCenter, yCeilCenter } = readStageMetrics();
+
+      const g = PHYS.gBase * physState.gravityMul;     // down accel
+      const thrust = energyToThrustAccel(physState.energy01); // up accel
+
+      // a = down - up
+      let a = g - thrust;
+
+      // simple linear drag (acts opposite velocity)
+      a += (-PHYS.linearDrag * physState.v);
+
+      physState.v += a * dt;
+      physState.v = clamp(physState.v, -PHYS.maxUpSpeed, PHYS.maxDownSpeed);
+
+      physState.y += physState.v * dt;
+
+      // ground collision (stick)
+      if (physState.y > yGroundCenter) {
+        physState.y = yGroundCenter;
+        if (physState.v > 0) physState.v = 0;
+      }
+
+      // ceiling collision (bounce)
+      if (physState.y < yCeilCenter) {
+        physState.y = yCeilCenter;
+        if (physState.v < 0) physState.v = -physState.v * PHYS.bounce;
+      }
+
+      applyOrbTransform();
+      requestAnimationFrame(physicsStep);
+    }
+    requestAnimationFrame(physicsStep);
+
+    // =========================================================================
     // ABLY RECEIVER (AUTO-CONNECT)
     // =========================================================================
     let realtime = null;
@@ -803,6 +950,10 @@
       const speed  = pick01Bounded("speed01",  "speed");
       const shake  = pick01Bounded("shake01",  "shake");
       const locked = !!d.locked;
+
+      // ✅ feed physics
+      physState.energy01 = Math.max(0, Number(energy) || 0); // allow >1 to be "more thrust" if you want
+      // If you want energy to saturate thrust at 1.0, swap to: clamp01(energy)
 
       setBgFromEnergy(energy);
 
@@ -887,13 +1038,11 @@
       channel.subscribe("orb", (msg) => {
         const d = (msg && msg.data) ? msg.data : {};
 
-        // one-line stream
         let s = "";
         try { s = JSON.stringify(d); } catch(_) { s = String(d); }
         if (s.length > 240) s = s.slice(0, 240) + " …";
         els.last.textContent = s;
 
-        // ✅ if the pair modal is open, close on first message from phone
         if (els.pairModal.classList.contains("on")) closePairModal();
 
         scheduleUIUpdate(d);
@@ -905,7 +1054,6 @@
     els.newRoom.addEventListener("click", async () => {
       currentRoomChannel = "orb:" + randCode(6);
       await connect({ auto:false });
-      // keep the modal in sync if it's open
       if (els.pairModal.classList.contains("on")) renderQR(currentRoomChannel);
     });
 
