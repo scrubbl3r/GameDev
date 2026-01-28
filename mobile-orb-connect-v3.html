@@ -212,7 +212,6 @@
           <span class="k">Last rr:</span> <span id="dRR" class="v dim">none</span>
         </div>
 
-        <!-- speed seed rebuild debug: raw -> cap -> EMA -> mapped -->
         <div class="row" style="margin-top:6px;">
           <span class="k">wRaw:</span> <span id="dOmega" class="v dim">0</span>
           <span class="k">wCap:</span> <span id="dOmegaC" class="v dim">0</span>
@@ -489,16 +488,15 @@
     const NORM_ALPHA = 0.10;
 
     // =========================================================================
-    // ✅ SPEED v0 (FORCE) — ground-up seed rebuild
-    // raw(rad/s) → cap(rad/s) → deadzone(rad/s) → ONE EMA → mapping → atk/rel
+    // ✅ SPEED v0 — degrees/second end-to-end (rotationRate is deg/s)
     // =========================================================================
-    const SPEED_CAP_RADS      = 6.5;    // rad/s (telemetry: cap)
-    const SPEED_DEAD_DPS      = 8.0;    // deg/s deadzone (converted to rad/s internally)
-    const SPEED_EMA_CUTOFF_HZ = 6.0;    // EMA smoothing cutoff
-    const SPEED_NORM_DPS      = 140.0;  // deg/s norm (converted to rad/s internally)
-    const SPEED_MAP_POW       = 1.10;   // 1.0 = linear; >1 suppresses low
-    const SPEED_ATTACK_HZ     = 7.0;    // rise smoothing
-    const SPEED_RELEASE_HZ    = 12.0;   // fall smoothing (faster = drops quicker)
+    const SPEED_DEAD_DPS       = 8.0;
+    const SPEED_CAP_DPS        = 360.0;
+    const SPEED_EMA_CUTOFF_HZ  = 6.0;
+    const SPEED_NORM_DPS       = 220.0;
+    const SPEED_MAP_POW        = 1.10;
+    const SPEED_ATTACK_HZ      = 7.0;
+    const SPEED_RELEASE_HZ     = 12.0;
 
     // =========================================================================
     // SSOT MOBILE 2.0 — ENERGY MODEL (still present, but speed-decoupled below)
@@ -558,7 +556,6 @@
       return 1 / (1 + tau / Math.max(1e-4, dt));
     }
 
-    // --- Robust statistics helpers for Smooth meter ---
     function median(arr) {
       if (!arr.length) return 0;
       const a = arr.slice().sort((x,y) => x - y);
@@ -744,9 +741,9 @@
     let energy = 0;
     let energyUI = 0;
 
-    // ✅ SPEED v0 state
-    let mSpeedEMA = 0;    // wFilt (rad/s) after deadzone
-    let speedOut  = 0;    // final speed meter output (0..1)
+    // ✅ SPEED v0 state (deg/s)
+    let mSpeedEMA = 0;
+    let speedOut  = 0;
 
     // continuity memory for meters (NOT speed)
     let meterHoldLeft = 0;
@@ -760,6 +757,9 @@
     let shakeCooldownLeft = 0;
     let lastSpikeTime = -1e9;
     let hadRecentSpike = false;
+
+    // (ONLY ONE declaration now)
+    let motionCount = 0;
 
     let audioCtx = null, osc = null, gainNode = null;
 
@@ -847,7 +847,6 @@
       dtBuf.splice(0, Math.max(0, dtBuf.length - keep));
     }
 
-    // ✅ continuity ONLY for groove/orbit/smooth (speed is handled by Speed v0 itself)
     function meterHoldOrFade(dt) {
       if (dt > 0) meterHoldLeft = Math.max(0, meterHoldLeft - dt);
 
@@ -866,24 +865,20 @@
       return { grooveOut, orbitOut, smoothOut };
     }
 
-    // =========================================================================
-    // ✅ SPEED v0 core (telemetry fields + unit-consistent)
-    // rotationRate is rad/s → keep everything rad/s internally.
-    // =========================================================================
-    function updateSpeedV0(wRaw, dt) {
+    function updateSpeedV0(wRawDps, dt) {
       const dtSafe = Math.max(1e-3, dt || 1/60);
 
-      const cap = SPEED_CAP_RADS;
-      const wCap = Math.min(Math.max(0, Number(wRaw) || 0), cap);
+      const wRaw = Math.max(0, wRawDps || 0);
+      const cap  = SPEED_CAP_DPS;
+      const wCap = Math.min(wRaw, cap);
 
-      const deadRad = (SPEED_DEAD_DPS * Math.PI) / 180;
-      const wDz = Math.max(0, wCap - deadRad);
+      const wDz = Math.max(0, wCap - SPEED_DEAD_DPS);
 
       const aE = alphaFromCutoff(dtSafe, SPEED_EMA_CUTOFF_HZ);
       mSpeedEMA = (mSpeedEMA === 0) ? wDz : ((1 - aE) * mSpeedEMA + aE * wDz);
+      const wFilt = mSpeedEMA;
 
-      const normRad = (SPEED_NORM_DPS * Math.PI) / 180;
-      const n = clamp01(mSpeedEMA / normRad);
+      const n = clamp01(wFilt / SPEED_NORM_DPS);
       const target = Math.pow(n, SPEED_MAP_POW);
 
       const aAtk = alphaFromCutoff(dtSafe, SPEED_ATTACK_HZ);
@@ -891,16 +886,8 @@
       const a = (target >= speedOut) ? aAtk : aRel;
       speedOut = (1 - a) * speedOut + a * target;
 
-      return {
-        cap,             // rad/s
-        wRaw: wRaw || 0, // rad/s
-        wCap,            // rad/s
-        wFilt: mSpeedEMA,// rad/s
-        speed: speedOut  // 0..1
-      };
+      return { cap, dt: dtSafe, wRaw, wCap, wFilt, speed: speedOut };
     }
-
-    let motionCount = 0;
 
     function updateShake(e, t, dt){
       const acc = e.accelerationIncludingGravity || e.acceleration;
@@ -960,10 +947,8 @@
       if (dt > 0) dtBuf.push(dt);
 
       const sh = updateShake(e, t, dt);
-
       const rr = e.rotationRate;
 
-      // If rotationRate missing: decay speed to 0 via release path
       if (!rr) {
         d.rr.textContent = "none";
 
@@ -972,31 +957,26 @@
 
         const sv = updateSpeedV0(0, dtForFilter);
 
-        // diagnostics (rad/s)
-        d.omega.textContent  = sv.wRaw.toFixed(2);
-        d.omegaC.textContent = sv.wCap.toFixed(2);
-        d.omegaF.textContent = sv.wFilt.toFixed(2);
+        d.omega.textContent  = sv.wRaw.toFixed(1);
+        d.omegaC.textContent = sv.wCap.toFixed(1);
+        d.omegaF.textContent = sv.wFilt.toFixed(1);
         d.speed.textContent  = sv.speed.toFixed(3);
 
         if (dt > 0) {
-          const ddec = ENERGY_DECAY;
-          energy = Math.max(0, energy - ddec * dt);
+          energy = Math.max(0, energy - ENERGY_DECAY * dt);
           energyUI = lerp(energyUI, energy, UI_SMOOTH);
         }
 
         const held = meterHoldOrFade(dt);
 
-        const payload = {
+        publishOrb({
           room,
           t: performance.now(),
-          dt: dtForFilter,
-
-          // ✅ telemetry
+          dt: sv.dt,
           wRaw: sv.wRaw,
           wCap: sv.wCap,
           wFilt: sv.wFilt,
           cap: sv.cap,
-
           energy01: energyUI,
           groove01: held.grooveOut,
           orbit01: held.orbitOut,
@@ -1006,8 +986,7 @@
           shakeHit: sh.shakeHit,
           locked: false,
           hz: 0
-        };
-        publishOrb(payload, dt);
+        }, dt);
 
         updateUI({
           groove: held.grooveOut,
@@ -1028,7 +1007,6 @@
 
       const prevOx=ox, prevOy=oy, prevOz=oz;
 
-      // stability-path omega smoothing for groove/smooth/orbit
       ox = lerp(ox, x, OMEGA_LPF);
       oy = lerp(oy, y, OMEGA_LPF);
       oz = lerp(oz, z, OMEGA_LPF);
@@ -1037,20 +1015,16 @@
       const dtMean = Math.max(1e-3, computeAvg(dtBuf.slice(-50)));
       const dtForFilter = (dt > 0) ? dt : dtMean;
 
-      // ✅ SPEED v0 uses RAW rotationRate magnitude (rad/s)
       const wRaw = mag3(x, y, z);
       const sv = updateSpeedV0(wRaw, dtForFilter);
 
-      // diagnostics (rad/s)
-      d.omega.textContent  = sv.wRaw.toFixed(2);
-      d.omegaC.textContent = sv.wCap.toFixed(2);
-      d.omegaF.textContent = sv.wFilt.toFixed(2);
+      d.omega.textContent  = sv.wRaw.toFixed(1);
+      d.omegaC.textContent = sv.wCap.toFixed(1);
+      d.omegaF.textContent = sv.wFilt.toFixed(1);
       d.speed.textContent  = sv.speed.toFixed(3);
 
-      // lock/grace timers (kept, but speed does NOT gate anything)
       if (dt > 0) graceLeft = Math.max(0, graceLeft - dt);
 
-      // history accumulation uses stability-path m (for groove detector)
       if (mStability > MIN_OMEGA) {
         omegaMag.push(mStability);
 
@@ -1083,24 +1057,20 @@
 
       if (omegaNorm.length < Math.min(MIN_WINDOW_SAMPLES, nTarget)) {
         if (dt > 0) {
-          const ddec = ENERGY_DECAY;
-          energy = Math.max(0, energy - ddec * dt);
+          energy = Math.max(0, energy - ENERGY_DECAY * dt);
           energyUI = lerp(energyUI, energy, UI_SMOOTH);
         }
 
         const held = meterHoldOrFade(dt);
 
-        const payload = {
+        publishOrb({
           room,
           t: performance.now(),
-          dt: dtForFilter,
-
-          // ✅ telemetry
+          dt: sv.dt,
           wRaw: sv.wRaw,
           wCap: sv.wCap,
           wFilt: sv.wFilt,
           cap: sv.cap,
-
           energy01: energyUI,
           groove01: held.grooveOut,
           orbit01: held.orbitOut,
@@ -1110,8 +1080,7 @@
           shakeHit: sh.shakeHit,
           locked: false,
           hz: 0
-        };
-        publishOrb(payload, dt);
+        }, dt);
 
         updateUI({
           groove: held.grooveOut,
@@ -1136,35 +1105,20 @@
       const orbitBonus = orbitBonusFromDirCov(dirCov);
       const orbitShown = (orbitBonus - ORBIT_FLOOR) / (1 - ORBIT_FLOOR);
 
-      // meter continuity for groove/orbit/smooth only
       meterHoldLeft = METER_HOLD_SEC;
       lastGrooveUI = lockStrength;
       lastOrbitUI  = orbitShown;
       lastSmoothUI = smoothScore;
 
-      // ✅ lock logic NO LONGER uses speed
       if (!lock) {
-        if (lockStrength > LOCK_ON) {
-          lock = true;
-          graceLeft = 0;
-        }
+        if (lockStrength > LOCK_ON) { lock = true; graceLeft = 0; }
       } else {
-        const shouldDrop = (lockStrength < LOCK_OFF);
-        if (shouldDrop) {
-          lock = false;
-          graceLeft = GRACE_SEC;
-        }
+        if (lockStrength < LOCK_OFF) { lock = false; graceLeft = GRACE_SEC; }
       }
 
       const inGrace = (!lock && graceLeft > 0);
-      if (inGrace) {
-        if (lockStrength > LOCK_ON) {
-          lock = true;
-          graceLeft = 0;
-        }
-      }
+      if (inGrace && lockStrength > LOCK_ON) { lock = true; graceLeft = 0; }
 
-      // ✅ recenter kept, but decoupled from speed (uses groove only)
       if (dt > 0) {
         const badGroove = lockStrength <= RECENTER_GROOVE_MAX;
         const notLockedNow = !lock;
@@ -1177,7 +1131,6 @@
         }
       }
 
-      // ✅ energy update: decoupled from speed (speed is NOT a term)
       if (dt > 0) {
         const grooveTerm = Math.pow(clamp01(lockStrength), GROOVE_EXP);
         const smoothTerm = Math.pow(clamp01(smoothScore), SMOOTH_EXP);
@@ -1197,10 +1150,7 @@
 
         if (smoothKill) {
           decay *= SMOOTH_KILL_DECAY_MULT;
-          if (SMOOTH_KILL_UNLOCK) {
-            lock = false;
-            graceLeft = 0;
-          }
+          if (SMOOTH_KILL_UNLOCK) { lock = false; graceLeft = 0; }
         }
 
         energy = Math.max(0, energy + (earn - decay) * dt);
@@ -1209,17 +1159,14 @@
 
       const lockedNow = !!(lock || inGrace);
 
-      const payload = {
+      publishOrb({
         room,
         t: performance.now(),
-        dt: dtForFilter,
-
-        // ✅ telemetry (the set you requested)
+        dt: sv.dt,
         wRaw: sv.wRaw,
         wCap: sv.wCap,
         wFilt: sv.wFilt,
         cap: sv.cap,
-
         energy01: energyUI,
         groove01: lockStrength,
         orbit01: orbitShown,
@@ -1229,8 +1176,7 @@
         shakeHit: sh.shakeHit,
         locked: lockedNow,
         hz: grooveHz
-      };
-      publishOrb(payload, dt);
+      }, dt);
 
       updateUI({
         groove: lockStrength,
@@ -1356,7 +1302,6 @@
         energy = 0;
         energyUI = 0;
 
-        // ✅ reset speed v0
         mSpeedEMA = 0;
         speedOut  = 0;
 
