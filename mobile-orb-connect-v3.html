@@ -493,6 +493,9 @@
     const UI_SMOOTH   = 0.10;
     const LOCK_SMOOTH = 0.14;
 
+    // ✅ CONTROL SIGNAL: publish raw energy (no UI smoothing) for physics/thrust
+    const PUBLISH_RAW_ENERGY = true;
+
     const GRACE_SEC = 0.75;
     const GRACE_SPEED_MIN = 0.12;
 
@@ -524,9 +527,6 @@
 
     // =========================================================================
     // DISRUPTOR METER v1 — SHAKE (high-frequency / high-amplitude impulse)
-    // - Computed from accelerationIncludingGravity magnitude, high-passed via slow baseline.
-    // - Integrates into shake01 (0..1), fast decay.
-    // - Emits shakeHit (one-shot) when crossing threshold (cooldown).
     // =========================================================================
     const SHAKE_BASELINE_HZ   = 0.65;  // slow baseline tracking (gravity + slow drift)
     const SHAKE_DEADZONE     = 0.85;  // m/s^2 (ignore tiny bumps)
@@ -745,10 +745,10 @@
     }
 
     // =========================================================================
-    // ✅ Meter continuity (prevents shared “dump to zero” on transient gaps)
+    // ✅ Meter continuity
     // =========================================================================
-    const METER_HOLD_SEC = 0.55; // how long to “hold last good” after analysis drops out
-    const METER_FADE_HZ  = 3.0;  // how quickly to fade toward 0 once hold expires
+    const METER_HOLD_SEC = 0.55;
+    const METER_FADE_HZ  = 3.0;
 
     // =========================================================================
     // State
@@ -774,13 +774,13 @@
     let graceLeft = 0;
     let recenterBadTime = 0;
 
-    let energy = 0;    // can exceed 1.0 now
-    let energyUI = 0;  // can exceed 1.0 now
+    let energy = 0;    // raw integrator (can exceed 1.0)
+    let energyUI = 0;  // smoothed UI
 
     // One Euro filter state for speed
     const speedFilter = { xPrev: null, xHat: null, dxHat: null };
 
-    // ✅ continuity memory for meters (including speed)
+    // continuity memory for meters
     let meterHoldLeft = 0;
     let lastGrooveUI = 0;
     let lastOrbitUI  = 0;
@@ -789,10 +789,10 @@
 
     // SHAKE state
     let shake01 = 0;
-    let accelBaseMag = 9.81;      // slow baseline of |a|
+    let accelBaseMag = 9.81;
     let shakeCooldownLeft = 0;
-    let lastSpikeTime = -1e9;     // for cadence requirement
-    let hadRecentSpike = false;   // for cadence requirement
+    let lastSpikeTime = -1e9;
+    let hadRecentSpike = false;
 
     let audioCtx = null, osc = null, gainNode = null;
 
@@ -813,7 +813,6 @@
     }
 
     function energyToGainSafe(eUI) {
-      // Audio mapping stays safely shaped into 0..1
       return energyToGain(clamp01(eUI));
     }
 
@@ -838,16 +837,16 @@
     }
 
     function updateUI(vals) {
-      const toPct01 = (x) => Math.round(clamp01(x) * 100);      // 0..100
-      const toPctRaw = (x) => Math.round(Math.max(0, x) * 100); // 0..∞
+      const toPct01 = (x) => Math.round(clamp01(x) * 100);
+      const toPctRaw = (x) => Math.round(Math.max(0, x) * 100);
 
       const grooveP = toPct01(vals.groove);
       const orbitP  = toPct01(vals.orbit);
       const smoothP = toPct01(vals.smooth);
       const speedP  = toPct01(vals.speed);
 
-      const energyPText = toPctRaw(vals.energy);  // can exceed 100
-      const energyPBar  = toPct01(vals.energy);   // bar stays 0..100
+      const energyPText = toPctRaw(vals.energy);
+      const energyPBar  = toPct01(vals.energy);
 
       grooveEl.textContent = grooveP;
       orbitEl.textContent  = orbitP;
@@ -869,7 +868,7 @@
       energyEl.classList.toggle("over", over);
       energyBar.classList.toggle("over", over);
 
-      setBgFromEnergy(clamp01(vals.energy)); // background saturates at 100%
+      setBgFromEnergy(clamp01(vals.energy));
     }
 
     function flushHistorySoft() {
@@ -909,10 +908,8 @@
     let motionCount = 0;
 
     function updateShake(e, t, dt){
-      // Prefer accelerationIncludingGravity (widest support), fallback to acceleration.
       const acc = e.accelerationIncludingGravity || e.acceleration;
       if (!acc) {
-        // No accel available: just decay.
         if (dt > 0) shake01 = Math.max(0, shake01 - SHAKE_DECAY * dt);
         if (dt > 0) shakeCooldownLeft = Math.max(0, shakeCooldownLeft - dt);
         return { shake01, shakeHit:false, spike:0, amag:0 };
@@ -925,16 +922,13 @@
 
       const dtSafe = Math.max(1e-3, dt || 1/60);
 
-      // slow baseline of |a| (tracks gravity + slow drift)
       const aBase = alphaFromCutoff(dtSafe, SHAKE_BASELINE_HZ);
       accelBaseMag = (isFinite(accelBaseMag) ? accelBaseMag : amag);
       accelBaseMag = (1 - aBase) * accelBaseMag + aBase * amag;
 
-      // high-passed "spike" energy
       const rawSpike = Math.abs(amag - accelBaseMag);
       const spike = Math.max(0, rawSpike - SHAKE_DEADZONE);
 
-      // cadence: require 2 spikes within window to arm "hit" (reduces single-bump triggers)
       if (spike > SHAKE_SPIKE_GATE) {
         if ((t - lastSpikeTime) <= SHAKE_CADENCE_SEC) {
           hadRecentSpike = true;
@@ -945,20 +939,16 @@
         hadRecentSpike = false;
       }
 
-      // integrate meter with fast decay
       shake01 = clamp01(shake01 + spike * SHAKE_GAIN * dtSafe - SHAKE_DECAY * dtSafe);
 
-      // cooldown
       shakeCooldownLeft = Math.max(0, shakeCooldownLeft - dtSafe);
 
-      // one-shot event
       let shakeHit = false;
       const armed = (shake01 >= SHAKE_ARM_THRESH);
-      const cadenceOk = hadRecentSpike; // requires two spikes close together
+      const cadenceOk = hadRecentSpike;
       if (armed && cadenceOk && shakeCooldownLeft <= 0 && shake01 >= SHAKE_HIT_THRESH) {
         shakeHit = true;
         shakeCooldownLeft = SHAKE_COOLDOWN_SEC;
-        // drop meter a bit so repeated publishes don't re-trigger instantly
         shake01 = Math.max(0, shake01 - 0.40);
       }
 
@@ -972,36 +962,37 @@
       const dt = (lastT == null) ? 0 : (t - lastT);
       lastT = t;
 
-      // diagnostics UI
       if (dt > 0) d.dt.textContent = dt.toFixed(3);
       motionCount++;
       d.motion.textContent = String(motionCount);
 
       if (dt > 0) dtBuf.push(dt);
 
-      // --- SHAKE UPDATE (always, independent of rotationRate presence) ---
       const sh = updateShake(e, t, dt);
 
       const rr = e.rotationRate;
 
-      // ✅ IMPORTANT: don't hard-return on missing rr (that makes everything “dump”)
       if (!rr) {
         d.rr.textContent = "none";
 
-        // decay energy normally
         if (dt > 0) {
           const ddec = ENERGY_DECAY * STOP_DECAY_MULT;
           energy = Math.max(0, energy - ddec * dt);
           energyUI = lerp(energyUI, energy, UI_SMOOTH);
         }
 
-        // hold+fade all meters, and publish/update consistently
         const held = meterHoldOrFade(dt, null);
+
+        // ✅ publish RAW energy for control + UI energy separately
+        const eRaw = energy;
+        const eUI  = energyUI;
 
         const payload = {
           room,
           t: performance.now(),
-          energy01: energyUI,
+          energy01: (PUBLISH_RAW_ENERGY ? eRaw : eUI),
+          energyUI01: eUI,
+
           groove01: held.grooveOut,
           orbit01: held.orbitOut,
           smooth01: held.smoothOut,
@@ -1039,22 +1030,18 @@
       const m = mag3(ox,oy,oz);
       const dtMean = Math.max(1e-3, computeAvg(dtBuf.slice(-50)));
 
-      // --- SPEED: stabilize omega magnitude (One Euro) + FAST-RELEASE on slowdown ---
       const dtForFilter = (dt > 0) ? dt : dtMean;
 
-      // base one-euro smoothing (keeps spikes down)
       let mFilt = oneEuroStep(m, dtForFilter, speedFilter);
 
-      // FAST RELEASE: if raw drops below filtered, follow downward faster
       if (m < mFilt) {
         const aRel = alphaFromCutoff(dtForFilter, SPEED_RELEASE_CUTOFF);
         mFilt = (1 - aRel) * mFilt + aRel * m;
       }
 
-      // Near motionless: help it settle to zero instead of hovering
       if (m < (MIN_OMEGA * SPEED_STOP_SNAP)) {
         const aRel2 = alphaFromCutoff(dtForFilter, SPEED_RELEASE_CUTOFF * 1.25);
-        mFilt = (1 - aRel2) * mFilt; // decay toward 0
+        mFilt = (1 - aRel2) * mFilt;
       }
 
       const speedNorm = Math.max(0, mFilt / SPEED_NORM);
@@ -1077,7 +1064,6 @@
         const inv = 1/m;
         omegaDir.push({x:ox*inv, y:oy*inv, z:oz*inv});
 
-        // ✅ Smooth robustness: dt glitches can cause gigantic jerk spikes
         if (dt > 0) {
           const dtSafe = Math.max(dt, dtMean * 0.5, 1/120);
           jerkBuf.push(mag3(ox-prevOx, oy-prevOy, oz-prevOz) / dtSafe);
@@ -1093,8 +1079,6 @@
       const windowSec = inStableMode ? STABLE_WINDOW_SEC : HUNT_WINDOW_SEC;
       const nTarget = trimToWindow(dtMean, windowSec, omegaMag, omegaNorm, omegaDir, jerkBuf, dtBuf);
 
-      // ✅ If analysis window is too small, DO NOT dump groove/orbit/smooth to 0.
-      // Hold last-good briefly, then fade gently. Speed continues live.
       if (omegaNorm.length < Math.min(MIN_WINDOW_SAMPLES, nTarget)) {
         if (dt > 0) {
           const ddec = ENERGY_DECAY * STOP_DECAY_MULT;
@@ -1102,15 +1086,19 @@
           energyUI = lerp(energyUI, energy, UI_SMOOTH);
         }
 
-        // keep speed “owned” by the system too
         lastSpeedUI = speedScore;
-
         const held = meterHoldOrFade(dt, speedScore);
+
+        // ✅ publish RAW energy for control + UI energy separately
+        const eRaw = energy;
+        const eUI  = energyUI;
 
         const payload = {
           room,
           t: performance.now(),
-          energy01: energyUI,
+          energy01: (PUBLISH_RAW_ENERGY ? eRaw : eUI),
+          energyUI01: eUI,
+
           groove01: held.grooveOut,
           orbit01: held.orbitOut,
           smooth01: held.smoothOut,
@@ -1137,16 +1125,14 @@
       lockStrength = lerp(lockStrength, ac.peak, LOCK_SMOOTH);
       grooveHz = ac.hz;
 
-      // ✅ Smooth robustness: use MEDIAN of jerk window (ignores one-off spikes)
       const jerkWindow = jerkBuf.slice(-Math.min(jerkBuf.length, 70));
       const avgJerk = median(jerkWindow);
       const smoothScore = smoothnessFromJerk(avgJerk);
 
       const dirCov = cov3(omegaDir);
-      const orbitBonus = orbitBonusFromDirCov(dirCov);                  // ~0.25..1
-      const orbitShown = (orbitBonus - ORBIT_FLOOR) / (1 - ORBIT_FLOOR); // 0..1 for UI
+      const orbitBonus = orbitBonusFromDirCov(dirCov);
+      const orbitShown = (orbitBonus - ORBIT_FLOOR) / (1 - ORBIT_FLOOR);
 
-      // ✅ refresh “last good” meters (this is what gets held on brief gaps)
       meterHoldLeft = METER_HOLD_SEC;
       lastGrooveUI = lockStrength;
       lastOrbitUI  = orbitShown;
@@ -1188,10 +1174,6 @@
         }
       }
 
-      // =========================================================================
-      // SSOT MOBILE 2.0: independent earnBase product + OVERCHARGE (no clamp01)
-      // + ✅ SMOOTH KILL SWITCH (deal-breaker)
-      // =========================================================================
       if (dt > 0) {
         const grooveTerm = Math.pow(clamp01(lockStrength), GROOVE_EXP);
         const smoothTerm = Math.pow(clamp01(smoothScore), SMOOTH_EXP);
@@ -1204,13 +1186,9 @@
         const effectivelyLocked = lock || inGrace;
         const gain = effectivelyLocked ? ENERGY_GAIN_LOCKED : ENERGY_GAIN_FREE;
 
-        // ✅ Smooth is a deal-breaker:
         const smoothKill = (smoothScore < SMOOTH_KILL_THRESH);
-
-        // earn stops entirely when smooth is too low
         const earn = smoothKill ? 0 : (gain * earnBase);
 
-        // decay rules + kill-drain
         let decay = ENERGY_DECAY;
         if (speedScore < STOP_SPEED_THRESH) decay *= STOP_DECAY_MULT;
         if (inGrace) decay *= 0.70;
@@ -1222,24 +1200,28 @@
         if (smoothKill) {
           decay *= SMOOTH_KILL_DECAY_MULT;
 
-          // optional: shake-lock can’t “coast”
           if (SMOOTH_KILL_UNLOCK) {
             lock = false;
             graceLeft = 0;
           }
         }
 
-        // ✅ allow energy to exceed 1.0 (overcharge), but never go negative
         energy = Math.max(0, energy + (earn - decay) * dt);
         energyUI = lerp(energyUI, energy, UI_SMOOTH);
       }
 
       const lockedNow = !!(lock || inGrace);
 
+      // ✅ publish RAW energy for control + UI energy separately
+      const eRaw = energy;
+      const eUI  = energyUI;
+
       const payload = {
         room,
         t: performance.now(),
-        energy01: energyUI,
+        energy01: (PUBLISH_RAW_ENERGY ? eRaw : eUI),
+        energyUI01: eUI,
+
         groove01: lockStrength,
         orbit01: orbitShown,
         smooth01: smoothScore,
@@ -1263,7 +1245,7 @@
     }
 
     // =========================================================================
-    // iOS permission gate (MUST run as first awaited action inside click gesture)
+    // iOS permission gate
     // =========================================================================
     async function requestMotionPermissionIfNeeded() {
       const needs = (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function')
@@ -1306,7 +1288,7 @@
     }
 
     // =========================================================================
-    // Start/Stop (permission FIRST, then audio, then relay)
+    // Start/Stop
     // =========================================================================
     async function start() {
       setRun("starting…", "warn");
@@ -1372,19 +1354,16 @@
         energy = 0;
         energyUI = 0;
 
-        // reset speed filter state
         speedFilter.xPrev = null;
         speedFilter.xHat  = null;
         speedFilter.dxHat = null;
 
-        // ✅ reset meter continuity state
         meterHoldLeft = 0;
         lastGrooveUI = 0;
         lastOrbitUI  = 0;
         lastSmoothUI = 0;
         lastSpeedUI  = 0;
 
-        // reset shake state
         shake01 = 0;
         accelBaseMag = 9.81;
         shakeCooldownLeft = 0;
