@@ -89,6 +89,7 @@
       white-space:nowrap;
     }
     button:hover{border-color:rgba(50,255,117,.35)}
+    button:disabled{ opacity:.55; cursor:default; }
 
     .stat{margin-top:10px; font-size:13px; line-height:1.5;}
     .dim{opacity:.78}
@@ -386,6 +387,63 @@
       font-weight: 900;
     }
 
+    /* ============================================================
+       ✅ SPEED TELEMETRY MODAL
+       ============================================================ */
+    .clickLabel{
+      cursor:pointer;
+      user-select:none;
+      padding:2px 6px;
+      border-radius:8px;
+      border:1px solid rgba(50,255,117,.18);
+      background: rgba(0,0,0,.22);
+    }
+    .clickLabel:hover{
+      border-color: rgba(50,255,117,.35);
+      box-shadow: 0 0 18px rgba(50,255,117,.10);
+    }
+
+    .teleCard{
+      width: min(760px, 94vw);
+    }
+    .teleTop{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:10px;
+      margin-bottom:10px;
+    }
+    .teleBtns{
+      display:flex;
+      gap:10px;
+      align-items:center;
+    }
+    .teleHint{
+      font-size: 11px;
+      opacity: .78;
+      margin: 2px 0 10px;
+      line-height: 1.35;
+    }
+    .teleOut{
+      border: 1px solid rgba(50,255,117,.18);
+      border-radius: 12px;
+      background: rgba(0,0,0,.30);
+      padding: 10px;
+      height: min(520px, 62vh);
+      overflow: auto;
+      white-space: pre;
+      word-break: break-word;
+      font-size: 11px;
+      line-height: 1.35;
+      color: rgba(50,255,117,.92);
+      box-shadow: inset 0 0 0 1px rgba(0,0,0,.25);
+    }
+    .recOn{
+      border-color: rgba(255,212,0,.35) !important;
+      color: rgba(255,212,0,.95) !important;
+      text-shadow: 0 0 10px rgba(255,212,0,.18);
+    }
+
     @media (max-width: 900px){
       .grid{grid-template-columns:1fr;}
       .big{font-size:52px;}
@@ -437,7 +495,11 @@
           <div class="barLabel"><div>Smooth</div><span id="vSmooth">0</span></div>
           <div class="bar"><div id="bSmooth" class="fill"></div></div>
 
-          <div class="barLabel"><div>Speed</div><span id="vSpeed">0</span></div>
+          <!-- ✅ CLICKABLE SPEED LABEL -->
+          <div class="barLabel">
+            <div id="speedLabel" class="clickLabel" title="Open speed telemetry">Speed</div>
+            <span id="vSpeed">0</span>
+          </div>
           <div class="bar"><div id="bSpeed" class="fill"></div></div>
 
           <div class="groupGap"></div>
@@ -496,6 +558,28 @@
     </div>
   </div>
 
+  <!-- ✅ Speed telemetry modal -->
+  <div id="teleModal" class="modal" aria-hidden="true">
+    <div class="backdrop" id="teleBackdrop"></div>
+    <div class="modalCard teleCard" role="dialog" aria-label="Speed telemetry">
+      <div class="teleTop">
+        <div class="modalTitle">Speed Telemetry</div>
+        <div class="teleBtns">
+          <button id="teleRecBtn">Record</button>
+          <button class="xBtn" id="teleClose" aria-label="Close">✕</button>
+        </div>
+      </div>
+
+      <div class="teleHint">
+        Click <b>Record</b> to clear + capture a clean sample while you lock into a rhythm.
+        Click again (Stop) to end. Then copy/paste the output into chat.
+        <span class="dim">(TSV: ms, dms, speed01, energy01, groove01, orbit01, smooth01, shake01, locked, hz)</span>
+      </div>
+
+      <div id="teleOut" class="teleOut">(not recording)</div>
+    </div>
+  </div>
+
   <script>
     const $ = (id) => document.getElementById(id);
 
@@ -541,6 +625,14 @@
       qr: $("qr"),
       urlText: $("urlText"),
       copyUrl: $("copyUrl"),
+
+      // ✅ telemetry
+      speedLabel: $("speedLabel"),
+      teleModal: $("teleModal"),
+      teleBackdrop: $("teleBackdrop"),
+      teleClose: $("teleClose"),
+      teleRecBtn: $("teleRecBtn"),
+      teleOut: $("teleOut"),
     };
 
     const WORKER_BASE = "https://orb-token.mrgarthwilliams.workers.dev";
@@ -718,9 +810,6 @@
     els.pairBtn.addEventListener("click", openPairModal);
     els.pairBackdrop.addEventListener("click", closePairModal);
     els.pairClose.addEventListener("click", closePairModal);
-    window.addEventListener("keydown", (e) => {
-      if (e.key === "Escape") closePairModal();
-    });
 
     async function renderQR(roomChannel){
       els.qr.innerHTML = "";
@@ -757,6 +846,105 @@
       }catch(e){
         els.qr.textContent = "QR render error";
         console.error("QR render error:", e);
+      }
+    }
+
+    // =========================================================================
+    // ✅ SPEED TELEMETRY MODAL (record/stop/close)
+    // =========================================================================
+    let teleRecording = false;
+    let teleT0 = 0;
+    let teleLast = 0;
+    let teleLines = 0;
+
+    function openTele(){
+      els.teleModal.classList.add("on");
+      els.teleModal.setAttribute("aria-hidden","false");
+    }
+    function stopTeleRecording(){
+      teleRecording = false;
+      els.teleRecBtn.textContent = "Record";
+      els.teleRecBtn.classList.remove("recOn");
+    }
+    function closeTele(){
+      stopTeleRecording(); // ✅ close stops recording (prevents accidental long captures)
+      els.teleModal.classList.remove("on");
+      els.teleModal.setAttribute("aria-hidden","true");
+    }
+
+    function startTeleRecording(){
+      teleRecording = true;
+      teleT0 = performance.now();
+      teleLast = teleT0;
+      teleLines = 0;
+
+      els.teleOut.textContent =
+        "ms\tdms\tspeed01\tenergy01\tgroove01\torbit01\tsmooth01\tshake01\tlocked\thz\n";
+      els.teleRecBtn.textContent = "Stop";
+      els.teleRecBtn.classList.add("recOn");
+    }
+
+    function toggleTeleRecord(){
+      if (!teleRecording) startTeleRecording();
+      else stopTeleRecording();
+    }
+
+    els.speedLabel.addEventListener("click", () => openTele());
+    els.teleBackdrop.addEventListener("click", closeTele);
+    els.teleClose.addEventListener("click", closeTele);
+    els.teleRecBtn.addEventListener("click", toggleTeleRecord);
+
+    // global escape closes whichever modal is open
+    window.addEventListener("keydown", (e) => {
+      if (e.key !== "Escape") return;
+      if (els.teleModal.classList.contains("on")) closeTele();
+      else if (els.pairModal.classList.contains("on")) closePairModal();
+    });
+
+    function telePick01(d, newKey, oldKey){
+      if (d[newKey] != null) {
+        const n = Number(d[newKey]);
+        return isFinite(n) ? n : 0;
+      }
+      const n = Number(d[oldKey]);
+      if (!isFinite(n)) return 0;
+      return (n > 1.5) ? (n / 100) : n;
+    }
+
+    function teleMaybeLog(d){
+      if (!teleRecording) return;
+
+      const now = performance.now();
+      const ms  = Math.max(0, now - teleT0);
+      const dms = Math.max(0, now - teleLast);
+      teleLast = now;
+
+      const energy = telePick01(d, "energy01", "energy");
+      const groove = telePick01(d, "groove01", "groove");
+      const orbit  = telePick01(d, "orbit01",  "orbit");
+      const smooth = telePick01(d, "smooth01", "smooth");
+      const speed  = telePick01(d, "speed01",  "speed");
+      const shake  = telePick01(d, "shake01",  "shake");
+
+      const locked = !!d.locked;
+      const hz = (d.hz != null && isFinite(Number(d.hz))) ? Number(d.hz) : 0;
+
+      const line =
+        `${ms.toFixed(1)}\t${dms.toFixed(1)}\t` +
+        `${speed.toFixed(4)}\t${energy.toFixed(4)}\t${groove.toFixed(4)}\t${orbit.toFixed(4)}\t${smooth.toFixed(4)}\t${shake.toFixed(4)}\t` +
+        `${locked ? 1 : 0}\t${hz.toFixed(3)}\n`;
+
+      els.teleOut.textContent += line;
+      teleLines++;
+
+      // keep it sane (avoid million-line DOM)
+      if (teleLines % 40 === 0) {
+        els.teleOut.scrollTop = els.teleOut.scrollHeight;
+      }
+      if (els.teleOut.textContent.length > 220000) {
+        // hard cap: stop and mark truncated
+        els.teleOut.textContent += "\n(TRUNCATED: output capped)\n";
+        stopTeleRecording();
       }
     }
 
@@ -1023,6 +1211,9 @@
         els.last.textContent = s;
 
         if (els.pairModal.classList.contains("on")) closePairModal();
+
+        // ✅ record telemetry if active (using the exact receiver-visible payload)
+        teleMaybeLog(d);
 
         scheduleUIUpdate(d);
       });
