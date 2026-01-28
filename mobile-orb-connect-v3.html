@@ -219,8 +219,10 @@
           <span class="k">Last rr:</span> <span id="dRR" class="v dim">none</span>
         </div>
 
+        <!-- ✅ updated: includes ω cap so we can see clamp behavior -->
         <div class="row" style="margin-top:6px;">
           <span class="k">ω raw:</span> <span id="dOmega" class="v dim">0</span>
+          <span class="k">ω cap:</span> <span id="dOmegaC" class="v dim">0</span>
           <span class="k">ω filt:</span> <span id="dOmegaF" class="v dim">0</span>
           <span class="k">speed:</span> <span id="dSpeed" class="v dim">0</span>
         </div>
@@ -259,6 +261,7 @@
       log: $("dLog"),
 
       omega: $("dOmega"),
+      omegaC: $("dOmegaC"), // ✅ NEW
       omegaF: $("dOmegaF"),
       speed: $("dSpeed"),
     };
@@ -478,7 +481,7 @@
     const SPEED_STOP_SNAP      = 1.0;
 
     // =========================================================================
-    // ✅ NEW: SPEED (FORCE) — raw-ish path for controllable throttle
+    // ✅ NEW: SPEED (FORCE) — spike-resistant + fast brake
     // =========================================================================
     const SPEED_FORCE_NORM   = 180.0; // raise = gentler, lower = stronger
     const SPEED_FORCE_POW    = 1.7;   // >1 suppresses low speeds, keeps high reachable
@@ -492,6 +495,12 @@
     const SPEED_FORCE_D_CUTOFF   = 1.40;
 
     const SPEED_FORCE_RELEASE_CUTOFF = 12.0; // fast fall when slowing
+
+    // --- SPIKE RESIST + BRAKE (the actual “runaway train” fix) ---
+    const SPEED_SPIKE_WINDOW_SEC = 0.35;
+    const SPEED_SPIKE_MULT       = 2.1;
+    const SPEED_SPIKE_ADD        = 18.0;
+    const SPEED_BRAKE_CUTOFF     = 18.0;
 
     const LOCK_ON  = 0.30;
     const LOCK_OFF = 0.22;
@@ -631,6 +640,14 @@
       const mid = (a.length - 1) / 2;
       const lo = Math.floor(mid), hi = Math.ceil(mid);
       return (a[lo] + a[hi]) / 2;
+    }
+
+    // ✅ rolling window helper for spike clamp
+    function trimRollingWindowByTime(maxSec, hist, histDt, timeRefObj){
+      while (hist.length && timeRefObj.t > maxSec) {
+        timeRefObj.t -= (histDt.shift() || 0);
+        hist.shift();
+      }
     }
 
     function energyToGain(e) {
@@ -816,6 +833,11 @@
     // ✅ NEW speed force filter state
     const speedForceFilter = { xPrev: null, xHat: null, dxHat: null };
     let mForceLPF = 0;
+
+    // ✅ rolling ω history for spike clamp (FORCE path)
+    const mHist = [];
+    const mHistDt = [];
+    const mHistTime = { t: 0 };
 
     // continuity memory for meters (including speed)
     let meterHoldLeft = 0;
@@ -1063,39 +1085,63 @@
       const dtMean = Math.max(1e-3, computeAvg(dtBuf.slice(-50)));
       const dtForFilter = (dt > 0) ? dt : dtMean;
 
-      // OLD omega filter kept only for the ω filt debug line
-      let mFilt = oneEuroStep(m, dtForFilter, speedFilter);
-      if (m < mFilt) {
+      // OLD omega filter kept only for the ω filt debug line (legacy)
+      let mFiltLegacy = oneEuroStep(m, dtForFilter, speedFilter);
+      if (m < mFiltLegacy) {
         const aRel = alphaFromCutoff(dtForFilter, SPEED_RELEASE_CUTOFF);
-        mFilt = (1 - aRel) * mFilt + aRel * m;
+        mFiltLegacy = (1 - aRel) * mFiltLegacy + aRel * m;
       }
       if (m < (MIN_OMEGA * SPEED_STOP_SNAP)) {
         const aRel2 = alphaFromCutoff(dtForFilter, SPEED_RELEASE_CUTOFF * 1.25);
-        mFilt = (1 - aRel2) * mFilt;
+        mFiltLegacy = (1 - aRel2) * mFiltLegacy;
       }
 
       // =========================================================================
-      // ✅ NEW SPEED (FORCE): raw-ish magnitude from rotationRate, with deadzone,
-      // fast LPF, One-Euro, and fast release.
+      // ✅ SPEED (FORCE): spike-resistant + fast brake
       // =========================================================================
       const mRaw = mag3(x, y, z);
       const mRawDz = Math.max(0, mRaw - SPEED_FORCE_DEAD);
 
+      // fast LPF on raw omega
       mForceLPF = (mForceLPF === 0) ? mRawDz : lerp(mForceLPF, mRawDz, SPEED_FORCE_LPF);
 
-      let mForceFilt = oneEuroStepForce(mForceLPF, dtForFilter, speedForceFilter);
+      // ---- rolling median clamp (resists brief spikes) ----
+      const dtHist = Math.max(1e-3, dtForFilter);
+      mHist.push(mForceLPF);
+      mHistDt.push(dtHist);
+      mHistTime.t += dtHist;
+      trimRollingWindowByTime(SPEED_SPIKE_WINDOW_SEC, mHist, mHistDt, mHistTime);
 
-      if (mForceLPF < mForceFilt) {
+      const mMed = median(mHist);
+      const mCap = Math.max(0, mMed * SPEED_SPIKE_MULT + SPEED_SPIKE_ADD);
+      const mClamped = Math.min(mForceLPF, mCap);
+
+      // One Euro on clamped ω
+      let mForceFilt = oneEuroStepForce(mClamped, dtForFilter, speedForceFilter);
+
+      // fast release when slowing
+      if (mClamped < mForceFilt) {
         const aRelF = alphaFromCutoff(dtForFilter, SPEED_FORCE_RELEASE_CUTOFF);
-        mForceFilt = (1 - aRelF) * mForceFilt + aRelF * mForceLPF;
+        mForceFilt = (1 - aRelF) * mForceFilt + aRelF * mClamped;
       }
 
+      // extra brake when near-stopping (kills lingering “runaway”)
+      if (mRawDz < 2.0) {
+        const aBrake = alphaFromCutoff(dtForFilter, SPEED_BRAKE_CUTOFF);
+        mForceFilt = (1 - aBrake) * mForceFilt;
+      }
+
+      // map to 0..1 speed
       const nForce = Math.max(0, mForceFilt / SPEED_FORCE_NORM);
       const shaped = Math.pow(clamp01(nForce), SPEED_FORCE_POW);
       const speedScore = clamp01(1 - Math.exp(-SPEED_FORCE_SHAPE * shaped));
 
-      // ✅ debug row uses: ω raw = m (smoothed), ω filt = mForceFilt (force path), speed = speedScore
+      // ✅ debug row:
+      // ω raw  = stability-path magnitude (smoothed rr)
+      // ω cap  = spike clamp cap (on force path)
+      // ω filt = force filtered ω (post clamp)
       d.omega.textContent  = m.toFixed(2);
+      d.omegaC.textContent = mCap.toFixed(2);
       d.omegaF.textContent = mForceFilt.toFixed(2);
       d.speed.textContent  = speedScore.toFixed(3);
 
@@ -1375,6 +1421,7 @@
         d.rr.textContent = "none";
 
         d.omega.textContent = "0";
+        d.omegaC.textContent = "0";
         d.omegaF.textContent = "0";
         d.speed.textContent = "0";
 
@@ -1409,6 +1456,11 @@
         speedForceFilter.xHat  = null;
         speedForceFilter.dxHat = null;
         mForceLPF = 0;
+
+        // ✅ reset spike clamp history
+        mHist.length = 0;
+        mHistDt.length = 0;
+        mHistTime.t = 0;
 
         meterHoldLeft = 0;
         lastGrooveUI = 0;
