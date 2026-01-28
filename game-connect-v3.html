@@ -39,6 +39,7 @@
       overflow-x:hidden;
     }
 
+    /* subtle vignette overlay so the orange still feels "ripper-y" */
     body::before{
       content:"";
       position:fixed;
@@ -53,7 +54,14 @@
 
     .wrap{max-width:980px;margin:24px auto;padding:0 16px; position:relative; z-index:1;}
     h1{margin:0 0 14px 0; font-size:18px; letter-spacing:.6px; text-align:center;}
-    .grid{display:grid; grid-template-columns: 1.2fr 1fr; gap:18px; align-items:start;}
+
+    .grid{
+      display:grid;
+      grid-template-columns: 1.2fr 1fr;
+      gap:18px;
+      align-items:start;
+    }
+
     .card{
       background:var(--panel);
       border:1px solid var(--border);
@@ -63,7 +71,15 @@
       overflow:hidden;
     }
 
+    /* ✅ both windows 800px tall */
+    .cardTall{
+      height:800px;
+      display:flex;
+      flex-direction:column;
+    }
+
     .row{display:flex; gap:10px; align-items:center; flex-wrap:wrap;}
+
     button{
       padding:10px 14px;
       border-radius:12px;
@@ -75,16 +91,17 @@
       white-space:nowrap;
     }
     button:hover{border-color:rgba(50,255,117,.35)}
-    button:disabled{opacity:.55; cursor:default;}
 
     .stat{margin-top:10px; font-size:13px; line-height:1.5;}
     .dim{opacity:.78}
     .bad{color:var(--bad); font-weight:900;}
     .ok{color:#7dffab; font-weight:900;}
 
+    /* overcharge styling */
     .over{ color: var(--over) !important; }
     .fill.over{ background: var(--over) !important; }
 
+    /* big charge display (glow ramps with energy) */
     .big{
       font-size:58px;
       font-weight:1000;
@@ -133,6 +150,7 @@
       transition: width 80ms linear;
     }
 
+    /* ===== one-line last-message ticker (BLACK BOX, INDIGO DATA TEXT) ===== */
     .logLine{
       margin-top:10px;
       padding:8px 10px;
@@ -164,7 +182,9 @@
 
     .mono{white-space:pre-wrap; word-break:break-word; font-size:12px; opacity:.9; margin-top:10px; color: rgba(50,255,117,.90);}
 
-    /* AUDIO BUTTON PROMPT (red by default, turns green when enabled) */
+    /* ============================================================
+       AUDIO BUTTON PROMPT (red by default, turns green when enabled)
+       ============================================================ */
     #audioBtn{
       border-color: rgba(255,90,90,.55);
       color: rgba(255,90,90,.95);
@@ -177,8 +197,33 @@
       text-shadow: none;
     }
 
-    /* DISRUPTOR: SHAKE */
+    /* ✅ Pair Phone = primary (bold + bright green stroke) */
+    #pairBtn{
+      font-weight: 1000;
+      border-color: var(--g);
+      color: var(--g);
+    }
+    #pairBtn:hover{
+      border-color: var(--g);
+      box-shadow: 0 0 18px rgba(50,255,117,.14);
+    }
+
+    /* ✅ Reconnect + New room dimmer */
+    #connect,
+    #newRoom{
+      opacity: 0.72;
+      font-weight: 800;
+    }
+    #connect:hover,
+    #newRoom:hover{
+      opacity: 0.92;
+    }
+
+    /* ============================================================
+       DISRUPTOR: SHAKE METER (short bar + round lamp)
+       ============================================================ */
     .groupGap{ height:10px; }
+
     .meterRow{
       display:flex;
       align-items:center;
@@ -189,6 +234,7 @@
       max-width: 430px;
       margin:8px 0 10px;
     }
+
     .lamp{
       width:16px;
       height:16px;
@@ -206,117 +252,138 @@
         0 0 28px rgba(255,212,0,0.26);
     }
 
-    /* PAIR PHONE MODAL (QR popup) */
-    .modalOverlay{
+    /* ============================================================
+       RIGHT WINDOW: PHYSICS TEST STAGE
+       ============================================================ */
+    .physHeader{
+      font-weight: 900;
+      margin-bottom: 10px;
+      letter-spacing: .3px;
+    }
+    .physStage{
+      position:relative;
+      flex:1 1 auto;
+      border:1px solid rgba(50,255,117,.22);
+      border-radius:14px;
+      background: rgba(0,0,0,.22);
+      overflow:hidden;
+      box-shadow: inset 0 0 0 1px rgba(0,0,0,.25);
+    }
+    .groundLine{
+      position:absolute;
+      left:16px;
+      right:16px;
+      height:2px;
+      background: var(--g);
+      bottom: 200px; /* ✅ 200px from bottom */
+      opacity: 0.95;
+      box-shadow: 0 0 18px rgba(50,255,117,.12);
+    }
+    .orb{
+      position:absolute;
+      width:150px;
+      height:150px;
+      border-radius:999px;
+      border:2px solid var(--g);
+      background: rgba(50,255,117,.06);
+      left:50%;
+      transform: translateX(-50%);
+      /* ✅ resting on ground line */
+      bottom: calc(200px + 2px);
+      box-shadow:
+        0 0 20px rgba(50,255,117,.12),
+        inset 0 0 0 1px rgba(0,0,0,.30);
+    }
+
+    /* ============================================================
+       PAIR MODAL (QR popup)
+       ============================================================ */
+    .modal{
       position:fixed;
       inset:0;
-      background: rgba(0,0,0,.72);
       display:none;
       align-items:center;
       justify-content:center;
-      z-index:1000;
-      padding:16px;
+      z-index:999;
     }
-    .modalOverlay.open{ display:flex; }
-
-    .modal{
-      width: min(520px, 92vw);
-      border-radius: 18px;
-      border: 1px solid rgba(50,255,117,.22);
-      background: rgba(0,0,0,.70);
-      box-shadow: 0 22px 120px rgba(0,0,0,.70);
-      overflow:hidden;
+    .modal.on{ display:flex; }
+    .backdrop{
+      position:absolute; inset:0;
+      background: rgba(0,0,0,.72);
+      backdrop-filter: blur(6px);
     }
-    .modalHeader{
+    .modalCard{
+      position:relative;
+      width: min(420px, 92vw);
+      border-radius:16px;
+      border:1px solid rgba(50,255,117,.22);
+      background: rgba(0,0,0,.72);
+      box-shadow: 0 22px 90px rgba(0,0,0,.65);
+      padding:14px 14px 14px;
+      z-index:1;
+    }
+    .modalTop{
       display:flex;
       align-items:center;
       justify-content:space-between;
       gap:10px;
-      padding:12px 12px;
-      border-bottom: 1px solid rgba(50,255,117,.14);
+      margin-bottom:10px;
     }
     .modalTitle{
-      font-weight:900;
-      letter-spacing:.5px;
-      font-size:12px;
-      opacity:0.95;
+      font-weight: 1000;
+      letter-spacing:.3px;
     }
-    .iconBtn{
+    .xBtn{
+      padding:8px 10px;
+      border-radius:12px;
+      border:1px solid rgba(50,255,117,.22);
+      background: rgba(0,0,0,.35);
+      color: var(--g);
+      cursor:pointer;
+      font-weight: 1000;
+      line-height:1;
+    }
+    .qrBox{
+      width: 280px; height: 280px;
+      border-radius: 14px;
+      border: 1px solid rgba(50,255,117,.18);
+      background: #fff;
+      display:grid; place-items:center;
+      overflow:hidden;
+      margin: 0 auto;
+    }
+    .urlRow{
+      margin-top:10px;
+      display:flex;
+      gap:10px;
+      align-items:center;
+    }
+    .urlRow code{
+      flex:1 1 auto;
       padding:8px 10px;
       border-radius:12px;
       border:1px solid rgba(50,255,117,.18);
       background: rgba(0,0,0,.35);
+      color: rgba(50,255,117,.92);
+      font-size: 11px;
+      white-space: nowrap;
+      overflow:hidden;
+      text-overflow: ellipsis;
+    }
+    .copyBtn{
+      padding:10px 12px;
+      border-radius:12px;
+      border:1px solid rgba(50,255,117,.22);
+      background: rgba(0,0,0,.35);
       color: var(--g);
       cursor:pointer;
-      font-weight:900;
-      line-height:1;
-    }
-    .iconBtn:hover{ border-color: rgba(50,255,117,.35); }
-
-    .modalBody{
-      padding:14px 14px 16px;
-      display:flex;
-      flex-direction:column;
-      gap:10px;
-      align-items:center;
-    }
-    .qrCanvasWrap{
-      width: 320px;
-      height: 320px;
-      border-radius: 16px;
-      border: 1px solid rgba(50,255,117,.16);
-      background: #fff;
-      display:grid;
-      place-items:center;
-      overflow:hidden;
-    }
-    .pairUrl{
-      width: 100%;
-      font-size: 12px;
-      opacity: 0.92;
-      color: rgba(50,255,117,.90);
-      word-break: break-word;
-      background: rgba(0,0,0,.35);
-      border: 1px solid rgba(50,255,117,.16);
-      border-radius: 12px;
-      padding: 10px 10px;
-      box-sizing:border-box;
-      text-align:left;
-    }
-    .pairHint{
-      font-size: 11px;
-      opacity: 0.75;
-      text-align:center;
-      line-height:1.25;
-    }
-
-    /* Pair Phone = primary */
-    #pairBtn{
-        font-weight: 1000;              /* bolder than other buttons */
-        border-color: var(--g);         /* bright green stroke */
-        color: var(--g);
-    }
-    #pairBtn:hover{
-        border-color: var(--g);
-        box-shadow: 0 0 18px rgba(50,255,117,.14);
-    }
-
-    /* Reconnect + New room = dimmer (secondary) */
-    #connect,
-    #newRoom{
-        opacity: 0.72;
-        font-weight: 800; /* keep readable */
-    }
-    #connect:hover,
-    #newRoom:hover{
-        opacity: 0.92; /* comes alive on hover */
+      font-weight: 900;
     }
 
     @media (max-width: 900px){
       .grid{grid-template-columns:1fr;}
       .big{font-size:52px;}
-      .barShort{ max-width: 360px; }
-      .qrCanvasWrap{ width: 280px; height: 280px; }
+      .qrBox{width: 240px; height:240px;}
     }
   </style>
 
@@ -330,9 +397,10 @@
     <h1>Orb Relay — Receiver Test (laptop/game side)</h1>
 
     <div class="grid">
-      <div class="card">
+      <!-- LEFT: meters window -->
+      <div class="card cardTall">
 
-        <!-- Buttons only (worker/room rows removed) -->
+        <!-- Buttons row -->
         <div class="row">
           <button id="pairBtn">Pair Phone</button>
           <button id="audioBtn">Audio: Off</button>
@@ -344,6 +412,7 @@
           <div>Status: <span id="status" class="dim">Auto-connecting…</span></div>
         </div>
 
+        <!-- one-line ticker -->
         <div class="logLine" aria-label="Last message">
           <span class="muted">Last message:</span>
           <span id="last" class="lastText">(none yet)</span>
@@ -370,6 +439,7 @@
 
           <div class="groupGap"></div>
 
+          <!-- DISRUPTOR: SHAKE -->
           <div class="barLabel"><div>Shake</div><span id="vShake">0</span></div>
           <div class="meterRow">
             <div class="bar barShort"><div id="bShake" class="fill"></div></div>
@@ -380,24 +450,34 @@
         <div id="fatal" class="mono bad" style="display:none;"></div>
       </div>
 
-      <div class="card">
-        <div style="font-weight:900; margin-bottom:8px;">(reserved)</div>
-        <div class="mono dim">Right panel reserved for game/physics tests.</div>
+      <!-- RIGHT: physics window -->
+      <div class="card cardTall">
+        <div class="physHeader">Game Physics Tester</div>
+        <div id="physStage" class="physStage" aria-label="Physics test stage">
+          <div class="groundLine" aria-label="Ground"></div>
+          <div class="orb" aria-label="Orb"></div>
+        </div>
       </div>
     </div>
   </div>
 
-  <!-- Pair Phone Modal -->
-  <div id="pairOverlay" class="modalOverlay" role="dialog" aria-modal="true" aria-label="Pair Phone">
-    <div class="modal">
-      <div class="modalHeader">
-        <div class="modalTitle">PAIR PHONE</div>
-        <button id="pairClose" class="iconBtn" aria-label="Close">✕</button>
+  <!-- Pair modal -->
+  <div id="pairModal" class="modal" aria-hidden="true">
+    <div class="backdrop" id="pairBackdrop"></div>
+    <div class="modalCard" role="dialog" aria-label="Pair phone">
+      <div class="modalTop">
+        <div class="modalTitle">Pair phone to this room</div>
+        <button class="xBtn" id="pairClose" aria-label="Close">✕</button>
       </div>
-      <div class="modalBody">
-        <div id="pairQR" class="qrCanvasWrap" aria-label="QR code"></div>
-        <div id="pairUrl" class="pairUrl"></div>
-        <div class="pairHint">Scan with your phone. The popup will close automatically when the phone starts sending data.</div>
+      <div id="qr" class="qrBox"></div>
+
+      <div class="urlRow">
+        <code id="urlText">(url)</code>
+        <button class="copyBtn" id="copyUrl">Copy</button>
+      </div>
+
+      <div class="mono dim" style="margin-top:10px;">
+        Tip: the popup auto-closes on first message from the phone.
       </div>
     </div>
   </div>
@@ -405,15 +485,11 @@
   <script>
     const $ = (id) => document.getElementById(id);
 
-    // ✅ SSOT: worker/room now fixed (no UI rows)
-    const WORKER_BASE = "https://orb-token.mrgarthwilliams.workers.dev";
-    let ROOM_CHANNEL  = "orb:test"; // overwritten by ?room=XYZ or new-room button
-
     const els = {
-      newRoom: $("newRoom"),
-      connect: $("connect"),
-      audioBtn: $("audioBtn"),
       pairBtn: $("pairBtn"),
+      connect: $("connect"),
+      newRoom: $("newRoom"),
+      audioBtn: $("audioBtn"),
 
       status: $("status"),
       last: $("last"),
@@ -439,12 +515,16 @@
 
       fatal: $("fatal"),
 
-      // Pair modal
-      pairOverlay: $("pairOverlay"),
+      // modal
+      pairModal: $("pairModal"),
+      pairBackdrop: $("pairBackdrop"),
       pairClose: $("pairClose"),
-      pairQR: $("pairQR"),
-      pairUrl: $("pairUrl"),
+      qr: $("qr"),
+      urlText: $("urlText"),
+      copyUrl: $("copyUrl"),
     };
+
+    const WORKER_BASE = "https://orb-token.mrgarthwilliams.workers.dev";
 
     function clamp01(x){ x = Number(x); return Math.max(0, Math.min(1, isFinite(x) ? x : 0)); }
     const toPct01  = (x01) => Math.round(clamp01(x01) * 100);
@@ -479,47 +559,19 @@
       return base + "?room=" + encodeURIComponent(roomCode);
     }
 
-    // Pair modal
-    function openPairModal(){
-      const url = phoneUrlFor(ROOM_CHANNEL);
-      els.pairUrl.textContent = url;
-
-      els.pairQR.innerHTML = "";
-      if (typeof QRCode === "undefined" || !QRCode.toCanvas) {
-        els.pairQR.textContent = "QR lib failed to load";
-      } else {
-        const canvas = document.createElement("canvas");
-        const size = Math.min(320, Math.max(240, Math.floor(window.innerWidth * 0.70)));
-        canvas.width = size; canvas.height = size;
-        els.pairQR.appendChild(canvas);
-
-        QRCode.toCanvas(canvas, url, {
-          width: size - 28,
-          margin: 2,
-          color: { dark: "#000000", light: "#ffffff" }
-        }).catch((e) => {
-          els.pairQR.textContent = "QR render error";
-          console.error("QR render error:", e);
-        });
-      }
-
-      els.pairOverlay.classList.add("open");
+    function fatal(msg){
+      els.fatal.style.display = "block";
+      els.fatal.textContent = msg;
     }
 
-    function closePairModal(){ els.pairOverlay.classList.remove("open"); }
+    function setStatus(html, cls){
+      els.status.className = cls || "dim";
+      els.status.innerHTML = html;
+    }
 
-    els.pairBtn.addEventListener("click", openPairModal);
-    els.pairClose.addEventListener("click", closePairModal);
-
-    els.pairOverlay.addEventListener("click", (e) => {
-      if (e.target === els.pairOverlay) closePairModal();
-    });
-
-    window.addEventListener("keydown", (e) => {
-      if (e.key === "Escape" && els.pairOverlay.classList.contains("open")) closePairModal();
-    });
-
-    // CHARGE VISUALS
+    // =========================================================================
+    // BACKGROUND (energy)
+    // =========================================================================
     const BG0 = { r: 0,   g: 0,  b: 0  };
     const BG1 = { r: 255, g: 42, b: 0  };
     function setBgFromEnergy(e01) {
@@ -532,7 +584,9 @@
     }
     setBgFromEnergy(0);
 
+    // =========================================================================
     // AUDIO (optional)
+    // =========================================================================
     let audioEnabled = false;
     let audioCtx = null, osc = null, gainNode = null;
 
@@ -617,7 +671,9 @@
       else disableAudio();
     });
 
+    // =========================================================================
     // SHAKE LAMP (500ms strobe)
+    // =========================================================================
     let lampTO = null;
     function flashShakeLamp(ms = 500){
       els.shakeLamp.classList.add("on");
@@ -628,14 +684,87 @@
       }, ms);
     }
 
-    // ABLY RECEIVER
+    // =========================================================================
+    // PAIR MODAL (QR popup)
+    // =========================================================================
+    function openPairModal(){
+      els.pairModal.classList.add("on");
+      els.pairModal.setAttribute("aria-hidden","false");
+      renderQR(currentRoomChannel);
+    }
+    function closePairModal(){
+      els.pairModal.classList.remove("on");
+      els.pairModal.setAttribute("aria-hidden","true");
+    }
+    els.pairBtn.addEventListener("click", openPairModal);
+    els.pairBackdrop.addEventListener("click", closePairModal);
+    els.pairClose.addEventListener("click", closePairModal);
+    window.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") closePairModal();
+    });
+
+    async function renderQR(roomChannel){
+      els.qr.innerHTML = "";
+      const url = phoneUrlFor(roomChannel);
+      els.urlText.textContent = url;
+
+      els.copyUrl.onclick = async () => {
+        try{
+          await navigator.clipboard.writeText(url);
+          els.copyUrl.textContent = "Copied";
+          setTimeout(() => els.copyUrl.textContent = "Copy", 700);
+        }catch(_){
+          els.copyUrl.textContent = "Nope";
+          setTimeout(() => els.copyUrl.textContent = "Copy", 700);
+        }
+      };
+
+      if (typeof QRCode === "undefined" || !QRCode.toCanvas) {
+        els.qr.style.background = "#fff";
+        els.qr.textContent = "QR lib failed to load";
+        return;
+      }
+
+      const canvas = document.createElement("canvas");
+      canvas.width = 280; canvas.height = 280;
+      els.qr.appendChild(canvas);
+
+      try{
+        await QRCode.toCanvas(canvas, url, {
+          width: 260,
+          margin: 2,
+          color: { dark: "#000000", light: "#ffffff" }
+        });
+      }catch(e){
+        els.qr.textContent = "QR render error";
+        console.error("QR render error:", e);
+      }
+    }
+
+    // =========================================================================
+    // ROOM STATE
+    // =========================================================================
+    function readUrlRoomOrNull(){
+      try{
+        const u = new URL(location.href);
+        const r = (u.searchParams.get("room") || "").trim();
+        if (!r) return null;
+        return normalizeRoom(r);
+      }catch(_){
+        return null;
+      }
+    }
+
+    let currentRoomChannel = normalizeRoom(readUrlRoomOrNull() || "orb:test");
+
+    // =========================================================================
+    // ABLY RECEIVER (AUTO-CONNECT)
+    // =========================================================================
     let realtime = null;
     let channel = null;
 
     let lastData = null;
     let rafPending = false;
-
-    let firstMsgSeen = false;
 
     function scheduleUIUpdate(data){
       lastData = data;
@@ -720,35 +849,13 @@
       setAudio(energy, groove, locked);
     }
 
-    function readUrlRoomOrNull(){
-      try{
-        const u = new URL(location.href);
-        const r = (u.searchParams.get("room") || "").trim();
-        if (!r) return null;
-        return normalizeRoom(r);
-      }catch(_){
-        return null;
-      }
-    }
-
     let connecting = false;
-
-    function fatal(msg){
-      els.fatal.style.display = "block";
-      els.fatal.textContent = msg;
-    }
-
-    function setStatus(html, cls){
-      els.status.className = cls || "dim";
-      els.status.innerHTML = html;
-    }
 
     async function connect(opts = {}){
       if (connecting) return;
       connecting = true;
 
-      const workerBase = WORKER_BASE.replace(/\/+$/,"");
-      const roomChannel = ROOM_CHANNEL;
+      const roomChannel = currentRoomChannel;
 
       if (typeof Ably === "undefined" || !Ably.Realtime) {
         fatal("Ably library failed to load. Check DevTools → Console/Network for blocked CDN scripts.");
@@ -757,20 +864,18 @@
         return;
       }
 
-      setStatus(opts.auto ? "Auto-connecting…" : "Reconnecting…", "ok");
+      setStatus(opts.auto ? `Auto-connecting… <span class="dim">(${roomChannel})</span>` : `Reconnecting… <span class="dim">(${roomChannel})</span>`, "ok");
 
       try { if (channel) channel.unsubscribe(); } catch(e) {}
       try { if (realtime) realtime.close(); } catch(e) {}
       realtime = null; channel = null;
 
-      firstMsgSeen = false;
-
       const roomCode = stripOrbPrefix(roomChannel);
-      const authUrl = workerBase + "/token?room=" + encodeURIComponent(roomCode) + "&v=" + Date.now();
+      const authUrl = WORKER_BASE + "/token?room=" + encodeURIComponent(roomCode) + "&v=" + Date.now();
 
       realtime = new Ably.Realtime({ authUrl, echoMessages:false });
 
-      realtime.connection.on("connected", () => setStatus("Connected ✓ (listening for phone…)", "ok"));
+      realtime.connection.on("connected", () => setStatus(`Connected ✓ <span class="dim">(${roomChannel})</span>`, "ok"));
       realtime.connection.on("failed", (st) => { console.error("Ably failed:", st); setStatus("FAILED — see console", "bad"); });
       realtime.connection.on("disconnected", () => setStatus("Disconnected (refresh / reconnect)", "bad"));
 
@@ -778,22 +883,20 @@
 
       channel.attach((err) => {
         if (err) { console.error("Channel attach failed:", err); setStatus("Channel attach FAILED — see console", "bad"); return; }
-        setStatus("Connected ✓ (channel attached, listening…)", "ok");
+        setStatus(`Connected ✓ (listening…) <span class="dim">(${roomChannel})</span>`, "ok");
       });
 
       channel.subscribe("orb", (msg) => {
         const d = (msg && msg.data) ? msg.data : {};
 
+        // one-line stream
         let s = "";
         try { s = JSON.stringify(d); } catch(_) { s = String(d); }
         if (s.length > 240) s = s.slice(0, 240) + " …";
         els.last.textContent = s;
 
-        // auto-close pairing modal on first message
-        if (!firstMsgSeen) {
-          firstMsgSeen = true;
-          if (els.pairOverlay.classList.contains("open")) closePairModal();
-        }
+        // ✅ if the pair modal is open, close on first message from phone
+        if (els.pairModal.classList.contains("on")) closePairModal();
 
         scheduleUIUpdate(d);
       });
@@ -801,28 +904,16 @@
       connecting = false;
     }
 
-    // Buttons
     els.newRoom.addEventListener("click", async () => {
-      ROOM_CHANNEL = "orb:" + randCode(6);
+      currentRoomChannel = "orb:" + randCode(6);
       await connect({ auto:false });
-
-      // if modal open, regenerate QR for new room
-      if (els.pairOverlay.classList.contains("open")) openPairModal();
+      // keep the modal in sync if it's open
+      if (els.pairModal.classList.contains("on")) renderQR(currentRoomChannel);
     });
 
     els.connect.addEventListener("click", () => connect({ auto:false }));
 
-    // Init
     (async function init(){
-      const urlRoom = readUrlRoomOrNull();
-      if (urlRoom) ROOM_CHANNEL = urlRoom;
-
-      if (typeof Ably === "undefined") {
-        fatal("Ably CDN did not load yet. Check DevTools → Network for ably.min-1.js.");
-        setStatus("FAILED — Ably missing", "bad");
-        return;
-      }
-
       connect({ auto:true });
     })();
   </script>
