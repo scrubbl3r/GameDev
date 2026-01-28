@@ -495,15 +495,15 @@
 
     // ✅ Adaptive EMA cutoff (Option A)
     // Low speed = higher cutoff (snappy), high speed = lower cutoff (steadier)
-    const SPEED_EMA_CUTOFF_FAST_HZ = 7.5;  // low-speed responsiveness
-    const SPEED_EMA_CUTOFF_SLOW_HZ = 1.4;  // 2.2 high-speed smoothing
+    const SPEED_EMA_CUTOFF_FAST_HZ = 6.0;  // 7.5 low-speed responsiveness
+    const SPEED_EMA_CUTOFF_SLOW_HZ = 1.0;  // 1.4 high-speed smoothing
 
     // Where the adaptation happens (deg/s AFTER deadzone)
     // Below START: mostly FAST. Above END: mostly SLOW.
     const SPEED_ADAPT_START_DPS = 18.0;
     const SPEED_ADAPT_END_DPS   = 220.0; // 140.0
 
-    const SPEED_ADAPT_POW = 2.2;
+    const SPEED_ADAPT_POW = 1.6; // 2.2
 
     const SPEED_NORM_DPS       = 220.0;
     const SPEED_MAP_POW        = 1.10;
