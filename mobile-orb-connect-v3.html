@@ -5,15 +5,12 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Groove Orbit</title>
   <style>
-    :root {
-      --green:#7dd35f;
-      --over:#ffd400; /* bright yellow for overcharge */
-    }
+    :root { --green:#7dd35f; --over:#ffd400; }
 
     html, body {
       height: 100%;
       margin: 0;
-      background: #000; /* overridden dynamically */
+      background: #000;
       color: var(--green);
       font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
       transition: background-color 80ms linear;
@@ -46,7 +43,6 @@
       opacity: 0.78;
     }
 
-    /* overcharge styling */
     .over { color: var(--over) !important; }
     .bigCharge.over { text-shadow: 0 0 18px rgba(255, 212, 0, 0.22); }
     .fill.over { background: var(--over) !important; }
@@ -119,9 +115,6 @@
     }
     button:disabled { opacity: 0.55; }
 
-    /* ============================================================
-       DIAGNOSTICS HUD (in-app “console”)
-       ============================================================ */
     .diag {
       width: min(560px, 92vw);
       border: 1px solid rgba(125,211,95,0.35);
@@ -186,7 +179,7 @@
       <div class="metric">
         <div class="label">
           Speed <span id="speed">0</span>
-          <span class="muted">(FORCE / raw-ish)</span>
+          <span class="muted">(FORCE / rebuilt)</span>
         </div>
         <div class="bar"><div id="speedBar" class="fill"></div></div>
       </div>
@@ -219,11 +212,11 @@
           <span class="k">Last rr:</span> <span id="dRR" class="v dim">none</span>
         </div>
 
-        <!-- ✅ updated: includes ω cap so we can see clamp behavior -->
+        <!-- speed seed rebuild debug: raw -> deadzone -> EMA -> mapped -->
         <div class="row" style="margin-top:6px;">
           <span class="k">ω raw:</span> <span id="dOmega" class="v dim">0</span>
-          <span class="k">ω cap:</span> <span id="dOmegaC" class="v dim">0</span>
-          <span class="k">ω filt:</span> <span id="dOmegaF" class="v dim">0</span>
+          <span class="k">ω dz:</span>  <span id="dOmegaC" class="v dim">0</span>
+          <span class="k">ω ema:</span> <span id="dOmegaF" class="v dim">0</span>
           <span class="k">speed:</span> <span id="dSpeed" class="v dim">0</span>
         </div>
 
@@ -261,7 +254,7 @@
       log: $("dLog"),
 
       omega: $("dOmega"),
-      omegaC: $("dOmegaC"), // ✅ NEW
+      omegaC: $("dOmegaC"),
       omegaF: $("dOmegaF"),
       speed: $("dSpeed"),
     };
@@ -468,40 +461,6 @@
 
     const MIN_OMEGA = 0.08;
 
-    // OLD speed mapping constants (kept for groove lock behavior thresholds etc.)
-    const SPEED_NORM  = 120.0;
-    const SPEED_SHAPE = 1.20;
-
-    const SPEED_MIN_CUTOFF = 0.20;
-    const SPEED_BETA       = 0.015;
-    const SPEED_D_CUTOFF   = 1.20;
-    const SPEED_LOW_EXP    = 0.70;
-
-    const SPEED_RELEASE_CUTOFF = 8.0;
-    const SPEED_STOP_SNAP      = 1.0;
-
-    // =========================================================================
-    // ✅ NEW: SPEED (FORCE) — spike-resistant + fast brake
-    // =========================================================================
-    const SPEED_FORCE_NORM   = 180.0; // raise = gentler, lower = stronger
-    const SPEED_FORCE_POW    = 1.7;   // >1 suppresses low speeds, keeps high reachable
-    const SPEED_FORCE_SHAPE  = 5.2;   // higher helps reach 1.0 at high motion
-
-    const SPEED_FORCE_LPF    = 0.55;  // fast smoothing on raw omega magnitude
-    const SPEED_FORCE_DEAD   = 8.0;   // deg/s deadzone (prevents tiny noise giving “force”)
-
-    const SPEED_FORCE_MIN_CUTOFF = 0.45;
-    const SPEED_FORCE_BETA       = 0.030;
-    const SPEED_FORCE_D_CUTOFF   = 1.40;
-
-    const SPEED_FORCE_RELEASE_CUTOFF = 12.0; // fast fall when slowing
-
-    // --- SPIKE RESIST + BRAKE (the actual “runaway train” fix) ---
-    const SPEED_SPIKE_WINDOW_SEC = 0.35;
-    const SPEED_SPIKE_MULT       = 2.1;
-    const SPEED_SPIKE_ADD        = 18.0;
-    const SPEED_BRAKE_CUTOFF     = 18.0;
-
     const LOCK_ON  = 0.30;
     const LOCK_OFF = 0.22;
 
@@ -518,27 +477,34 @@
     const ENERGY_GAIN_FREE   = 0.65;
 
     const ENERGY_DECAY       = 0.040;
-    const STOP_SPEED_THRESH  = 0.07;
-    const STOP_DECAY_MULT    = 10.;
 
     const UI_SMOOTH   = 0.10;
     const LOCK_SMOOTH = 0.14;
 
     const GRACE_SEC = 0.75;
-    const GRACE_SPEED_MIN = 0.12;
 
     const RECENTER_SEC = 0.85;
-    const RECENTER_SPEED_MIN = 0.18;
     const RECENTER_GROOVE_MAX = 0.22;
 
     const NORM_ALPHA = 0.10;
 
     // =========================================================================
-    // SSOT MOBILE 2.0 — ENERGY MODEL (INDEPENDENT PRODUCT METERS)
+    // ✅ SPEED v0 (FORCE) — ground-up seed rebuild
+    // raw → deadzone → ONE EMA → mapping → attack/release output smoothing
+    // NO lock/grace involvement, NO energy coupling, NO meter-hold.
+    // =========================================================================
+    const SPEED_DEAD_DPS       = 8.0;    // deg/s deadzone
+    const SPEED_EMA_CUTOFF_HZ  = 6.0;    // EMA smoothing cutoff
+    const SPEED_NORM_DPS       = 140.0;  // tune: medium-ish should land ~0.35–0.65
+    const SPEED_MAP_POW        = 1.10;   // 1.0 = linear; >1 suppresses low
+    const SPEED_ATTACK_HZ      = 7.0;    // rise smoothing
+    const SPEED_RELEASE_HZ     = 12.0;   // fall smoothing (faster = drops quicker)
+
+    // =========================================================================
+    // SSOT MOBILE 2.0 — ENERGY MODEL (still present, but speed-decoupled below)
     // =========================================================================
     const GROOVE_EXP = 0.70;
     const SMOOTH_EXP = 0.70;
-    const SPEED_EXP  = 1.00;
     const ORBIT_EXP  = 1.00;
 
     const EARN_SCALE = 1.00;
@@ -587,50 +553,9 @@
     const mag3 = (x,y,z) => Math.sqrt(x*x+y*y+z*z);
     const dbToGain = (db) => Math.pow(10, db/20);
 
-    function speedCurve(norm01) {
-      const x = Math.max(0, norm01);
-      return clamp01(1 - Math.exp(-SPEED_SHAPE * x));
-    }
-
     function alphaFromCutoff(dt, cutoffHz){
       const tau = 1 / (2 * Math.PI * cutoffHz);
       return 1 / (1 + tau / Math.max(1e-4, dt));
-    }
-
-    // One Euro step for a scalar signal (omega magnitude) — OLD (kept for debug/compat)
-    function oneEuroStep(x, dt, state){
-      const dtSafe = Math.max(1e-3, dt);
-
-      const dx = (state.xPrev == null) ? 0 : (x - state.xPrev) / dtSafe;
-      state.xPrev = x;
-
-      const aD = alphaFromCutoff(dtSafe, SPEED_D_CUTOFF);
-      state.dxHat = (state.dxHat == null) ? dx : (1 - aD) * state.dxHat + aD * dx;
-
-      const cutoff = SPEED_MIN_CUTOFF + SPEED_BETA * Math.abs(state.dxHat);
-
-      const aX = alphaFromCutoff(dtSafe, cutoff);
-      state.xHat = (state.xHat == null) ? x : (1 - aX) * state.xHat + aX * x;
-
-      return state.xHat;
-    }
-
-    // ✅ NEW One-Euro for FORCE speed path
-    function oneEuroStepForce(x, dt, state){
-      const dtSafe = Math.max(1e-3, dt);
-
-      const dx = (state.xPrev == null) ? 0 : (x - state.xPrev) / dtSafe;
-      state.xPrev = x;
-
-      const aD = alphaFromCutoff(dtSafe, SPEED_FORCE_D_CUTOFF);
-      state.dxHat = (state.dxHat == null) ? dx : (1 - aD) * state.dxHat + aD * dx;
-
-      const cutoff = SPEED_FORCE_MIN_CUTOFF + SPEED_FORCE_BETA * Math.abs(state.dxHat);
-
-      const aX = alphaFromCutoff(dtSafe, cutoff);
-      state.xHat = (state.xHat == null) ? x : (1 - aX) * state.xHat + aX * x;
-
-      return state.xHat;
     }
 
     // --- Robust statistics helpers for Smooth meter ---
@@ -640,14 +565,6 @@
       const mid = (a.length - 1) / 2;
       const lo = Math.floor(mid), hi = Math.ceil(mid);
       return (a[lo] + a[hi]) / 2;
-    }
-
-    // ✅ rolling window helper for spike clamp
-    function trimRollingWindowByTime(maxSec, hist, histDt, timeRefObj){
-      while (hist.length && timeRefObj.t > maxSec) {
-        timeRefObj.t -= (histDt.shift() || 0);
-        hist.shift();
-      }
     }
 
     function energyToGain(e) {
@@ -795,7 +712,7 @@
     }
 
     // =========================================================================
-    // ✅ Meter continuity
+    // ✅ Meter continuity (kept for groove/orbit/smooth ONLY)
     // =========================================================================
     const METER_HOLD_SEC = 0.55;
     const METER_FADE_HZ  = 3.0;
@@ -827,24 +744,15 @@
     let energy = 0;
     let energyUI = 0;
 
-    // OLD One Euro filter state (kept for ω filt debug readout)
-    const speedFilter = { xPrev: null, xHat: null, dxHat: null };
+    // ✅ SPEED v0 state
+    let mSpeedEMA = 0;    // ω ema after deadzone
+    let speedOut  = 0;    // final speed meter output (0..1)
 
-    // ✅ NEW speed force filter state
-    const speedForceFilter = { xPrev: null, xHat: null, dxHat: null };
-    let mForceLPF = 0;
-
-    // ✅ rolling ω history for spike clamp (FORCE path)
-    const mHist = [];
-    const mHistDt = [];
-    const mHistTime = { t: 0 };
-
-    // continuity memory for meters (including speed)
+    // continuity memory for meters (NOT speed)
     let meterHoldLeft = 0;
     let lastGrooveUI = 0;
     let lastOrbitUI  = 0;
     let lastSmoothUI = 0;
-    let lastSpeedUI  = 0;
 
     // SHAKE state
     let shake01 = 0;
@@ -939,7 +847,8 @@
       dtBuf.splice(0, Math.max(0, dtBuf.length - keep));
     }
 
-    function meterHoldOrFade(dt, fallbackSpeed) {
+    // ✅ continuity ONLY for groove/orbit/smooth (speed is handled by Speed v0 itself)
+    function meterHoldOrFade(dt) {
       if (dt > 0) meterHoldLeft = Math.max(0, meterHoldLeft - dt);
 
       const dtFade = Math.max(1e-3, dt || computeAvg(dtBuf.slice(-50)) || 1/60);
@@ -949,19 +858,38 @@
       const grooveOut = holding ? lastGrooveUI : (1 - aFade) * lastGrooveUI;
       const orbitOut  = holding ? lastOrbitUI  : (1 - aFade) * lastOrbitUI;
       const smoothOut = holding ? lastSmoothUI : (1 - aFade) * lastSmoothUI;
-      const speedOut  = holding ? lastSpeedUI  : (1 - aFade) * lastSpeedUI;
 
       lastGrooveUI = grooveOut;
       lastOrbitUI  = orbitOut;
       lastSmoothUI = smoothOut;
-      lastSpeedUI  = speedOut;
 
-      return {
-        grooveOut,
-        orbitOut,
-        smoothOut,
-        speedOut: (fallbackSpeed != null ? fallbackSpeed : speedOut)
-      };
+      return { grooveOut, orbitOut, smoothOut };
+    }
+
+    // =========================================================================
+    // ✅ SPEED v0 core
+    // =========================================================================
+    function updateSpeedV0(mRaw, dt) {
+      const dtSafe = Math.max(1e-3, dt || 1/60);
+
+      // raw → deadzone
+      const mDz = Math.max(0, mRaw - SPEED_DEAD_DPS);
+
+      // one smoother (EMA via cutoff)
+      const aE = alphaFromCutoff(dtSafe, SPEED_EMA_CUTOFF_HZ);
+      mSpeedEMA = (mSpeedEMA === 0) ? mDz : ((1 - aE) * mSpeedEMA + aE * mDz);
+
+      // one mapping
+      const n = clamp01(mSpeedEMA / SPEED_NORM_DPS);
+      const target = Math.pow(n, SPEED_MAP_POW);
+
+      // attack/release on output (force feel: quick fall)
+      const aAtk = alphaFromCutoff(dtSafe, SPEED_ATTACK_HZ);
+      const aRel = alphaFromCutoff(dtSafe, SPEED_RELEASE_HZ);
+      const a = (target >= speedOut) ? aAtk : aRel;
+      speedOut = (1 - a) * speedOut + a * target;
+
+      return { mDz, mEMA: mSpeedEMA, speed: speedOut };
     }
 
     let motionCount = 0;
@@ -989,14 +917,10 @@
       const spike = Math.max(0, rawSpike - SHAKE_DEADZONE);
 
       if (spike > SHAKE_SPIKE_GATE) {
-        if ((t - lastSpikeTime) <= SHAKE_CADENCE_SEC) {
-          hadRecentSpike = true;
-        }
+        if ((t - lastSpikeTime) <= SHAKE_CADENCE_SEC) hadRecentSpike = true;
         lastSpikeTime = t;
       }
-      if ((t - lastSpikeTime) > SHAKE_CADENCE_SEC) {
-        hadRecentSpike = false;
-      }
+      if ((t - lastSpikeTime) > SHAKE_CADENCE_SEC) hadRecentSpike = false;
 
       shake01 = clamp01(shake01 + spike * SHAKE_GAIN * dtSafe - SHAKE_DECAY * dtSafe);
 
@@ -1031,16 +955,23 @@
 
       const rr = e.rotationRate;
 
+      // If rotationRate missing: decay speed to 0 via release path
       if (!rr) {
         d.rr.textContent = "none";
 
+        const sv = updateSpeedV0(0, dt);
+        d.omega.textContent  = "0.00";
+        d.omegaC.textContent = sv.mDz.toFixed(2);
+        d.omegaF.textContent = sv.mEMA.toFixed(2);
+        d.speed.textContent  = sv.speed.toFixed(3);
+
         if (dt > 0) {
-          const ddec = ENERGY_DECAY * STOP_DECAY_MULT;
+          const ddec = ENERGY_DECAY;
           energy = Math.max(0, energy - ddec * dt);
           energyUI = lerp(energyUI, energy, UI_SMOOTH);
         }
 
-        const held = meterHoldOrFade(dt, null);
+        const held = meterHoldOrFade(dt);
 
         const payload = {
           room,
@@ -1049,7 +980,7 @@
           groove01: held.grooveOut,
           orbit01: held.orbitOut,
           smooth01: held.smoothOut,
-          speed01: held.speedOut,
+          speed01: speedOut,
           shake01: sh.shake01,
           shakeHit: sh.shakeHit,
           locked: false,
@@ -1061,7 +992,7 @@
           groove: held.grooveOut,
           orbit: held.orbitOut,
           smooth: held.smoothOut,
-          speed: held.speedOut,
+          speed: speedOut,
           energy: energyUI
         });
         setAudio(energyUI, held.grooveOut, false);
@@ -1076,91 +1007,42 @@
 
       const prevOx=ox, prevOy=oy, prevOz=oz;
 
-      // smoothed omega for groove/smooth/orbit stability computations
+      // stability-path omega smoothing for groove/smooth/orbit
       ox = lerp(ox, x, OMEGA_LPF);
       oy = lerp(oy, y, OMEGA_LPF);
       oz = lerp(oz, z, OMEGA_LPF);
 
-      const m = mag3(ox,oy,oz);
+      const mStability = mag3(ox,oy,oz);
       const dtMean = Math.max(1e-3, computeAvg(dtBuf.slice(-50)));
       const dtForFilter = (dt > 0) ? dt : dtMean;
 
-      // OLD omega filter kept only for the ω filt debug line (legacy)
-      let mFiltLegacy = oneEuroStep(m, dtForFilter, speedFilter);
-      if (m < mFiltLegacy) {
-        const aRel = alphaFromCutoff(dtForFilter, SPEED_RELEASE_CUTOFF);
-        mFiltLegacy = (1 - aRel) * mFiltLegacy + aRel * m;
-      }
-      if (m < (MIN_OMEGA * SPEED_STOP_SNAP)) {
-        const aRel2 = alphaFromCutoff(dtForFilter, SPEED_RELEASE_CUTOFF * 1.25);
-        mFiltLegacy = (1 - aRel2) * mFiltLegacy;
-      }
-
-      // =========================================================================
-      // ✅ SPEED (FORCE): spike-resistant + fast brake
-      // =========================================================================
+      // ✅ SPEED v0 uses RAW rotationRate magnitude (force)
       const mRaw = mag3(x, y, z);
-      const mRawDz = Math.max(0, mRaw - SPEED_FORCE_DEAD);
+      const sv = updateSpeedV0(mRaw, dtForFilter);
 
-      // fast LPF on raw omega
-      mForceLPF = (mForceLPF === 0) ? mRawDz : lerp(mForceLPF, mRawDz, SPEED_FORCE_LPF);
+      // diagnostics
+      d.omega.textContent  = mRaw.toFixed(2);
+      d.omegaC.textContent = sv.mDz.toFixed(2);
+      d.omegaF.textContent = sv.mEMA.toFixed(2);
+      d.speed.textContent  = sv.speed.toFixed(3);
 
-      // ---- rolling median clamp (resists brief spikes) ----
-      const dtHist = Math.max(1e-3, dtForFilter);
-      mHist.push(mForceLPF);
-      mHistDt.push(dtHist);
-      mHistTime.t += dtHist;
-      trimRollingWindowByTime(SPEED_SPIKE_WINDOW_SEC, mHist, mHistDt, mHistTime);
-
-      const mMed = median(mHist);
-      const mCap = Math.max(0, mMed * SPEED_SPIKE_MULT + SPEED_SPIKE_ADD);
-      const mClamped = Math.min(mForceLPF, mCap);
-
-      // One Euro on clamped ω
-      let mForceFilt = oneEuroStepForce(mClamped, dtForFilter, speedForceFilter);
-
-      // fast release when slowing
-      if (mClamped < mForceFilt) {
-        const aRelF = alphaFromCutoff(dtForFilter, SPEED_FORCE_RELEASE_CUTOFF);
-        mForceFilt = (1 - aRelF) * mForceFilt + aRelF * mClamped;
-      }
-
-      // extra brake when near-stopping (kills lingering “runaway”)
-      if (mRawDz < 2.0) {
-        const aBrake = alphaFromCutoff(dtForFilter, SPEED_BRAKE_CUTOFF);
-        mForceFilt = (1 - aBrake) * mForceFilt;
-      }
-
-      // map to 0..1 speed
-      const nForce = Math.max(0, mForceFilt / SPEED_FORCE_NORM);
-      const shaped = Math.pow(clamp01(nForce), SPEED_FORCE_POW);
-      const speedScore = clamp01(1 - Math.exp(-SPEED_FORCE_SHAPE * shaped));
-
-      // ✅ debug row:
-      // ω raw  = stability-path magnitude (smoothed rr)
-      // ω cap  = spike clamp cap (on force path)
-      // ω filt = force filtered ω (post clamp)
-      d.omega.textContent  = m.toFixed(2);
-      d.omegaC.textContent = mCap.toFixed(2);
-      d.omegaF.textContent = mForceFilt.toFixed(2);
-      d.speed.textContent  = speedScore.toFixed(3);
-
+      // lock/grace timers (kept, but speed does NOT gate anything)
       if (dt > 0) graceLeft = Math.max(0, graceLeft - dt);
 
-      // history accumulation uses m (stability path)
-      if (m > MIN_OMEGA) {
-        omegaMag.push(m);
+      // history accumulation uses stability-path m (for groove detector)
+      if (mStability > MIN_OMEGA) {
+        omegaMag.push(mStability);
 
-        const d0 = m - emaMean;
+        const d0 = mStability - emaMean;
         emaMean = emaMean + NORM_ALPHA * d0;
 
-        const d2 = (m - emaMean);
+        const d2 = (mStability - emaMean);
         emaVar = emaVar + NORM_ALPHA * (d2*d2 - emaVar);
 
         const rms = Math.sqrt(Math.max(1e-6, emaVar));
-        omegaNorm.push((m - emaMean) / rms);
+        omegaNorm.push((mStability - emaMean) / rms);
 
-        const inv = 1/m;
+        const inv = 1/mStability;
         omegaDir.push({x:ox*inv, y:oy*inv, z:oz*inv});
 
         if (dt > 0) {
@@ -1180,14 +1062,12 @@
 
       if (omegaNorm.length < Math.min(MIN_WINDOW_SAMPLES, nTarget)) {
         if (dt > 0) {
-          const ddec = ENERGY_DECAY * STOP_DECAY_MULT;
+          const ddec = ENERGY_DECAY;
           energy = Math.max(0, energy - ddec * dt);
           energyUI = lerp(energyUI, energy, UI_SMOOTH);
         }
 
-        lastSpeedUI = speedScore;
-
-        const held = meterHoldOrFade(dt, speedScore);
+        const held = meterHoldOrFade(dt);
 
         const payload = {
           room,
@@ -1196,7 +1076,7 @@
           groove01: held.grooveOut,
           orbit01: held.orbitOut,
           smooth01: held.smoothOut,
-          speed01: held.speedOut,
+          speed01: speedOut,
           shake01: sh.shake01,
           shakeHit: sh.shakeHit,
           locked: false,
@@ -1208,7 +1088,7 @@
           groove: held.grooveOut,
           orbit: held.orbitOut,
           smooth: held.smoothOut,
-          speed: held.speedOut,
+          speed: speedOut,
           energy: energyUI
         });
         setAudio(energyUI, held.grooveOut, false);
@@ -1227,19 +1107,20 @@
       const orbitBonus = orbitBonusFromDirCov(dirCov);
       const orbitShown = (orbitBonus - ORBIT_FLOOR) / (1 - ORBIT_FLOOR);
 
+      // meter continuity for groove/orbit/smooth only
       meterHoldLeft = METER_HOLD_SEC;
       lastGrooveUI = lockStrength;
       lastOrbitUI  = orbitShown;
       lastSmoothUI = smoothScore;
-      lastSpeedUI  = speedScore;
 
+      // ✅ lock logic NO LONGER uses speed
       if (!lock) {
-        if (lockStrength > LOCK_ON && speedScore > 0.16) {
+        if (lockStrength > LOCK_ON) {
           lock = true;
           graceLeft = 0;
         }
       } else {
-        const shouldDrop = (lockStrength < LOCK_OFF) || (speedScore < 0.08);
+        const shouldDrop = (lockStrength < LOCK_OFF);
         if (shouldDrop) {
           lock = false;
           graceLeft = GRACE_SEC;
@@ -1248,18 +1129,17 @@
 
       const inGrace = (!lock && graceLeft > 0);
       if (inGrace) {
-        if (lockStrength > LOCK_ON && speedScore > GRACE_SPEED_MIN) {
+        if (lockStrength > LOCK_ON) {
           lock = true;
           graceLeft = 0;
         }
       }
 
+      // ✅ recenter kept, but decoupled from speed (uses groove only)
       if (dt > 0) {
-        const moving = speedScore >= RECENTER_SPEED_MIN;
         const badGroove = lockStrength <= RECENTER_GROOVE_MAX;
         const notLockedNow = !lock;
-
-        if (moving && badGroove && notLockedNow) recenterBadTime += dt;
+        if (badGroove && notLockedNow) recenterBadTime += dt;
         else recenterBadTime = Math.max(0, recenterBadTime - 1.5*dt);
 
         if (recenterBadTime >= RECENTER_SEC) {
@@ -1268,14 +1148,14 @@
         }
       }
 
+      // ✅ energy update: decoupled from speed (speed is NOT a term)
       if (dt > 0) {
         const grooveTerm = Math.pow(clamp01(lockStrength), GROOVE_EXP);
         const smoothTerm = Math.pow(clamp01(smoothScore), SMOOTH_EXP);
-        const speedTerm  = Math.pow(clamp01(speedScore),  SPEED_EXP);
         const orbitTerm  = Math.pow(clamp01(orbitBonus),  ORBIT_EXP);
 
         const qualityTerm = grooveTerm * smoothTerm;
-        const earnBase = EARN_SCALE * grooveTerm * smoothTerm * speedTerm * orbitTerm;
+        const earnBase = EARN_SCALE * grooveTerm * smoothTerm * orbitTerm;
 
         const effectivelyLocked = lock || inGrace;
         const gain = effectivelyLocked ? ENERGY_GAIN_LOCKED : ENERGY_GAIN_FREE;
@@ -1284,12 +1164,7 @@
         const earn = smoothKill ? 0 : (gain * earnBase);
 
         let decay = ENERGY_DECAY;
-        if (speedScore < STOP_SPEED_THRESH) decay *= STOP_DECAY_MULT;
-        if (inGrace) decay *= 0.70;
-
-        if (speedScore >= STOP_SPEED_THRESH && qualityTerm >= COAST_QUALITY_MIN) {
-          decay *= COAST_DECAY_MULT;
-        }
+        if (qualityTerm >= COAST_QUALITY_MIN) decay *= COAST_DECAY_MULT;
 
         if (smoothKill) {
           decay *= SMOOTH_KILL_DECAY_MULT;
@@ -1312,7 +1187,7 @@
         groove01: lockStrength,
         orbit01: orbitShown,
         smooth01: smoothScore,
-        speed01: speedScore,
+        speed01: speedOut,     // ✅ speed v0 published
         shake01: sh.shake01,
         shakeHit: sh.shakeHit,
         locked: lockedNow,
@@ -1324,7 +1199,7 @@
         groove: lockStrength,
         orbit: orbitShown,
         smooth: smoothScore,
-        speed: speedScore,
+        speed: speedOut,
         energy: energyUI
       });
 
@@ -1409,9 +1284,7 @@
         setStage("relay connect", "warn");
         publishAcc = 0;
         const okRelay = await connectRelay();
-        if (!okRelay) {
-          log("Relay connect failed; running locally only.");
-        }
+        if (!okRelay) log("Relay connect failed; running locally only.");
 
         running = true;
         lastT = null;
@@ -1446,27 +1319,14 @@
         energy = 0;
         energyUI = 0;
 
-        // reset OLD filter (debug)
-        speedFilter.xPrev = null;
-        speedFilter.xHat  = null;
-        speedFilter.dxHat = null;
-
-        // ✅ reset NEW force speed filter
-        speedForceFilter.xPrev = null;
-        speedForceFilter.xHat  = null;
-        speedForceFilter.dxHat = null;
-        mForceLPF = 0;
-
-        // ✅ reset spike clamp history
-        mHist.length = 0;
-        mHistDt.length = 0;
-        mHistTime.t = 0;
+        // ✅ reset speed v0
+        mSpeedEMA = 0;
+        speedOut  = 0;
 
         meterHoldLeft = 0;
         lastGrooveUI = 0;
         lastOrbitUI  = 0;
         lastSmoothUI = 0;
-        lastSpeedUI  = 0;
 
         shake01 = 0;
         accelBaseMag = 9.81;
