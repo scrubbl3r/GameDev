@@ -32,14 +32,13 @@
     html,body{
       height:100%;
       margin:0;
-      background: var(--bg); /* overridden dynamically */
+      background: var(--bg);
       color:var(--g);
       font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
       transition: background-color 80ms linear;
       overflow-x:hidden;
     }
 
-    /* subtle vignette overlay so the orange still feels "ripper-y" */
     body::before{
       content:"";
       position:fixed;
@@ -64,18 +63,6 @@
       overflow:hidden;
     }
 
-    label{display:block; font-size:12px; opacity:.92; margin:10px 0 6px;}
-    input{
-      width:100%;
-      box-sizing:border-box;
-      padding:10px 10px;
-      border-radius:12px;
-      border:1px solid var(--border);
-      background:rgba(0,0,0,.45);
-      color:var(--g);
-      outline:none;
-    }
-
     .row{display:flex; gap:10px; align-items:center; flex-wrap:wrap;}
     button{
       padding:10px 14px;
@@ -88,17 +75,16 @@
       white-space:nowrap;
     }
     button:hover{border-color:rgba(50,255,117,.35)}
+    button:disabled{opacity:.55; cursor:default;}
 
     .stat{margin-top:10px; font-size:13px; line-height:1.5;}
     .dim{opacity:.78}
     .bad{color:var(--bad); font-weight:900;}
     .ok{color:#7dffab; font-weight:900;}
 
-    /* overcharge styling */
     .over{ color: var(--over) !important; }
     .fill.over{ background: var(--over) !important; }
 
-    /* big charge display (glow ramps with energy) */
     .big{
       font-size:58px;
       font-weight:1000;
@@ -131,7 +117,6 @@
       font-size:12px;
       opacity:.92;
     }
-    .barLabel span{ opacity:.92; }
 
     .bar{
       height:14px;
@@ -148,7 +133,6 @@
       transition: width 80ms linear;
     }
 
-    /* ===== one-line last-message ticker (BLACK BOX, INDIGO DATA TEXT) ===== */
     .logLine{
       margin-top:10px;
       padding:8px 10px;
@@ -180,9 +164,7 @@
 
     .mono{white-space:pre-wrap; word-break:break-word; font-size:12px; opacity:.9; margin-top:10px; color: rgba(50,255,117,.90);}
 
-    /* ============================================================
-       AUDIO BUTTON PROMPT (red by default, turns green when enabled)
-       ============================================================ */
+    /* AUDIO BUTTON PROMPT (red by default, turns green when enabled) */
     #audioBtn{
       border-color: rgba(255,90,90,.55);
       color: rgba(255,90,90,.95);
@@ -195,26 +177,8 @@
       text-shadow: none;
     }
 
-    /* ============================================================
-       INLINE FIELD ROWS (label + input on one line)
-       ============================================================ */
-    .fieldRow{ margin-top:10px; }
-    .inlineLabel{
-      font-size:12px;
-      opacity:.92;
-      flex:0 0 auto;
-      min-width:64px;
-    }
-    .fieldRow input{
-      flex:1 1 320px;
-      min-width:220px;
-    }
-
-    /* ============================================================
-       DISRUPTOR: SHAKE METER (short bar + round lamp)
-       ============================================================ */
+    /* DISRUPTOR: SHAKE */
     .groupGap{ height:10px; }
-
     .meterRow{
       display:flex;
       align-items:center;
@@ -225,7 +189,6 @@
       max-width: 430px;
       margin:8px 0 10px;
     }
-
     .lamp{
       width:16px;
       height:16px;
@@ -243,9 +206,7 @@
         0 0 28px rgba(255,212,0,0.26);
     }
 
-    /* ============================================================
-       PAIR PHONE MODAL (QR popup)
-       ============================================================ */
+    /* PAIR PHONE MODAL (QR popup) */
     .modalOverlay{
       position:fixed;
       inset:0;
@@ -332,7 +293,6 @@
     @media (max-width: 900px){
       .grid{grid-template-columns:1fr;}
       .big{font-size:52px;}
-      .inlineLabel{min-width:56px;}
       .barShort{ max-width: 360px; }
       .qrCanvasWrap{ width: 280px; height: 280px; }
     }
@@ -350,17 +310,8 @@
     <div class="grid">
       <div class="card">
 
-        <!-- Worker inline -->
-        <div class="row fieldRow">
-          <span class="inlineLabel">Worker</span>
-          <input id="worker" value="https://orb-token.mrgarthwilliams.workers.dev" />
-        </div>
-
-        <!-- Room + buttons inline -->
-        <div class="row fieldRow">
-          <span class="inlineLabel">Room</span>
-          <input id="room" value="orb:test" />
-          <!-- Pair button LEFT of Audio -->
+        <!-- Buttons only (worker/room rows removed) -->
+        <div class="row">
           <button id="pairBtn">Pair Phone</button>
           <button id="audioBtn">Audio: Off</button>
           <button id="connect">Reconnect</button>
@@ -371,7 +322,6 @@
           <div>Status: <span id="status" class="dim">Auto-connecting…</span></div>
         </div>
 
-        <!-- one-line ticker -->
         <div class="logLine" aria-label="Last message">
           <span class="muted">Last message:</span>
           <span id="last" class="lastText">(none yet)</span>
@@ -396,10 +346,8 @@
           <div class="barLabel"><div>Speed</div><span id="vSpeed">0</span></div>
           <div class="bar"><div id="bSpeed" class="fill"></div></div>
 
-          <!-- single blank spacer between groups -->
           <div class="groupGap"></div>
 
-          <!-- DISRUPTOR: SHAKE -->
           <div class="barLabel"><div>Shake</div><span id="vShake">0</span></div>
           <div class="meterRow">
             <div class="bar barShort"><div id="bShake" class="fill"></div></div>
@@ -417,13 +365,7 @@
     </div>
   </div>
 
-  <!-- ============================================================
-       Pair Phone Modal
-       - Open via Pair Phone button
-       - Shows QR + URL
-       - Auto-closes on first orb message received
-       - Click outside or X to close
-       ============================================================ -->
+  <!-- Pair Phone Modal -->
   <div id="pairOverlay" class="modalOverlay" role="dialog" aria-modal="true" aria-label="Pair Phone">
     <div class="modal">
       <div class="modalHeader">
@@ -441,9 +383,11 @@
   <script>
     const $ = (id) => document.getElementById(id);
 
+    // ✅ SSOT: worker/room now fixed (no UI rows)
+    const WORKER_BASE = "https://orb-token.mrgarthwilliams.workers.dev";
+    let ROOM_CHANNEL  = "orb:test"; // overwritten by ?room=XYZ or new-room button
+
     const els = {
-      worker: $("worker"),
-      room: $("room"),
       newRoom: $("newRoom"),
       connect: $("connect"),
       audioBtn: $("audioBtn"),
@@ -513,17 +457,11 @@
       return base + "?room=" + encodeURIComponent(roomCode);
     }
 
-    // =========================================================================
-    // Pair modal: open/close + QR render
-    // =========================================================================
+    // Pair modal
     function openPairModal(){
-      const roomChannel = normalizeRoom(els.room.value);
-      els.room.value = roomChannel;
-
-      const url = phoneUrlFor(roomChannel);
+      const url = phoneUrlFor(ROOM_CHANNEL);
       els.pairUrl.textContent = url;
 
-      // clear + render QR
       els.pairQR.innerHTML = "";
       if (typeof QRCode === "undefined" || !QRCode.toCanvas) {
         els.pairQR.textContent = "QR lib failed to load";
@@ -546,26 +484,20 @@
       els.pairOverlay.classList.add("open");
     }
 
-    function closePairModal(){
-      els.pairOverlay.classList.remove("open");
-    }
+    function closePairModal(){ els.pairOverlay.classList.remove("open"); }
 
     els.pairBtn.addEventListener("click", openPairModal);
     els.pairClose.addEventListener("click", closePairModal);
 
-    // click outside modal closes
     els.pairOverlay.addEventListener("click", (e) => {
       if (e.target === els.pairOverlay) closePairModal();
     });
 
-    // ESC closes
     window.addEventListener("keydown", (e) => {
       if (e.key === "Escape" && els.pairOverlay.classList.contains("open")) closePairModal();
     });
 
-    // =========================================================================
     // CHARGE VISUALS
-    // =========================================================================
     const BG0 = { r: 0,   g: 0,  b: 0  };
     const BG1 = { r: 255, g: 42, b: 0  };
     function setBgFromEnergy(e01) {
@@ -578,9 +510,7 @@
     }
     setBgFromEnergy(0);
 
-    // =========================================================================
     // AUDIO (optional)
-    // =========================================================================
     let audioEnabled = false;
     let audioCtx = null, osc = null, gainNode = null;
 
@@ -665,9 +595,7 @@
       else disableAudio();
     });
 
-    // =========================================================================
     // SHAKE LAMP (500ms strobe)
-    // =========================================================================
     let lampTO = null;
     function flashShakeLamp(ms = 500){
       els.shakeLamp.classList.add("on");
@@ -678,16 +606,13 @@
       }, ms);
     }
 
-    // =========================================================================
-    // ABLY RECEIVER (AUTO-CONNECT)
-    // =========================================================================
+    // ABLY RECEIVER
     let realtime = null;
     let channel = null;
 
     let lastData = null;
     let rafPending = false;
 
-    // auto-close pairing modal on FIRST message (#1)
     let firstMsgSeen = false;
 
     function scheduleUIUpdate(data){
@@ -786,13 +711,22 @@
 
     let connecting = false;
 
+    function fatal(msg){
+      els.fatal.style.display = "block";
+      els.fatal.textContent = msg;
+    }
+
+    function setStatus(html, cls){
+      els.status.className = cls || "dim";
+      els.status.innerHTML = html;
+    }
+
     async function connect(opts = {}){
       if (connecting) return;
       connecting = true;
 
-      const workerBase = String(els.worker.value || "").replace(/\/+$/,"");
-      const roomChannel = normalizeRoom(els.room.value);
-      els.room.value = roomChannel;
+      const workerBase = WORKER_BASE.replace(/\/+$/,"");
+      const roomChannel = ROOM_CHANNEL;
 
       if (typeof Ably === "undefined" || !Ably.Realtime) {
         fatal("Ably library failed to load. Check DevTools → Console/Network for blocked CDN scripts.");
@@ -807,7 +741,7 @@
       try { if (realtime) realtime.close(); } catch(e) {}
       realtime = null; channel = null;
 
-      firstMsgSeen = false; // reset pairing auto-close on reconnect/new room
+      firstMsgSeen = false;
 
       const roomCode = stripOrbPrefix(roomChannel);
       const authUrl = workerBase + "/token?room=" + encodeURIComponent(roomCode) + "&v=" + Date.now();
@@ -828,13 +762,12 @@
       channel.subscribe("orb", (msg) => {
         const d = (msg && msg.data) ? msg.data : {};
 
-        // one-line stream
         let s = "";
         try { s = JSON.stringify(d); } catch(_) { s = String(d); }
         if (s.length > 240) s = s.slice(0, 240) + " …";
         els.last.textContent = s;
 
-        // ✅ Pairing: close popup on first received orb message
+        // auto-close pairing modal on first message
         if (!firstMsgSeen) {
           firstMsgSeen = true;
           if (els.pairOverlay.classList.contains("open")) closePairModal();
@@ -846,38 +779,21 @@
       connecting = false;
     }
 
-    function fatal(msg){
-      els.fatal.style.display = "block";
-      els.fatal.textContent = msg;
-    }
-
-    function setStatus(html, cls){
-      els.status.className = cls || "dim";
-      els.status.innerHTML = html;
-    }
-
+    // Buttons
     els.newRoom.addEventListener("click", async () => {
-      const roomChannel = "orb:" + randCode(6);
-      els.room.value = roomChannel;
+      ROOM_CHANNEL = "orb:" + randCode(6);
       await connect({ auto:false });
 
-      // nice touch: if modal is open, regenerate QR for new room
+      // if modal open, regenerate QR for new room
       if (els.pairOverlay.classList.contains("open")) openPairModal();
     });
 
     els.connect.addEventListener("click", () => connect({ auto:false }));
-    els.room.addEventListener("change", () => {
-      connect({ auto:false });
-      if (els.pairOverlay.classList.contains("open")) openPairModal();
-    });
-    els.worker.addEventListener("change", () => connect({ auto:false }));
 
+    // Init
     (async function init(){
       const urlRoom = readUrlRoomOrNull();
-      if (urlRoom) els.room.value = urlRoom;
-
-      const roomChannel = normalizeRoom(els.room.value);
-      els.room.value = roomChannel;
+      if (urlRoom) ROOM_CHANNEL = urlRoom;
 
       if (typeof Ably === "undefined") {
         fatal("Ably CDN did not load yet. Check DevTools → Network for ably.min-1.js.");
@@ -885,7 +801,6 @@
         return;
       }
 
-      // no hard-fail if QR library missing; pairing will show error text
       connect({ auto:true });
     })();
   </script>
