@@ -481,11 +481,11 @@
     // ✅ NEW: SPEED (FORCE) — raw-ish path for controllable throttle
     // =========================================================================
     const SPEED_FORCE_NORM   = 180.0; // raise = gentler, lower = stronger
-    const SPEED_FORCE_POW    = 2.2;   // >1 suppresses low speeds, keeps high reachable
-    const SPEED_FORCE_SHAPE  = 4.5;   // higher helps reach 1.0 at high motion
+    const SPEED_FORCE_POW    = 1.7;   // >1 suppresses low speeds, keeps high reachable
+    const SPEED_FORCE_SHAPE  = 5.2;   // higher helps reach 1.0 at high motion
 
     const SPEED_FORCE_LPF    = 0.55;  // fast smoothing on raw omega magnitude
-    const SPEED_FORCE_DEAD   = 6.0;   // deg/s deadzone (prevents tiny noise giving “force”)
+    const SPEED_FORCE_DEAD   = 8.0;   // deg/s deadzone (prevents tiny noise giving “force”)
 
     const SPEED_FORCE_MIN_CUTOFF = 0.45;
     const SPEED_FORCE_BETA       = 0.030;
