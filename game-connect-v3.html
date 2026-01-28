@@ -290,6 +290,28 @@
       line-height:1.25;
     }
 
+    /* Pair Phone = primary */
+    #pairBtn{
+        font-weight: 1000;              /* bolder than other buttons */
+        border-color: var(--g);         /* bright green stroke */
+        color: var(--g);
+    }
+    #pairBtn:hover{
+        border-color: var(--g);
+        box-shadow: 0 0 18px rgba(50,255,117,.14);
+    }
+
+    /* Reconnect + New room = dimmer (secondary) */
+    #connect,
+    #newRoom{
+        opacity: 0.72;
+        font-weight: 800; /* keep readable */
+    }
+    #connect:hover,
+    #newRoom:hover{
+        opacity: 0.92; /* comes alive on hover */
+    }
+
     @media (max-width: 900px){
       .grid{grid-template-columns:1fr;}
       .big{font-size:52px;}
