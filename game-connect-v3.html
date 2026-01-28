@@ -1,0 +1,687 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Orb Relay — Receiver Test</title>
+  <style>
+    :root{
+      --g:#32ff75;
+      --g2:rgba(50,255,117,.60);
+      --g3:rgba(50,255,117,.20);
+      --bg:#000;
+      --panel: rgba(0,0,0,.55);
+      --border: rgba(50,255,117,.18);
+      --bad:#ff5a5a;
+
+      /* overcharge */
+      --over:#ffd400;
+
+      /* charge-driven (0..1) */
+      --charge: 0;
+
+      /* message stream color (bright indigo, readable) */
+      --stream: rgba(140, 130, 255, 0.95);
+      --streamGlow: rgba(140, 130, 255, 0.32);
+    }
+
+    html,body{
+      height:100%;
+      margin:0;
+      background: var(--bg); /* overridden dynamically */
+      color:var(--g);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      transition: background-color 80ms linear;
+      overflow-x:hidden;
+    }
+
+    /* subtle vignette overlay so the orange still feels "ripper-y" */
+    body::before{
+      content:"";
+      position:fixed;
+      inset:0;
+      pointer-events:none;
+      background:
+        radial-gradient(1200px 700px at 50% 35%, rgba(0,0,0,.0) 0%, rgba(0,0,0,.45) 55%, rgba(0,0,0,.75) 100%);
+      opacity:0.95;
+      mix-blend-mode:multiply;
+      z-index:0;
+    }
+
+    .wrap{max-width:980px;margin:24px auto;padding:0 16px; position:relative; z-index:1;}
+    h1{margin:0 0 14px 0; font-size:18px; letter-spacing:.6px; text-align:center;}
+    .grid{display:grid; grid-template-columns: 1.2fr 1fr; gap:18px; align-items:start;}
+    .card{
+      background:var(--panel);
+      border:1px solid var(--border);
+      border-radius:16px;
+      padding:14px 14px 16px;
+      box-shadow: 0 18px 80px rgba(0,0,0,.55);
+      overflow:hidden;
+    }
+
+    label{display:block; font-size:12px; opacity:.92; margin:10px 0 6px;}
+    input{
+      width:100%;
+      box-sizing:border-box;
+      padding:10px 10px;
+      border-radius:12px;
+      border:1px solid var(--border);
+      background:rgba(0,0,0,.45);
+      color:var(--g);
+      outline:none;
+    }
+
+    .row{display:flex; gap:10px; align-items:center; flex-wrap:wrap;}
+    button{
+      padding:10px 14px;
+      border-radius:12px;
+      border:1px solid var(--border);
+      background:rgba(0,0,0,.45);
+      color:var(--g);
+      cursor:pointer;
+      font-weight:800;
+      white-space:nowrap;
+    }
+    button:hover{border-color:rgba(50,255,117,.35)}
+
+    .stat{margin-top:10px; font-size:13px; line-height:1.5;}
+    .dim{opacity:.78}
+    .bad{color:var(--bad); font-weight:900;}
+    .ok{color:#7dffab; font-weight:900;}
+
+    /* overcharge styling */
+    .over{ color: var(--over) !important; }
+    .fill.over{ background: var(--over) !important; }
+
+    /* big charge display (glow ramps with energy) */
+    .big{
+      font-size:58px;
+      font-weight:1000;
+      margin:12px 0 8px;
+      letter-spacing:-0.04em;
+      line-height:0.92;
+      text-align:left;
+      text-shadow:
+        0 0 calc(10px + 40px * var(--charge)) rgba(50,255,117, calc(0.12 + 0.38 * var(--charge))),
+        0 0 calc(2px + 18px * var(--charge)) rgba(50,255,117, calc(0.10 + 0.25 * var(--charge)));
+    }
+    .big.over{
+      text-shadow:
+        0 0 calc(10px + 40px * var(--charge)) rgba(255,212,0, calc(0.14 + 0.42 * var(--charge))),
+        0 0 calc(2px + 18px * var(--charge)) rgba(255,212,0, calc(0.10 + 0.28 * var(--charge)));
+    }
+
+    .bigSub{
+      margin-top:-2px;
+      font-size:12px;
+      opacity:0.85;
+    }
+
+    .bars{margin-top:10px;}
+    .barLabel{
+      display:flex;
+      align-items:baseline;
+      justify-content:space-between;
+      gap:10px;
+      font-size:12px;
+      opacity:.92;
+    }
+    .barLabel span{ opacity:.92; }
+
+    .bar{
+      height:14px;
+      border-radius:999px;
+      border:1px solid rgba(50,255,117,.35);
+      background:rgba(50,255,117,.08);
+      overflow:hidden;
+      margin:8px 0 10px;
+    }
+    .fill{
+      height:100%;
+      width:0%;
+      background: rgba(50,255,117,.85);
+      transition: width 80ms linear;
+    }
+
+    /* ===== one-line last-message ticker (BLACK BOX, INDIGO DATA TEXT) ===== */
+    .logLine{
+      margin-top:10px;
+      padding:8px 10px;
+      border-radius:12px;
+      border:1px solid rgba(50,255,117,.22);
+      background:rgba(0,0,0,.30); /* keep it black-ish as before */
+      color: rgba(50,255,117,.92);
+      font-size:11px;
+      line-height:1;
+      display:flex;
+      align-items:center;
+      gap:8px;
+      white-space:nowrap;
+      overflow:hidden;
+      box-shadow: inset 0 0 0 1px rgba(0,0,0,.25);
+    }
+    .logLine .muted{
+      opacity:.78;
+      flex:0 0 auto;
+    }
+    /* the live stream text only */
+    .lastText{
+      flex:1 1 auto;
+      overflow:hidden;
+      text-overflow:ellipsis;
+      color: var(--stream);
+      text-shadow: 0 0 10px var(--streamGlow);
+      opacity: 1;
+    }
+
+    .qrBox{
+      width: 280px; height: 280px;
+      border-radius: 14px;
+      border: 1px solid var(--border);
+      background: #fff;
+      display:grid; place-items:center;
+      overflow:hidden;
+      margin-top:10px;
+    }
+    .mono{white-space:pre-wrap; word-break:break-word; font-size:12px; opacity:.9; margin-top:10px; color: rgba(50,255,117,.90);}
+
+    /* ============================================================
+       AUDIO BUTTON PROMPT (red by default, turns green when enabled)
+       ============================================================ */
+    #audioBtn{
+      border-color: rgba(255,90,90,.55);
+      color: rgba(255,90,90,.95);
+      text-shadow: 0 0 10px rgba(255,90,90,.18);
+    }
+    #audioBtn:hover{
+      border-color: rgba(255,90,90,.78);
+    }
+    #audioBtn.on{
+      border-color: rgba(50,255,117,.35);
+      color: var(--g);
+      text-shadow: none;
+    }
+
+    /* ============================================================
+       INLINE FIELD ROWS (label + input on one line)
+       ============================================================ */
+    .fieldRow{ margin-top:10px; }
+    .inlineLabel{
+      font-size:12px;
+      opacity:.92;
+      flex:0 0 auto;
+      min-width:64px;
+    }
+    .fieldRow input{
+      flex:1 1 320px;
+      min-width:220px;
+    }
+
+    @media (max-width: 900px){
+      .grid{grid-template-columns:1fr;}
+      .qrBox{width: 240px; height:240px;}
+      .big{font-size:52px;}
+      .inlineLabel{min-width:56px;}
+    }
+  </style>
+
+  <!-- Ably + QR -->
+  <script src="https://cdn.ably.com/lib/ably.min-1.js"></script>
+  <script src="./qrcode.min.js"></script>
+</head>
+
+<body>
+  <div class="wrap">
+    <h1>Orb Relay — Receiver Test (laptop/game side)</h1>
+
+    <div class="grid">
+      <div class="card">
+
+        <!-- Worker inline -->
+        <div class="row fieldRow">
+          <span class="inlineLabel">Worker</span>
+          <input id="worker" value="https://orb-token.mrgarthwilliams.workers.dev" />
+        </div>
+
+        <!-- Room + buttons inline -->
+        <div class="row fieldRow">
+          <span class="inlineLabel">Room</span>
+          <input id="room" value="orb:test" />
+          <!-- audio FIRST -->
+          <button id="audioBtn">Audio: Off</button>
+          <button id="connect">Reconnect</button>
+          <button id="newRoom">New room</button>
+        </div>
+
+        <div class="stat">
+          <div>Status: <span id="status" class="dim">Auto-connecting…</span></div>
+        </div>
+
+        <!-- one-line ticker -->
+        <div class="logLine" aria-label="Last message">
+          <span class="muted">Last message:</span>
+          <span id="last" class="lastText">(none yet)</span>
+        </div>
+
+        <div id="bigCharge" class="big"><span id="pct">0</span>%</div>
+        <div class="bigSub dim">energy</div>
+
+        <div class="bars">
+          <div class="barLabel"><div>Energy</div><span id="vEnergy">0</span></div>
+          <div class="bar"><div id="bEnergy" class="fill"></div></div>
+
+          <div class="barLabel"><div>Groove</div><span id="vGroove">0</span></div>
+          <div class="bar"><div id="bGroove" class="fill"></div></div>
+
+          <div class="barLabel"><div>Orbit</div><span id="vOrbit">0</span></div>
+          <div class="bar"><div id="bOrbit" class="fill"></div></div>
+
+          <div class="barLabel"><div>Smooth</div><span id="vSmooth">0</span></div>
+          <div class="bar"><div id="bSmooth" class="fill"></div></div>
+
+          <div class="barLabel"><div>Speed</div><span id="vSpeed">0</span></div>
+          <div class="bar"><div id="bSpeed" class="fill"></div></div>
+        </div>
+
+        <div id="fatal" class="mono bad" style="display:none;"></div>
+      </div>
+
+      <div class="card">
+        <div style="font-weight:900; margin-bottom:8px;">Scan to pair phone → this room</div>
+        <div id="qr" class="qrBox"></div>
+        <div class="mono">
+URL:
+<span id="urlText"></span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+
+    const els = {
+      worker: $("worker"),
+      room: $("room"),
+      newRoom: $("newRoom"),
+      connect: $("connect"),
+      audioBtn: $("audioBtn"),
+
+      status: $("status"),
+      last: $("last"),
+
+      bigCharge: $("bigCharge"),
+      pct: $("pct"),
+
+      vEnergy: $("vEnergy"),
+      vGroove: $("vGroove"),
+      vOrbit: $("vOrbit"),
+      vSmooth: $("vSmooth"),
+      vSpeed: $("vSpeed"),
+
+      bEnergy: $("bEnergy"),
+      bGroove: $("bGroove"),
+      bOrbit: $("bOrbit"),
+      bSmooth: $("bSmooth"),
+      bSpeed: $("bSpeed"),
+
+      qr: $("qr"),
+      urlText: $("urlText"),
+      fatal: $("fatal"),
+    };
+
+    function clamp01(x){ x = Number(x); return Math.max(0, Math.min(1, isFinite(x) ? x : 0)); }
+    const toPct01  = (x01) => Math.round(clamp01(x01) * 100);
+    const toPctRaw = (x)   => Math.round(Math.max(0, Number(x) || 0) * 100);
+
+    function setBar(el, v01){
+      const p = clamp01(v01) * 100;
+      el.style.width = p.toFixed(1) + "%";
+    }
+
+    function randCode(n=6){
+      const A="ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+      let s="";
+      for(let i=0;i<n;i++) s += A[(Math.random()*A.length)|0];
+      return s;
+    }
+
+    function normalizeRoom(input){
+      let r = String(input || "").trim();
+      if (!r) r = "orb:test";
+      if (r.indexOf(":") === -1) r = "orb:" + r;
+      return r;
+    }
+
+    function stripOrbPrefix(room){
+      return String(room || "").startsWith("orb:") ? String(room).slice(4) : String(room || "");
+    }
+
+    function phoneUrlFor(roomChannel){
+      const base = "https://scrubbl3r.github.io/GameDev/mobile-orb-connect-v3.html";
+      const roomCode = stripOrbPrefix(roomChannel);
+      return base + "?room=" + encodeURIComponent(roomCode);
+    }
+
+    async function renderQR(roomChannel){
+      els.qr.innerHTML = "";
+      const url = phoneUrlFor(roomChannel);
+      els.urlText.textContent = url;
+
+      if (typeof QRCode === "undefined" || !QRCode.toCanvas) {
+        els.qr.style.background = "#fff";
+        els.qr.textContent = "QR lib failed to load";
+        return;
+      }
+
+      const canvas = document.createElement("canvas");
+      canvas.width = 280; canvas.height = 280;
+      els.qr.appendChild(canvas);
+
+      try{
+        await QRCode.toCanvas(canvas, url, {
+          width: 260,
+          margin: 2,
+          color: { dark: "#000000", light: "#ffffff" }
+        });
+      }catch(e){
+        els.qr.textContent = "QR render error";
+        console.error("QR render error:", e);
+      }
+    }
+
+    function fatal(msg){
+      els.fatal.style.display = "block";
+      els.fatal.textContent = msg;
+    }
+
+    function setStatus(html, cls){
+      els.status.className = cls || "dim";
+      els.status.innerHTML = html;
+    }
+
+    // =========================================================================
+    // CHARGE VISUALS
+    // =========================================================================
+    const BG0 = { r: 0,   g: 0,  b: 0  };
+    const BG1 = { r: 255, g: 42, b: 0  };
+    function setBgFromEnergy(e01) {
+      const t = clamp01(e01);
+      const r = Math.round(BG0.r + (BG1.r - BG0.r) * t);
+      const g = Math.round(BG0.g + (BG1.g - BG0.g) * t);
+      const b = Math.round(BG0.b + (BG1.b - BG0.b) * t);
+      document.body.style.backgroundColor = `rgb(${r},${g},${b})`;
+      document.documentElement.style.setProperty("--charge", String(t));
+    }
+    setBgFromEnergy(0);
+
+    // =========================================================================
+    // AUDIO (optional)
+    // =========================================================================
+    let audioEnabled = false;
+    let audioCtx = null, osc = null, gainNode = null;
+
+    const AUDIO_GATE   = 0.02;
+    const AUDIO_MIN_DB = -42;
+    const AUDIO_MAX_DB = -6;
+    const AUDIO_EXP    = 1.15;
+
+    const MASTER_GAIN  = 2.2;
+
+    const TONE_BASE_HZ    = 180;
+    const TONE_MAX_ADD_HZ = 220;
+
+    const dbToGain = (db) => Math.pow(10, db/20);
+
+    function energyToGain(e) {
+      if (e <= AUDIO_GATE) return 0;
+      const x = (e - AUDIO_GATE) / (1 - AUDIO_GATE);
+      const shaped = Math.pow(clamp01(x), AUDIO_EXP);
+      const db = AUDIO_MIN_DB + (AUDIO_MAX_DB - AUDIO_MIN_DB) * shaped;
+      return dbToGain(db);
+    }
+
+    function ensureAudio() {
+      if (audioCtx) return;
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      gainNode = audioCtx.createGain();
+      gainNode.gain.value = 0;
+
+      osc = audioCtx.createOscillator();
+      osc.type = "sine";
+      osc.frequency.value = TONE_BASE_HZ;
+
+      osc.connect(gainNode);
+      gainNode.connect(audioCtx.destination);
+      osc.start();
+    }
+
+    async function enableAudio() {
+      ensureAudio();
+      try { await audioCtx.resume(); } catch(_) {}
+      audioEnabled = true;
+      els.audioBtn.textContent = "Audio: On";
+      els.audioBtn.classList.add("on");      // green state
+      els.audioBtn.classList.remove("dim");
+    }
+
+    function disableAudio() {
+      audioEnabled = false;
+      els.audioBtn.textContent = "Audio: Off";
+      els.audioBtn.classList.remove("on");   // back to red state
+      if (audioCtx && gainNode) {
+        const now = audioCtx.currentTime;
+        gainNode.gain.cancelScheduledValues(now);
+        gainNode.gain.setTargetAtTime(0, now, 0.06);
+      }
+    }
+
+    function setAudio(eUI, groove, locked) {
+      if (!audioEnabled || !audioCtx || !gainNode || !osc) return;
+      const e01 = clamp01(eUI);
+
+      const gBase = energyToGain(e01);
+      const gGroove = locked ? (0.30 + 0.70*groove) : (0.08 + 0.22*groove);
+      const g = MASTER_GAIN * gBase * gGroove;
+
+      const f = TONE_BASE_HZ
+              + TONE_MAX_ADD_HZ * (locked ? groove : 0.30*groove)
+              + 60 * e01;
+
+      const now = audioCtx.currentTime;
+      gainNode.gain.cancelScheduledValues(now);
+      gainNode.gain.setTargetAtTime(g, now, 0.06);
+
+      osc.frequency.cancelScheduledValues(now);
+      osc.frequency.setTargetAtTime(f, now, 0.06);
+    }
+
+    // ensure initial red state
+    disableAudio();
+
+    els.audioBtn.addEventListener("click", async () => {
+      if (!audioEnabled) await enableAudio();
+      else disableAudio();
+    });
+
+    // =========================================================================
+    // ABLY RECEIVER (AUTO-CONNECT)
+    // =========================================================================
+    let realtime = null;
+    let channel = null;
+
+    let lastData = null;
+    let rafPending = false;
+
+    function scheduleUIUpdate(data){
+      lastData = data;
+      if (rafPending) return;
+      rafPending = true;
+      requestAnimationFrame(() => {
+        rafPending = false;
+        if (!lastData) return;
+        applyDataToUI(lastData);
+      });
+    }
+
+    function applyDataToUI(d){
+      function pick01NewOrOld(newKey, oldKey){
+        if (d[newKey] != null) {
+          const n = Number(d[newKey]);
+          return isFinite(n) ? n : 0;
+        }
+        const n = Number(d[oldKey]);
+        if (!isFinite(n)) return 0;
+        return (n > 1.5) ? (n / 100) : n;
+      }
+
+      function pick01Bounded(newKey, oldKey){
+        if (d[newKey] != null) {
+          const n = Number(d[newKey]);
+          return isFinite(n) ? n : 0;
+        }
+        const n = Number(d[oldKey]);
+        if (!isFinite(n)) return 0;
+        return (n > 1.5) ? (n / 100) : n;
+      }
+
+      const energy = pick01NewOrOld("energy01", "energy");
+      const groove = pick01Bounded("groove01", "groove");
+      const orbit  = pick01Bounded("orbit01",  "orbit");
+      const smooth = pick01Bounded("smooth01", "smooth");
+      const speed  = pick01Bounded("speed01",  "speed");
+      const locked = !!d.locked;
+
+      setBgFromEnergy(energy);
+
+      const eText = toPctRaw(energy);
+      const gP = toPct01(groove);
+      const oP = toPct01(orbit);
+      const sP = toPct01(smooth);
+      const sp = toPct01(speed);
+
+      els.pct.textContent = isFinite(eText) ? eText : 0;
+
+      els.vEnergy.textContent = `${isFinite(eText) ? eText : 0}%`;
+      els.vGroove.textContent = `${gP}%${locked ? " (locked)" : ""}`;
+      els.vOrbit.textContent  = `${oP}%`;
+      els.vSmooth.textContent = `${sP}%`;
+      els.vSpeed.textContent  = `${sp}%`;
+
+      setBar(els.bEnergy, energy);
+      setBar(els.bGroove, groove);
+      setBar(els.bOrbit,  orbit);
+      setBar(els.bSmooth, smooth);
+      setBar(els.bSpeed,  speed);
+
+      const over = (energy > 1);
+      els.bigCharge.classList.toggle("over", over);
+      els.vEnergy.classList.toggle("over", over);
+      els.bEnergy.classList.toggle("over", over);
+
+      setAudio(energy, groove, locked);
+    }
+
+    function readUrlRoomOrNull(){
+      try{
+        const u = new URL(location.href);
+        const r = (u.searchParams.get("room") || "").trim();
+        if (!r) return null;
+        return normalizeRoom(r);
+      }catch(_){
+        return null;
+      }
+    }
+
+    let connecting = false;
+
+    async function connect(opts = {}){
+      if (connecting) return;
+      connecting = true;
+
+      const workerBase = String(els.worker.value || "").replace(/\/+$/,"");
+      const roomChannel = normalizeRoom(els.room.value);
+      els.room.value = roomChannel;
+
+      renderQR(roomChannel);
+
+      if (typeof Ably === "undefined" || !Ably.Realtime) {
+        fatal("Ably library failed to load. Check DevTools → Console/Network for blocked CDN scripts.");
+        setStatus("FAILED — Ably lib missing", "bad");
+        connecting = false;
+        return;
+      }
+
+      setStatus(opts.auto ? "Auto-connecting…" : "Reconnecting…", "ok");
+
+      try { if (channel) channel.unsubscribe(); } catch(e) {}
+      try { if (realtime) realtime.close(); } catch(e) {}
+      realtime = null; channel = null;
+
+      const roomCode = stripOrbPrefix(roomChannel);
+      const authUrl = workerBase + "/token?room=" + encodeURIComponent(roomCode) + "&v=" + Date.now();
+
+      realtime = new Ably.Realtime({ authUrl, echoMessages:false });
+
+      realtime.connection.on("connected", () => setStatus("Connected ✓ (listening for phone…)", "ok"));
+      realtime.connection.on("failed", (st) => { console.error("Ably failed:", st); setStatus("FAILED — see console", "bad"); });
+      realtime.connection.on("disconnected", () => setStatus("Disconnected (refresh / reconnect)", "bad"));
+
+      channel = realtime.channels.get(roomChannel);
+
+      channel.attach((err) => {
+        if (err) { console.error("Channel attach failed:", err); setStatus("Channel attach FAILED — see console", "bad"); return; }
+        setStatus("Connected ✓ (channel attached, listening…)", "ok");
+      });
+
+      channel.subscribe("orb", (msg) => {
+        const d = (msg && msg.data) ? msg.data : {};
+
+        // one-line stream
+        let s = "";
+        try { s = JSON.stringify(d); } catch(_) { s = String(d); }
+        if (s.length > 240) s = s.slice(0, 240) + " …";
+        els.last.textContent = s;
+
+        scheduleUIUpdate(d);
+      });
+
+      connecting = false;
+    }
+
+    els.newRoom.addEventListener("click", async () => {
+      const roomChannel = "orb:" + randCode(6);
+      els.room.value = roomChannel;
+      await connect({ auto:false });
+    });
+
+    els.connect.addEventListener("click", () => connect({ auto:false }));
+    els.room.addEventListener("change", () => connect({ auto:false }));
+    els.worker.addEventListener("change", () => connect({ auto:false }));
+
+    (async function init(){
+      const urlRoom = readUrlRoomOrNull();
+      if (urlRoom) els.room.value = urlRoom;
+
+      const roomChannel = normalizeRoom(els.room.value);
+      els.room.value = roomChannel;
+
+      await renderQR(roomChannel);
+
+      if (typeof Ably === "undefined") {
+        fatal("Ably CDN did not load yet. Check DevTools → Network for ably.min-1.js.");
+        setStatus("FAILED — Ably missing", "bad");
+        return;
+      }
+      if (typeof QRCode === "undefined") {
+        fatal("QR lib did not load yet. Check DevTools → Network for qrcode.min.js.");
+      } else {
+        els.fatal.style.display = "none";
+      }
+
+      connect({ auto:true });
+    })();
+  </script>
+</body>
+</html>
