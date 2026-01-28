@@ -235,11 +235,6 @@
   <script>
   (() => {
     // =========================================================================
-    // BUILD / QR sanity (you mentioned QR is hardcoded to -2 elsewhere)
-    // =========================================================================
-    const EXPECT_PATH_INCLUDES = "-2"; // warn if this page isn't the -2 build
-
-    // =========================================================================
     // Diagnostics helpers
     // =========================================================================
     const $ = (id) => document.getElementById(id);
@@ -289,11 +284,6 @@
     log("boot url=" + window.location.href);
     log("ua=" + navigator.userAgent);
     log("secureContext=" + !!window.isSecureContext);
-
-    if (!String(window.location.pathname || "").includes(EXPECT_PATH_INCLUDES)) {
-      log("WARN: this does not look like the -2 build (QR may point elsewhere)", { pathname: window.location.pathname });
-      setStage("warning: not -2 path", "warn");
-    }
 
     setSecure(!!window.isSecureContext);
     setPerm("unknown", "dim");
@@ -531,6 +521,22 @@
     const SMOOTH_KILL_THRESH     = 0.12; // below this: NO earn, energy drains
     const SMOOTH_KILL_DECAY_MULT = 3.25; // how hard to drain when below thresh
     const SMOOTH_KILL_UNLOCK     = true; // drop lock/grace when below thresh
+
+    // =========================================================================
+    // DISRUPTOR METER v1 — SHAKE (high-frequency / high-amplitude impulse)
+    // - Computed from accelerationIncludingGravity magnitude, high-passed via slow baseline.
+    // - Integrates into shake01 (0..1), fast decay.
+    // - Emits shakeHit (one-shot) when crossing threshold (cooldown).
+    // =========================================================================
+    const SHAKE_BASELINE_HZ   = 0.65;  // slow baseline tracking (gravity + slow drift)
+    const SHAKE_DEADZONE     = 0.85;  // m/s^2 (ignore tiny bumps)
+    const SHAKE_GAIN         = 3.20;  // how fast shake01 fills
+    const SHAKE_DECAY        = 2.10;  // how fast shake01 decays per second
+    const SHAKE_HIT_THRESH   = 0.85;  // crossing this emits shakeHit
+    const SHAKE_ARM_THRESH   = 0.65;  // must be above this to be "armed"
+    const SHAKE_COOLDOWN_SEC = 0.55;  // min time between shakeHit events
+    const SHAKE_CADENCE_SEC  = 0.28;  // require two spikes within this window to count as a "real shake"
+    const SHAKE_SPIKE_GATE   = 2.2;   // m/s^2 spike that counts as a "spike" for cadence
 
     // =========================================================================
     // AUDIO MAPPING — gentler curve, audible by ~10% energy
@@ -781,6 +787,13 @@
     let lastSmoothUI = 0;
     let lastSpeedUI  = 0;
 
+    // SHAKE state
+    let shake01 = 0;
+    let accelBaseMag = 9.81;      // slow baseline of |a|
+    let shakeCooldownLeft = 0;
+    let lastSpikeTime = -1e9;     // for cadence requirement
+    let hadRecentSpike = false;   // for cadence requirement
+
     let audioCtx = null, osc = null, gainNode = null;
 
     function ensureAudio() {
@@ -895,6 +908,63 @@
 
     let motionCount = 0;
 
+    function updateShake(e, t, dt){
+      // Prefer accelerationIncludingGravity (widest support), fallback to acceleration.
+      const acc = e.accelerationIncludingGravity || e.acceleration;
+      if (!acc) {
+        // No accel available: just decay.
+        if (dt > 0) shake01 = Math.max(0, shake01 - SHAKE_DECAY * dt);
+        if (dt > 0) shakeCooldownLeft = Math.max(0, shakeCooldownLeft - dt);
+        return { shake01, shakeHit:false, spike:0, amag:0 };
+      }
+
+      const ax = Number(acc.x) || 0;
+      const ay = Number(acc.y) || 0;
+      const az = Number(acc.z) || 0;
+      const amag = mag3(ax, ay, az);
+
+      const dtSafe = Math.max(1e-3, dt || 1/60);
+
+      // slow baseline of |a| (tracks gravity + slow drift)
+      const aBase = alphaFromCutoff(dtSafe, SHAKE_BASELINE_HZ);
+      accelBaseMag = (isFinite(accelBaseMag) ? accelBaseMag : amag);
+      accelBaseMag = (1 - aBase) * accelBaseMag + aBase * amag;
+
+      // high-passed "spike" energy
+      const rawSpike = Math.abs(amag - accelBaseMag);
+      const spike = Math.max(0, rawSpike - SHAKE_DEADZONE);
+
+      // cadence: require 2 spikes within window to arm "hit" (reduces single-bump triggers)
+      if (spike > SHAKE_SPIKE_GATE) {
+        if ((t - lastSpikeTime) <= SHAKE_CADENCE_SEC) {
+          hadRecentSpike = true;
+        }
+        lastSpikeTime = t;
+      }
+      if ((t - lastSpikeTime) > SHAKE_CADENCE_SEC) {
+        hadRecentSpike = false;
+      }
+
+      // integrate meter with fast decay
+      shake01 = clamp01(shake01 + spike * SHAKE_GAIN * dtSafe - SHAKE_DECAY * dtSafe);
+
+      // cooldown
+      shakeCooldownLeft = Math.max(0, shakeCooldownLeft - dtSafe);
+
+      // one-shot event
+      let shakeHit = false;
+      const armed = (shake01 >= SHAKE_ARM_THRESH);
+      const cadenceOk = hadRecentSpike; // requires two spikes close together
+      if (armed && cadenceOk && shakeCooldownLeft <= 0 && shake01 >= SHAKE_HIT_THRESH) {
+        shakeHit = true;
+        shakeCooldownLeft = SHAKE_COOLDOWN_SEC;
+        // drop meter a bit so repeated publishes don't re-trigger instantly
+        shake01 = Math.max(0, shake01 - 0.40);
+      }
+
+      return { shake01, shakeHit, spike, amag };
+    }
+
     function onMotion(e) {
       if (!running) return;
 
@@ -908,6 +978,9 @@
       d.motion.textContent = String(motionCount);
 
       if (dt > 0) dtBuf.push(dt);
+
+      // --- SHAKE UPDATE (always, independent of rotationRate presence) ---
+      const sh = updateShake(e, t, dt);
 
       const rr = e.rotationRate;
 
@@ -933,6 +1006,8 @@
           orbit01: held.orbitOut,
           smooth01: held.smoothOut,
           speed01: held.speedOut,
+          shake01: sh.shake01,
+          shakeHit: sh.shakeHit,
           locked: false,
           hz: 0
         };
@@ -1040,6 +1115,8 @@
           orbit01: held.orbitOut,
           smooth01: held.smoothOut,
           speed01: held.speedOut,
+          shake01: sh.shake01,
+          shakeHit: sh.shakeHit,
           locked: false,
           hz: 0
         };
@@ -1167,6 +1244,8 @@
         orbit01: orbitShown,
         smooth01: smoothScore,
         speed01: speedScore,
+        shake01: sh.shake01,
+        shakeHit: sh.shakeHit,
         locked: lockedNow,
         hz: grooveHz
       };
@@ -1304,6 +1383,13 @@
         lastOrbitUI  = 0;
         lastSmoothUI = 0;
         lastSpeedUI  = 0;
+
+        // reset shake state
+        shake01 = 0;
+        accelBaseMag = 9.81;
+        shakeCooldownLeft = 0;
+        lastSpikeTime = -1e9;
+        hadRecentSpike = false;
 
         setAudio(0,0,false);
         setBgFromEnergy(0);
