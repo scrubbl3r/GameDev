@@ -492,11 +492,24 @@
     // =========================================================================
     const SPEED_DEAD_DPS       = 8.0;
     const SPEED_CAP_DPS        = 360.0;
-    const SPEED_EMA_CUTOFF_HZ  = 6.0;
+
+    // ✅ Adaptive EMA cutoff (Option A)
+    // Low speed = higher cutoff (snappy), high speed = lower cutoff (steadier)
+    const SPEED_EMA_CUTOFF_FAST_HZ = 7.5;  // low-speed responsiveness
+    const SPEED_EMA_CUTOFF_SLOW_HZ = 2.2;  // high-speed smoothing
+
+    // Where the adaptation happens (deg/s AFTER deadzone)
+    // Below START: mostly FAST. Above END: mostly SLOW.
+    const SPEED_ADAPT_START_DPS = 18.0;
+    const SPEED_ADAPT_END_DPS   = 140.0;
+
     const SPEED_NORM_DPS       = 220.0;
     const SPEED_MAP_POW        = 1.10;
+
+    // Output envelope (still useful, keep these)
     const SPEED_ATTACK_HZ      = 7.0;
     const SPEED_RELEASE_HZ     = 12.0;
+
 
     // =========================================================================
     // SSOT MOBILE 2.0 — ENERGY MODEL (still present, but speed-decoupled below)
@@ -555,6 +568,16 @@
       const tau = 1 / (2 * Math.PI * cutoffHz);
       return 1 / (1 + tau / Math.max(1e-4, dt));
     }
+
+    const smoothstep01 = (t) => {
+        t = clamp01(t);
+        return t * t * (3 - 2 * t);
+    };
+
+    const invLerp01 = (a, b, v) => {
+        if (Math.abs(b - a) < 1e-9) return 0;
+        return clamp01((v - a) / (b - a));
+    };
 
     function median(arr) {
       if (!arr.length) return 0;
@@ -866,28 +889,38 @@
     }
 
     function updateSpeedV0(wRawDps, dt) {
-      const dtSafe = Math.max(1e-3, dt || 1/60);
+  const dtSafe = Math.max(1e-3, dt || 1/60);
 
-      const wRaw = Math.max(0, wRawDps || 0);
-      const cap  = SPEED_CAP_DPS;
-      const wCap = Math.min(wRaw, cap);
+        const wRaw = Math.max(0, wRawDps || 0);
+        const cap  = SPEED_CAP_DPS;
+        const wCap = Math.min(wRaw, cap);
 
-      const wDz = Math.max(0, wCap - SPEED_DEAD_DPS);
+        // Deg/s after deadzone
+        const wDz = Math.max(0, wCap - SPEED_DEAD_DPS);
 
-      const aE = alphaFromCutoff(dtSafe, SPEED_EMA_CUTOFF_HZ);
-      mSpeedEMA = (mSpeedEMA === 0) ? wDz : ((1 - aE) * mSpeedEMA + aE * wDz);
-      const wFilt = mSpeedEMA;
+        // ✅ Adaptive cutoff based on current (dead-zoned) angular rate
+        // t=0 => FAST cutoff (snappy); t=1 => SLOW cutoff (more smoothing)
+        const tAdapt = smoothstep01(invLerp01(SPEED_ADAPT_START_DPS, SPEED_ADAPT_END_DPS, wDz));
+        const cutoffHz = lerp(SPEED_EMA_CUTOFF_FAST_HZ, SPEED_EMA_CUTOFF_SLOW_HZ, tAdapt);
 
-      const n = clamp01(wFilt / SPEED_NORM_DPS);
-      const target = Math.pow(n, SPEED_MAP_POW);
+        // EMA on wDz using adaptive cutoff
+        const aE = alphaFromCutoff(dtSafe, cutoffHz);
+        mSpeedEMA = (mSpeedEMA === 0) ? wDz : ((1 - aE) * mSpeedEMA + aE * wDz);
+        const wFilt = mSpeedEMA;
 
-      const aAtk = alphaFromCutoff(dtSafe, SPEED_ATTACK_HZ);
-      const aRel = alphaFromCutoff(dtSafe, SPEED_RELEASE_HZ);
-      const a = (target >= speedOut) ? aAtk : aRel;
-      speedOut = (1 - a) * speedOut + a * target;
+        // Normalize + shape
+        const n = clamp01(wFilt / SPEED_NORM_DPS);
+        const target = Math.pow(n, SPEED_MAP_POW);
 
-      return { cap, dt: dtSafe, wRaw, wCap, wFilt, speed: speedOut };
+        // Envelope (keeps “meter feel” stable)
+        const aAtk = alphaFromCutoff(dtSafe, SPEED_ATTACK_HZ);
+        const aRel = alphaFromCutoff(dtSafe, SPEED_RELEASE_HZ);
+        const a = (target >= speedOut) ? aAtk : aRel;
+        speedOut = (1 - a) * speedOut + a * target;
+
+        return { cap, dt: dtSafe, wRaw, wCap, wFilt, speed: speedOut, cutoffHz, tAdapt, wDz };
     }
+
 
     function updateShake(e, t, dt){
       const acc = e.accelerationIncludingGravity || e.acceleration;
