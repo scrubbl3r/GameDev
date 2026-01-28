@@ -154,7 +154,7 @@
       padding:8px 10px;
       border-radius:12px;
       border:1px solid rgba(50,255,117,.22);
-      background:rgba(0,0,0,.30); /* keep it black-ish as before */
+      background:rgba(0,0,0,.30);
       color: rgba(50,255,117,.92);
       font-size:11px;
       line-height:1;
@@ -169,7 +169,6 @@
       opacity:.78;
       flex:0 0 auto;
     }
-    /* the live stream text only */
     .lastText{
       flex:1 1 auto;
       overflow:hidden;
@@ -179,15 +178,6 @@
       opacity: 1;
     }
 
-    .qrBox{
-      width: 280px; height: 280px;
-      border-radius: 14px;
-      border: 1px solid var(--border);
-      background: #fff;
-      display:grid; place-items:center;
-      overflow:hidden;
-      margin-top:10px;
-    }
     .mono{white-space:pre-wrap; word-break:break-word; font-size:12px; opacity:.9; margin-top:10px; color: rgba(50,255,117,.90);}
 
     /* ============================================================
@@ -198,9 +188,7 @@
       color: rgba(255,90,90,.95);
       text-shadow: 0 0 10px rgba(255,90,90,.18);
     }
-    #audioBtn:hover{
-      border-color: rgba(255,90,90,.78);
-    }
+    #audioBtn:hover{ border-color: rgba(255,90,90,.78); }
     #audioBtn.on{
       border-color: rgba(50,255,117,.35);
       color: var(--g);
@@ -225,7 +213,7 @@
     /* ============================================================
        DISRUPTOR: SHAKE METER (short bar + round lamp)
        ============================================================ */
-    .groupGap{ height:10px; } /* single space between groups */
+    .groupGap{ height:10px; }
 
     .meterRow{
       display:flex;
@@ -234,7 +222,7 @@
     }
     .barShort{
       flex:1 1 auto;
-      max-width: 430px; /* shorter than other bars to make room for lamp */
+      max-width: 430px;
       margin:8px 0 10px;
     }
 
@@ -255,12 +243,98 @@
         0 0 28px rgba(255,212,0,0.26);
     }
 
+    /* ============================================================
+       PAIR PHONE MODAL (QR popup)
+       ============================================================ */
+    .modalOverlay{
+      position:fixed;
+      inset:0;
+      background: rgba(0,0,0,.72);
+      display:none;
+      align-items:center;
+      justify-content:center;
+      z-index:1000;
+      padding:16px;
+    }
+    .modalOverlay.open{ display:flex; }
+
+    .modal{
+      width: min(520px, 92vw);
+      border-radius: 18px;
+      border: 1px solid rgba(50,255,117,.22);
+      background: rgba(0,0,0,.70);
+      box-shadow: 0 22px 120px rgba(0,0,0,.70);
+      overflow:hidden;
+    }
+    .modalHeader{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:10px;
+      padding:12px 12px;
+      border-bottom: 1px solid rgba(50,255,117,.14);
+    }
+    .modalTitle{
+      font-weight:900;
+      letter-spacing:.5px;
+      font-size:12px;
+      opacity:0.95;
+    }
+    .iconBtn{
+      padding:8px 10px;
+      border-radius:12px;
+      border:1px solid rgba(50,255,117,.18);
+      background: rgba(0,0,0,.35);
+      color: var(--g);
+      cursor:pointer;
+      font-weight:900;
+      line-height:1;
+    }
+    .iconBtn:hover{ border-color: rgba(50,255,117,.35); }
+
+    .modalBody{
+      padding:14px 14px 16px;
+      display:flex;
+      flex-direction:column;
+      gap:10px;
+      align-items:center;
+    }
+    .qrCanvasWrap{
+      width: 320px;
+      height: 320px;
+      border-radius: 16px;
+      border: 1px solid rgba(50,255,117,.16);
+      background: #fff;
+      display:grid;
+      place-items:center;
+      overflow:hidden;
+    }
+    .pairUrl{
+      width: 100%;
+      font-size: 12px;
+      opacity: 0.92;
+      color: rgba(50,255,117,.90);
+      word-break: break-word;
+      background: rgba(0,0,0,.35);
+      border: 1px solid rgba(50,255,117,.16);
+      border-radius: 12px;
+      padding: 10px 10px;
+      box-sizing:border-box;
+      text-align:left;
+    }
+    .pairHint{
+      font-size: 11px;
+      opacity: 0.75;
+      text-align:center;
+      line-height:1.25;
+    }
+
     @media (max-width: 900px){
       .grid{grid-template-columns:1fr;}
-      .qrBox{width: 240px; height:240px;}
       .big{font-size:52px;}
       .inlineLabel{min-width:56px;}
       .barShort{ max-width: 360px; }
+      .qrCanvasWrap{ width: 280px; height: 280px; }
     }
   </style>
 
@@ -286,7 +360,8 @@
         <div class="row fieldRow">
           <span class="inlineLabel">Room</span>
           <input id="room" value="orb:test" />
-          <!-- audio FIRST -->
+          <!-- Pair button LEFT of Audio -->
+          <button id="pairBtn">Pair Phone</button>
           <button id="audioBtn">Audio: Off</button>
           <button id="connect">Reconnect</button>
           <button id="newRoom">New room</button>
@@ -336,12 +411,29 @@
       </div>
 
       <div class="card">
-        <div style="font-weight:900; margin-bottom:8px;">Scan to pair phone → this room</div>
-        <div id="qr" class="qrBox"></div>
-        <div class="mono">
-URL:
-<span id="urlText"></span>
-        </div>
+        <div style="font-weight:900; margin-bottom:8px;">(reserved)</div>
+        <div class="mono dim">Right panel reserved for game/physics tests.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================
+       Pair Phone Modal
+       - Open via Pair Phone button
+       - Shows QR + URL
+       - Auto-closes on first orb message received
+       - Click outside or X to close
+       ============================================================ -->
+  <div id="pairOverlay" class="modalOverlay" role="dialog" aria-modal="true" aria-label="Pair Phone">
+    <div class="modal">
+      <div class="modalHeader">
+        <div class="modalTitle">PAIR PHONE</div>
+        <button id="pairClose" class="iconBtn" aria-label="Close">✕</button>
+      </div>
+      <div class="modalBody">
+        <div id="pairQR" class="qrCanvasWrap" aria-label="QR code"></div>
+        <div id="pairUrl" class="pairUrl"></div>
+        <div class="pairHint">Scan with your phone. The popup will close automatically when the phone starts sending data.</div>
       </div>
     </div>
   </div>
@@ -355,6 +447,7 @@ URL:
       newRoom: $("newRoom"),
       connect: $("connect"),
       audioBtn: $("audioBtn"),
+      pairBtn: $("pairBtn"),
 
       status: $("status"),
       last: $("last"),
@@ -378,9 +471,13 @@ URL:
 
       shakeLamp: $("shakeLamp"),
 
-      qr: $("qr"),
-      urlText: $("urlText"),
       fatal: $("fatal"),
+
+      // Pair modal
+      pairOverlay: $("pairOverlay"),
+      pairClose: $("pairClose"),
+      pairQR: $("pairQR"),
+      pairUrl: $("pairUrl"),
     };
 
     function clamp01(x){ x = Number(x); return Math.max(0, Math.min(1, isFinite(x) ? x : 0)); }
@@ -416,42 +513,55 @@ URL:
       return base + "?room=" + encodeURIComponent(roomCode);
     }
 
-    async function renderQR(roomChannel){
-      els.qr.innerHTML = "";
+    // =========================================================================
+    // Pair modal: open/close + QR render
+    // =========================================================================
+    function openPairModal(){
+      const roomChannel = normalizeRoom(els.room.value);
+      els.room.value = roomChannel;
+
       const url = phoneUrlFor(roomChannel);
-      els.urlText.textContent = url;
+      els.pairUrl.textContent = url;
 
+      // clear + render QR
+      els.pairQR.innerHTML = "";
       if (typeof QRCode === "undefined" || !QRCode.toCanvas) {
-        els.qr.style.background = "#fff";
-        els.qr.textContent = "QR lib failed to load";
-        return;
-      }
+        els.pairQR.textContent = "QR lib failed to load";
+      } else {
+        const canvas = document.createElement("canvas");
+        const size = Math.min(320, Math.max(240, Math.floor(window.innerWidth * 0.70)));
+        canvas.width = size; canvas.height = size;
+        els.pairQR.appendChild(canvas);
 
-      const canvas = document.createElement("canvas");
-      canvas.width = 280; canvas.height = 280;
-      els.qr.appendChild(canvas);
-
-      try{
-        await QRCode.toCanvas(canvas, url, {
-          width: 260,
+        QRCode.toCanvas(canvas, url, {
+          width: size - 28,
           margin: 2,
           color: { dark: "#000000", light: "#ffffff" }
+        }).catch((e) => {
+          els.pairQR.textContent = "QR render error";
+          console.error("QR render error:", e);
         });
-      }catch(e){
-        els.qr.textContent = "QR render error";
-        console.error("QR render error:", e);
       }
+
+      els.pairOverlay.classList.add("open");
     }
 
-    function fatal(msg){
-      els.fatal.style.display = "block";
-      els.fatal.textContent = msg;
+    function closePairModal(){
+      els.pairOverlay.classList.remove("open");
     }
 
-    function setStatus(html, cls){
-      els.status.className = cls || "dim";
-      els.status.innerHTML = html;
-    }
+    els.pairBtn.addEventListener("click", openPairModal);
+    els.pairClose.addEventListener("click", closePairModal);
+
+    // click outside modal closes
+    els.pairOverlay.addEventListener("click", (e) => {
+      if (e.target === els.pairOverlay) closePairModal();
+    });
+
+    // ESC closes
+    window.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && els.pairOverlay.classList.contains("open")) closePairModal();
+    });
 
     // =========================================================================
     // CHARGE VISUALS
@@ -514,14 +624,14 @@ URL:
       try { await audioCtx.resume(); } catch(_) {}
       audioEnabled = true;
       els.audioBtn.textContent = "Audio: On";
-      els.audioBtn.classList.add("on");      // green state
+      els.audioBtn.classList.add("on");
       els.audioBtn.classList.remove("dim");
     }
 
     function disableAudio() {
       audioEnabled = false;
       els.audioBtn.textContent = "Audio: Off";
-      els.audioBtn.classList.remove("on");   // back to red state
+      els.audioBtn.classList.remove("on");
       if (audioCtx && gainNode) {
         const now = audioCtx.currentTime;
         gainNode.gain.cancelScheduledValues(now);
@@ -549,9 +659,7 @@ URL:
       osc.frequency.setTargetAtTime(f, now, 0.06);
     }
 
-    // ensure initial red state
     disableAudio();
-
     els.audioBtn.addEventListener("click", async () => {
       if (!audioEnabled) await enableAudio();
       else disableAudio();
@@ -559,10 +667,6 @@ URL:
 
     // =========================================================================
     // SHAKE LAMP (500ms strobe)
-    // - Flash triggers when we receive:
-    //    - d.shakeHit === true  OR
-    //    - d.shakeEvent is truthy OR
-    //    - d.verb === "shake" (future-proof)
     // =========================================================================
     let lampTO = null;
     function flashShakeLamp(ms = 500){
@@ -582,6 +686,9 @@ URL:
 
     let lastData = null;
     let rafPending = false;
+
+    // auto-close pairing modal on FIRST message (#1)
+    let firstMsgSeen = false;
 
     function scheduleUIUpdate(data){
       lastData = data;
@@ -653,7 +760,6 @@ URL:
       els.vEnergy.classList.toggle("over", over);
       els.bEnergy.classList.toggle("over", over);
 
-      // shake lamp trigger (tolerant to future payload variations)
       const shakeHit =
         d.shakeHit === true ||
         d.shakeEvent === true ||
@@ -688,8 +794,6 @@ URL:
       const roomChannel = normalizeRoom(els.room.value);
       els.room.value = roomChannel;
 
-      renderQR(roomChannel);
-
       if (typeof Ably === "undefined" || !Ably.Realtime) {
         fatal("Ably library failed to load. Check DevTools → Console/Network for blocked CDN scripts.");
         setStatus("FAILED — Ably lib missing", "bad");
@@ -702,6 +806,8 @@ URL:
       try { if (channel) channel.unsubscribe(); } catch(e) {}
       try { if (realtime) realtime.close(); } catch(e) {}
       realtime = null; channel = null;
+
+      firstMsgSeen = false; // reset pairing auto-close on reconnect/new room
 
       const roomCode = stripOrbPrefix(roomChannel);
       const authUrl = workerBase + "/token?room=" + encodeURIComponent(roomCode) + "&v=" + Date.now();
@@ -728,20 +834,42 @@ URL:
         if (s.length > 240) s = s.slice(0, 240) + " …";
         els.last.textContent = s;
 
+        // ✅ Pairing: close popup on first received orb message
+        if (!firstMsgSeen) {
+          firstMsgSeen = true;
+          if (els.pairOverlay.classList.contains("open")) closePairModal();
+        }
+
         scheduleUIUpdate(d);
       });
 
       connecting = false;
     }
 
+    function fatal(msg){
+      els.fatal.style.display = "block";
+      els.fatal.textContent = msg;
+    }
+
+    function setStatus(html, cls){
+      els.status.className = cls || "dim";
+      els.status.innerHTML = html;
+    }
+
     els.newRoom.addEventListener("click", async () => {
       const roomChannel = "orb:" + randCode(6);
       els.room.value = roomChannel;
       await connect({ auto:false });
+
+      // nice touch: if modal is open, regenerate QR for new room
+      if (els.pairOverlay.classList.contains("open")) openPairModal();
     });
 
     els.connect.addEventListener("click", () => connect({ auto:false }));
-    els.room.addEventListener("change", () => connect({ auto:false }));
+    els.room.addEventListener("change", () => {
+      connect({ auto:false });
+      if (els.pairOverlay.classList.contains("open")) openPairModal();
+    });
     els.worker.addEventListener("change", () => connect({ auto:false }));
 
     (async function init(){
@@ -751,19 +879,13 @@ URL:
       const roomChannel = normalizeRoom(els.room.value);
       els.room.value = roomChannel;
 
-      await renderQR(roomChannel);
-
       if (typeof Ably === "undefined") {
         fatal("Ably CDN did not load yet. Check DevTools → Network for ably.min-1.js.");
         setStatus("FAILED — Ably missing", "bad");
         return;
       }
-      if (typeof QRCode === "undefined") {
-        fatal("QR lib did not load yet. Check DevTools → Network for qrcode.min.js.");
-      } else {
-        els.fatal.style.display = "none";
-      }
 
+      // no hard-fail if QR library missing; pairing will show error text
       connect({ auto:true });
     })();
   </script>
