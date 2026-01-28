@@ -212,11 +212,11 @@
           <span class="k">Last rr:</span> <span id="dRR" class="v dim">none</span>
         </div>
 
-        <!-- speed seed rebuild debug: raw -> deadzone -> EMA -> mapped -->
+        <!-- speed seed rebuild debug: raw -> cap -> EMA -> mapped -->
         <div class="row" style="margin-top:6px;">
-          <span class="k">ω raw:</span> <span id="dOmega" class="v dim">0</span>
-          <span class="k">ω dz:</span>  <span id="dOmegaC" class="v dim">0</span>
-          <span class="k">ω ema:</span> <span id="dOmegaF" class="v dim">0</span>
+          <span class="k">wRaw:</span> <span id="dOmega" class="v dim">0</span>
+          <span class="k">wCap:</span> <span id="dOmegaC" class="v dim">0</span>
+          <span class="k">wFilt:</span> <span id="dOmegaF" class="v dim">0</span>
           <span class="k">speed:</span> <span id="dSpeed" class="v dim">0</span>
         </div>
 
@@ -490,15 +490,15 @@
 
     // =========================================================================
     // ✅ SPEED v0 (FORCE) — ground-up seed rebuild
-    // raw → deadzone → ONE EMA → mapping → attack/release output smoothing
-    // NO lock/grace involvement, NO energy coupling, NO meter-hold.
+    // raw(rad/s) → cap(rad/s) → deadzone(rad/s) → ONE EMA → mapping → atk/rel
     // =========================================================================
-    const SPEED_DEAD_DPS       = 8.0;    // deg/s deadzone
-    const SPEED_EMA_CUTOFF_HZ  = 6.0;    // EMA smoothing cutoff
-    const SPEED_NORM_DPS       = 140.0;  // tune: medium-ish should land ~0.35–0.65
-    const SPEED_MAP_POW        = 1.10;   // 1.0 = linear; >1 suppresses low
-    const SPEED_ATTACK_HZ      = 7.0;    // rise smoothing
-    const SPEED_RELEASE_HZ     = 12.0;   // fall smoothing (faster = drops quicker)
+    const SPEED_CAP_RADS      = 6.5;    // rad/s (telemetry: cap)
+    const SPEED_DEAD_DPS      = 8.0;    // deg/s deadzone (converted to rad/s internally)
+    const SPEED_EMA_CUTOFF_HZ = 6.0;    // EMA smoothing cutoff
+    const SPEED_NORM_DPS      = 140.0;  // deg/s norm (converted to rad/s internally)
+    const SPEED_MAP_POW       = 1.10;   // 1.0 = linear; >1 suppresses low
+    const SPEED_ATTACK_HZ     = 7.0;    // rise smoothing
+    const SPEED_RELEASE_HZ    = 12.0;   // fall smoothing (faster = drops quicker)
 
     // =========================================================================
     // SSOT MOBILE 2.0 — ENERGY MODEL (still present, but speed-decoupled below)
@@ -745,7 +745,7 @@
     let energyUI = 0;
 
     // ✅ SPEED v0 state
-    let mSpeedEMA = 0;    // ω ema after deadzone
+    let mSpeedEMA = 0;    // wFilt (rad/s) after deadzone
     let speedOut  = 0;    // final speed meter output (0..1)
 
     // continuity memory for meters (NOT speed)
@@ -867,29 +867,37 @@
     }
 
     // =========================================================================
-    // ✅ SPEED v0 core
+    // ✅ SPEED v0 core (telemetry fields + unit-consistent)
+    // rotationRate is rad/s → keep everything rad/s internally.
     // =========================================================================
-    function updateSpeedV0(mRaw, dt) {
+    function updateSpeedV0(wRaw, dt) {
       const dtSafe = Math.max(1e-3, dt || 1/60);
 
-      // raw → deadzone
-      const mDz = Math.max(0, mRaw - SPEED_DEAD_DPS);
+      const cap = SPEED_CAP_RADS;
+      const wCap = Math.min(Math.max(0, Number(wRaw) || 0), cap);
 
-      // one smoother (EMA via cutoff)
+      const deadRad = (SPEED_DEAD_DPS * Math.PI) / 180;
+      const wDz = Math.max(0, wCap - deadRad);
+
       const aE = alphaFromCutoff(dtSafe, SPEED_EMA_CUTOFF_HZ);
-      mSpeedEMA = (mSpeedEMA === 0) ? mDz : ((1 - aE) * mSpeedEMA + aE * mDz);
+      mSpeedEMA = (mSpeedEMA === 0) ? wDz : ((1 - aE) * mSpeedEMA + aE * wDz);
 
-      // one mapping
-      const n = clamp01(mSpeedEMA / SPEED_NORM_DPS);
+      const normRad = (SPEED_NORM_DPS * Math.PI) / 180;
+      const n = clamp01(mSpeedEMA / normRad);
       const target = Math.pow(n, SPEED_MAP_POW);
 
-      // attack/release on output (force feel: quick fall)
       const aAtk = alphaFromCutoff(dtSafe, SPEED_ATTACK_HZ);
       const aRel = alphaFromCutoff(dtSafe, SPEED_RELEASE_HZ);
       const a = (target >= speedOut) ? aAtk : aRel;
       speedOut = (1 - a) * speedOut + a * target;
 
-      return { mDz, mEMA: mSpeedEMA, speed: speedOut };
+      return {
+        cap,             // rad/s
+        wRaw: wRaw || 0, // rad/s
+        wCap,            // rad/s
+        wFilt: mSpeedEMA,// rad/s
+        speed: speedOut  // 0..1
+      };
     }
 
     let motionCount = 0;
@@ -959,10 +967,15 @@
       if (!rr) {
         d.rr.textContent = "none";
 
-        const sv = updateSpeedV0(0, dt);
-        d.omega.textContent  = "0.00";
-        d.omegaC.textContent = sv.mDz.toFixed(2);
-        d.omegaF.textContent = sv.mEMA.toFixed(2);
+        const dtMean = Math.max(1e-3, computeAvg(dtBuf.slice(-50)) || 1/60);
+        const dtForFilter = (dt > 0) ? dt : dtMean;
+
+        const sv = updateSpeedV0(0, dtForFilter);
+
+        // diagnostics (rad/s)
+        d.omega.textContent  = sv.wRaw.toFixed(2);
+        d.omegaC.textContent = sv.wCap.toFixed(2);
+        d.omegaF.textContent = sv.wFilt.toFixed(2);
         d.speed.textContent  = sv.speed.toFixed(3);
 
         if (dt > 0) {
@@ -976,11 +989,19 @@
         const payload = {
           room,
           t: performance.now(),
+          dt: dtForFilter,
+
+          // ✅ telemetry
+          wRaw: sv.wRaw,
+          wCap: sv.wCap,
+          wFilt: sv.wFilt,
+          cap: sv.cap,
+
           energy01: energyUI,
           groove01: held.grooveOut,
           orbit01: held.orbitOut,
           smooth01: held.smoothOut,
-          speed01: speedOut,
+          speed01: sv.speed,
           shake01: sh.shake01,
           shakeHit: sh.shakeHit,
           locked: false,
@@ -992,7 +1013,7 @@
           groove: held.grooveOut,
           orbit: held.orbitOut,
           smooth: held.smoothOut,
-          speed: speedOut,
+          speed: sv.speed,
           energy: energyUI
         });
         setAudio(energyUI, held.grooveOut, false);
@@ -1016,14 +1037,14 @@
       const dtMean = Math.max(1e-3, computeAvg(dtBuf.slice(-50)));
       const dtForFilter = (dt > 0) ? dt : dtMean;
 
-      // ✅ SPEED v0 uses RAW rotationRate magnitude (force)
-      const mRaw = mag3(x, y, z);
-      const sv = updateSpeedV0(mRaw, dtForFilter);
+      // ✅ SPEED v0 uses RAW rotationRate magnitude (rad/s)
+      const wRaw = mag3(x, y, z);
+      const sv = updateSpeedV0(wRaw, dtForFilter);
 
-      // diagnostics
-      d.omega.textContent  = mRaw.toFixed(2);
-      d.omegaC.textContent = sv.mDz.toFixed(2);
-      d.omegaF.textContent = sv.mEMA.toFixed(2);
+      // diagnostics (rad/s)
+      d.omega.textContent  = sv.wRaw.toFixed(2);
+      d.omegaC.textContent = sv.wCap.toFixed(2);
+      d.omegaF.textContent = sv.wFilt.toFixed(2);
       d.speed.textContent  = sv.speed.toFixed(3);
 
       // lock/grace timers (kept, but speed does NOT gate anything)
@@ -1072,11 +1093,19 @@
         const payload = {
           room,
           t: performance.now(),
+          dt: dtForFilter,
+
+          // ✅ telemetry
+          wRaw: sv.wRaw,
+          wCap: sv.wCap,
+          wFilt: sv.wFilt,
+          cap: sv.cap,
+
           energy01: energyUI,
           groove01: held.grooveOut,
           orbit01: held.orbitOut,
           smooth01: held.smoothOut,
-          speed01: speedOut,
+          speed01: sv.speed,
           shake01: sh.shake01,
           shakeHit: sh.shakeHit,
           locked: false,
@@ -1088,7 +1117,7 @@
           groove: held.grooveOut,
           orbit: held.orbitOut,
           smooth: held.smoothOut,
-          speed: speedOut,
+          speed: sv.speed,
           energy: energyUI
         });
         setAudio(energyUI, held.grooveOut, false);
@@ -1183,11 +1212,19 @@
       const payload = {
         room,
         t: performance.now(),
+        dt: dtForFilter,
+
+        // ✅ telemetry (the set you requested)
+        wRaw: sv.wRaw,
+        wCap: sv.wCap,
+        wFilt: sv.wFilt,
+        cap: sv.cap,
+
         energy01: energyUI,
         groove01: lockStrength,
         orbit01: orbitShown,
         smooth01: smoothScore,
-        speed01: speedOut,     // ✅ speed v0 published
+        speed01: sv.speed,
         shake01: sh.shake01,
         shakeHit: sh.shakeHit,
         locked: lockedNow,
@@ -1199,7 +1236,7 @@
         groove: lockStrength,
         orbit: orbitShown,
         smooth: smoothScore,
-        speed: speedOut,
+        speed: sv.speed,
         energy: energyUI
       });
 
