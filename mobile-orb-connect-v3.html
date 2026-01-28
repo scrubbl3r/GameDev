@@ -496,12 +496,14 @@
     // ✅ Adaptive EMA cutoff (Option A)
     // Low speed = higher cutoff (snappy), high speed = lower cutoff (steadier)
     const SPEED_EMA_CUTOFF_FAST_HZ = 7.5;  // low-speed responsiveness
-    const SPEED_EMA_CUTOFF_SLOW_HZ = 2.2;  // high-speed smoothing
+    const SPEED_EMA_CUTOFF_SLOW_HZ = 1.4;  // 2.2 high-speed smoothing
 
     // Where the adaptation happens (deg/s AFTER deadzone)
     // Below START: mostly FAST. Above END: mostly SLOW.
     const SPEED_ADAPT_START_DPS = 18.0;
-    const SPEED_ADAPT_END_DPS   = 140.0;
+    const SPEED_ADAPT_END_DPS   = 220.0; // 140.0
+
+    const SPEED_ADAPT_POW = 2.2;
 
     const SPEED_NORM_DPS       = 220.0;
     const SPEED_MAP_POW        = 1.10;
@@ -889,22 +891,22 @@
     }
 
     function updateSpeedV0(wRawDps, dt) {
-  const dtSafe = Math.max(1e-3, dt || 1/60);
+        const dtSafe = Math.max(1e-3, dt || 1/60);
 
         const wRaw = Math.max(0, wRawDps || 0);
         const cap  = SPEED_CAP_DPS;
         const wCap = Math.min(wRaw, cap);
 
         // Deg/s after deadzone
-        const wDz = Math.max(0, wCap - SPEED_DEAD_DPS);
+        // Adaptive EMA cutoff: fast at low speed, slow at high speed
+        const denom = Math.max(1e-6, (SPEED_ADAPT_END_DPS - SPEED_ADAPT_START_DPS));
+        let t = (wDz - SPEED_ADAPT_START_DPS) / denom; // 0..1 across the adapt range
+        t = clamp01(t);
+        t = Math.pow(t, SPEED_ADAPT_POW);              // high-speed weighted (later ramp-in)
 
-        // ✅ Adaptive cutoff based on current (dead-zoned) angular rate
-        // t=0 => FAST cutoff (snappy); t=1 => SLOW cutoff (more smoothing)
-        const tAdapt = smoothstep01(invLerp01(SPEED_ADAPT_START_DPS, SPEED_ADAPT_END_DPS, wDz));
-        const cutoffHz = lerp(SPEED_EMA_CUTOFF_FAST_HZ, SPEED_EMA_CUTOFF_SLOW_HZ, tAdapt);
-
-        // EMA on wDz using adaptive cutoff
+        const cutoffHz = lerp(SPEED_EMA_CUTOFF_FAST_HZ, SPEED_EMA_CUTOFF_SLOW_HZ, t);
         const aE = alphaFromCutoff(dtSafe, cutoffHz);
+
         mSpeedEMA = (mSpeedEMA === 0) ? wDz : ((1 - aE) * mSpeedEMA + aE * wDz);
         const wFilt = mSpeedEMA;
 
