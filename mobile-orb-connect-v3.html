@@ -426,19 +426,98 @@
       log("disconnectRelay");
     }
 
-    // Publish throttle (~25 Hz)
-    const PUBLISH_HZ = 25;
-    const PUBLISH_DT = 1 / PUBLISH_HZ;
-    let publishAcc = 0;
+    // =========================================================================
+    // ✅ NETWORK THROTTLE (Ably cost control)
+    // - Hard cap send rate (SEND_HZ)
+    // - Only send when values change meaningfully (eps thresholds)
+    // - Force-send on discrete events (shakeHit) or state flips (locked)
+    // =========================================================================
+    const SEND_HZ = 12;
+    const SEND_MIN_MS = 1000 / SEND_HZ;
 
-    function publishOrb(payload, dt) {
+    const EPS = {
+      energy01: 0.006,
+      groove01: 0.008,
+      orbit01:  0.008,
+      smooth01: 0.008,
+      speed01:  0.008,
+      shake01:  0.015,
+      hz:       0.030,
+    };
+
+    let nextSendAtMs = 0;
+    let lastSig = null;
+
+    function roundN(x, n=4){
+      const v = Number(x);
+      if (!isFinite(v)) return 0;
+      const p = Math.pow(10, n);
+      return Math.round(v * p) / p;
+    }
+
+    function buildSigFromPayload(p){
+      return {
+        energy01: roundN(p.energy01, 4),
+        groove01: roundN(p.groove01, 4),
+        orbit01:  roundN(p.orbit01, 4),
+        smooth01: roundN(p.smooth01, 4),
+        speed01:  roundN(p.speed01, 4),
+        shake01:  roundN(p.shake01, 4),
+        locked:   !!p.locked,
+        shakeHit: !!p.shakeHit,
+        hz:       roundN(p.hz, 3),
+      };
+    }
+
+    function sigChanged(sig){
+      if (!lastSig) return true;
+
+      if (sig.shakeHit && !lastSig.shakeHit) return true;
+      if (sig.locked !== lastSig.locked) return true;
+
+      if (Math.abs(sig.energy01 - lastSig.energy01) > EPS.energy01) return true;
+      if (Math.abs(sig.groove01 - lastSig.groove01) > EPS.groove01) return true;
+      if (Math.abs(sig.orbit01  - lastSig.orbit01 ) > EPS.orbit01 ) return true;
+      if (Math.abs(sig.smooth01 - lastSig.smooth01) > EPS.smooth01) return true;
+      if (Math.abs(sig.speed01  - lastSig.speed01 ) > EPS.speed01 ) return true;
+      if (Math.abs(sig.shake01  - lastSig.shake01 ) > EPS.shake01 ) return true;
+      if (Math.abs(sig.hz       - lastSig.hz      ) > EPS.hz      ) return true;
+
+      return false;
+    }
+
+    function publishOrb(payload, dt, force=false) {
       if (!ablyChannel) return;
 
-      publishAcc += (dt || 0);
-      if (publishAcc < PUBLISH_DT) return;
-      publishAcc = 0;
+      const now = performance.now();
+      if (!force && now < nextSendAtMs) return;
 
-      ablyChannel.publish("orb", payload, (err) => {
+      const sig = buildSigFromPayload(payload);
+      if (!force && !sigChanged(sig)) return;
+
+      lastSig = sig;
+      nextSendAtMs = now + SEND_MIN_MS;
+
+      const out = {
+        ...payload,
+        t: roundN(payload.t, 1),
+        dt: roundN(payload.dt, 4),
+        wRaw: roundN(payload.wRaw, 2),
+        wCap: roundN(payload.wCap, 2),
+        wFilt: roundN(payload.wFilt, 2),
+        cap: roundN(payload.cap, 2),
+        energy01: sig.energy01,
+        groove01: sig.groove01,
+        orbit01:  sig.orbit01,
+        smooth01: sig.smooth01,
+        speed01:  sig.speed01,
+        shake01:  sig.shake01,
+        locked:   sig.locked,
+        shakeHit: sig.shakeHit,
+        hz:       sig.hz,
+      };
+
+      ablyChannel.publish("orb", out, (err) => {
         if (err) {
           setRelay("publish error", "bad");
           setErr("publish error (see console)", "bad");
@@ -489,81 +568,23 @@
 
     // ============================================================================
     // SPEED METER — tuned for “force” (rotationRate magnitude, deg/sec)
-    // Pipeline (high level):
-    //   wRaw (deg/s) → cap → deadzone → adaptive EMA smoothing → normalize → curve →
-    //   attack/release envelope → speed01 (0..1)
     // ============================================================================
-
-    // Ignore tiny motion so the meter rests at 0.
-    // ↑ higher = needs more movement to “wake up” (less twitchy near zero)
-    // ↓ lower  = responds to smaller motion (more twitchy near zero)
     const SPEED_DEAD_DPS = 8.0;
-
-    // Hard ceiling on raw deg/s before any filtering.
-    // ↑ higher = allows bigger peaks / higher potential meter
-    // ↓ lower  = clamps peaks sooner (can reduce extreme spikes)
     const SPEED_CAP_DPS  = 360.0;
 
-    // --- Adaptive EMA smoothing (Option A) --------------------------------------
-    // We vary the EMA cutoff based on current speed:
-    //   low speed  → FAST cutoff (more responsive)
-    //   high speed → SLOW cutoff (more smoothing / less spiky)
-    //
-    // NOTE: Cutoff is in Hz (higher Hz = less smoothing / more responsiveness).
-
-    // Low-speed EMA cutoff.
-    // ↑ higher = snappier at low speeds (less smoothing)
-    // ↓ lower  = steadier at low speeds (more smoothing)
     const SPEED_EMA_CUTOFF_FAST_HZ = 1.5;
-
-    // High-speed EMA cutoff.
-    // ↑ higher = less smoothing at high speeds (more spiky)
-    // ↓ lower  = more smoothing at high speeds (steadier)
     const SPEED_EMA_CUTOFF_SLOW_HZ = .10;
 
-    // Where the adaptive blend happens, using wDz (deg/s AFTER deadzone).
-    // Below START: mostly FAST cutoff.
-    // Above END:   mostly SLOW cutoff.
-
-    // ↑ higher START = stays “fast/snappy” longer (less smoothing in low-mid)
-    // ↓ lower  START = enters smoothing earlier
     const SPEED_ADAPT_START_DPS = 18.0;
-
-    // ↑ higher END = takes longer to fully reach “slow/smooth” (less smoothing overall)
-    // ↓ lower  END = reaches “slow/smooth” sooner (more smoothing overall)
     const SPEED_ADAPT_END_DPS   = 130.0;
 
-    // Shapes how quickly we slide from FAST → SLOW across the adapt range.
-    // ↑ higher = smoothing ramps in later (keeps midrange snappier, then smooths hard near top)
-    // ↓ lower  = smoothing ramps in earlier (more smoothing through midrange)
     const SPEED_ADAPT_POW = 1.0;
 
-    // --- Meter difficulty + curve ----------------------------------------------
-    // Normalization point for 100% (before the curve).
-    // ↑ higher = harder to reach 100% (needs more deg/s)
-    // ↓ lower  = easier to reach 100%
     const SPEED_NORM_DPS = 300.0;
-
-    // Curve on normalized value (n^pow).
-    // ↑ higher (>1) = softer low/mid, harder near top (more “effort” to climb)
-    // ↓ lower  (<1) = boosts low/mid, easier to climb early
     const SPEED_MAP_POW  = 1.10;
 
-    // --- Output envelope (final smoothing on the meter itself) ------------------
-    // These shape how quickly the displayed meter chases the target.
-    // Higher Hz = faster response (less smoothing). Lower Hz = more smoothing.
-
-    // Rise speed (when target is increasing).
-    // ↑ higher = faster climb (snappier, more spiky)
-    // ↓ lower  = slower climb (smoother)
     const SPEED_ATTACK_HZ  = 5.0;
-
-    // Fall speed (when target is decreasing).
-    // ↑ higher = faster drop (snappier)
-    // ↓ lower  = slower decay (more “hang time”)
     const SPEED_RELEASE_HZ = 8.0;
-
-
 
     // =========================================================================
     // SSOT MOBILE 2.0 — ENERGY MODEL (still present, but speed-decoupled below)
@@ -949,14 +970,12 @@
         const cap  = SPEED_CAP_DPS;
         const wCap = Math.min(wRaw, cap);
 
-        // deg/s after deadzone (THIS WAS MISSING)
         const wDz = Math.max(0, wCap - SPEED_DEAD_DPS);
 
-        // Adaptive EMA cutoff: fast at low speed, slow at high speed
         const denom = Math.max(1e-6, (SPEED_ADAPT_END_DPS - SPEED_ADAPT_START_DPS));
-        let tAdapt = (wDz - SPEED_ADAPT_START_DPS) / denom; // 0..1 across the adapt range
+        let tAdapt = (wDz - SPEED_ADAPT_START_DPS) / denom;
         tAdapt = clamp01(tAdapt);
-        tAdapt = Math.pow(tAdapt, SPEED_ADAPT_POW);         // high-speed weighted (later ramp-in)
+        tAdapt = Math.pow(tAdapt, SPEED_ADAPT_POW);
 
         const cutoffHz = lerp(SPEED_EMA_CUTOFF_FAST_HZ, SPEED_EMA_CUTOFF_SLOW_HZ, tAdapt);
         const aE = alphaFromCutoff(dtSafe, cutoffHz);
@@ -964,11 +983,9 @@
         mSpeedEMA = (mSpeedEMA === 0) ? wDz : ((1 - aE) * mSpeedEMA + aE * wDz);
         const wFilt = mSpeedEMA;
 
-        // Normalize + shape
         const n = clamp01(wFilt / SPEED_NORM_DPS);
         const target = Math.pow(n, SPEED_MAP_POW);
 
-        // Envelope
         const aAtk = alphaFromCutoff(dtSafe, SPEED_ATTACK_HZ);
         const aRel = alphaFromCutoff(dtSafe, SPEED_RELEASE_HZ);
         const a = (target >= speedOut) ? aAtk : aRel;
@@ -976,8 +993,6 @@
 
         return { cap, dt: dtSafe, wRaw, wCap, wDz, wFilt, speed: speedOut, cutoffHz, tAdapt };
     }
-
-
 
     function updateShake(e, t, dt){
       const acc = e.accelerationIncludingGravity || e.acceleration;
@@ -1355,7 +1370,8 @@
         catch(e){ log("audio: resume failed", { message: e?.message || String(e) }); }
 
         setStage("relay connect", "warn");
-        publishAcc = 0;
+        nextSendAtMs = 0;
+        lastSig = null;
         const okRelay = await connectRelay();
         if (!okRelay) log("Relay connect failed; running locally only.");
 
