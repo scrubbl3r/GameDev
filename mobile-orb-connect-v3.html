@@ -487,30 +487,82 @@
 
     const NORM_ALPHA = 0.10;
 
-    // =========================================================================
-    // ✅ SPEED v0 — degrees/second end-to-end (rotationRate is deg/s)
-    // =========================================================================
-    const SPEED_DEAD_DPS       = 8.0;
-    const SPEED_CAP_DPS        = 360.0;
+    // ============================================================================
+    // SPEED METER — tuned for “force” (rotationRate magnitude, deg/sec)
+    // Pipeline (high level):
+    //   wRaw (deg/s) → cap → deadzone → adaptive EMA smoothing → normalize → curve →
+    //   attack/release envelope → speed01 (0..1)
+    // ============================================================================
 
-    // ✅ Adaptive EMA cutoff (Option A)
-    // Low speed = higher cutoff (snappy), high speed = lower cutoff (steadier)
-    const SPEED_EMA_CUTOFF_FAST_HZ = 6.0;  // 7.5 low-speed responsiveness
-    const SPEED_EMA_CUTOFF_SLOW_HZ = 1.0;  // 1.4 high-speed smoothing
+    // Ignore tiny motion so the meter rests at 0.
+    // ↑ higher = needs more movement to “wake up” (less twitchy near zero)
+    // ↓ lower  = responds to smaller motion (more twitchy near zero)
+    const SPEED_DEAD_DPS = 8.0;
 
-    // Where the adaptation happens (deg/s AFTER deadzone)
-    // Below START: mostly FAST. Above END: mostly SLOW.
+    // Hard ceiling on raw deg/s before any filtering.
+    // ↑ higher = allows bigger peaks / higher potential meter
+    // ↓ lower  = clamps peaks sooner (can reduce extreme spikes)
+    const SPEED_CAP_DPS  = 360.0;
+
+    // --- Adaptive EMA smoothing (Option A) --------------------------------------
+    // We vary the EMA cutoff based on current speed:
+    //   low speed  → FAST cutoff (more responsive)
+    //   high speed → SLOW cutoff (more smoothing / less spiky)
+    //
+    // NOTE: Cutoff is in Hz (higher Hz = less smoothing / more responsiveness).
+
+    // Low-speed EMA cutoff.
+    // ↑ higher = snappier at low speeds (less smoothing)
+    // ↓ lower  = steadier at low speeds (more smoothing)
+    const SPEED_EMA_CUTOFF_FAST_HZ = 6.0;
+
+    // High-speed EMA cutoff.
+    // ↑ higher = less smoothing at high speeds (more spiky)
+    // ↓ lower  = more smoothing at high speeds (steadier)
+    const SPEED_EMA_CUTOFF_SLOW_HZ = 1.0;
+
+    // Where the adaptive blend happens, using wDz (deg/s AFTER deadzone).
+    // Below START: mostly FAST cutoff.
+    // Above END:   mostly SLOW cutoff.
+
+    // ↑ higher START = stays “fast/snappy” longer (less smoothing in low-mid)
+    // ↓ lower  START = enters smoothing earlier
     const SPEED_ADAPT_START_DPS = 18.0;
-    const SPEED_ADAPT_END_DPS   = 220.0; // 140.0
 
-    const SPEED_ADAPT_POW = 1.6; // 2.2
+    // ↑ higher END = takes longer to fully reach “slow/smooth” (less smoothing overall)
+    // ↓ lower  END = reaches “slow/smooth” sooner (more smoothing overall)
+    const SPEED_ADAPT_END_DPS   = 220.0;
 
-    const SPEED_NORM_DPS       = 220.0;
-    const SPEED_MAP_POW        = 1.10;
+    // Shapes how quickly we slide from FAST → SLOW across the adapt range.
+    // ↑ higher = smoothing ramps in later (keeps midrange snappier, then smooths hard near top)
+    // ↓ lower  = smoothing ramps in earlier (more smoothing through midrange)
+    const SPEED_ADAPT_POW = 1.6;
 
-    // Output envelope (still useful, keep these)
-    const SPEED_ATTACK_HZ      = 5.0; // 7.0
-    const SPEED_RELEASE_HZ     = 8.0; // 12.0
+    // --- Meter difficulty + curve ----------------------------------------------
+    // Normalization point for 100% (before the curve).
+    // ↑ higher = harder to reach 100% (needs more deg/s)
+    // ↓ lower  = easier to reach 100%
+    const SPEED_NORM_DPS = 200.0;
+
+    // Curve on normalized value (n^pow).
+    // ↑ higher (>1) = softer low/mid, harder near top (more “effort” to climb)
+    // ↓ lower  (<1) = boosts low/mid, easier to climb early
+    const SPEED_MAP_POW  = 1.10;
+
+    // --- Output envelope (final smoothing on the meter itself) ------------------
+    // These shape how quickly the displayed meter chases the target.
+    // Higher Hz = faster response (less smoothing). Lower Hz = more smoothing.
+
+    // Rise speed (when target is increasing).
+    // ↑ higher = faster climb (snappier, more spiky)
+    // ↓ lower  = slower climb (smoother)
+    const SPEED_ATTACK_HZ  = 5.0;
+
+    // Fall speed (when target is decreasing).
+    // ↑ higher = faster drop (snappier)
+    // ↓ lower  = slower decay (more “hang time”)
+    const SPEED_RELEASE_HZ = 8.0;
+
 
 
     // =========================================================================
