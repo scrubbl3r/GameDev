@@ -479,18 +479,18 @@
           <span id="last" class="lastText">(none yet)</span>
         </div>
 
+        <!-- ✅ BIG HEADLINE = LIFT (no overcharge yellow yet) -->
         <div id="bigCharge" class="big"><span id="pct">0</span>%</div>
-        <div class="bigSub dim">energy</div>
+        <div class="bigSub dim">lift</div>
 
         <div class="bars">
-          <div class="barLabel"><div>Energy</div><span id="vEnergy">0</span></div>
-          <div class="bar"><div id="bEnergy" class="fill"></div></div>
+          <!-- ✅ Order: Lift, Groove, Smooth, Speed, Orbit, Energy, Shake -->
+
+          <div class="barLabel"><div>Lift</div><span id="vLift">0</span></div>
+          <div class="bar"><div id="bLift" class="fill"></div></div>
 
           <div class="barLabel"><div>Groove</div><span id="vGroove">0</span></div>
           <div class="bar"><div id="bGroove" class="fill"></div></div>
-
-          <div class="barLabel"><div>Orbit</div><span id="vOrbit">0</span></div>
-          <div class="bar"><div id="bOrbit" class="fill"></div></div>
 
           <div class="barLabel"><div>Smooth</div><span id="vSmooth">0</span></div>
           <div class="bar"><div id="bSmooth" class="fill"></div></div>
@@ -501,6 +501,13 @@
             <span id="vSpeed">0</span>
           </div>
           <div class="bar"><div id="bSpeed" class="fill"></div></div>
+
+          <div class="barLabel"><div>Orbit</div><span id="vOrbit">0</span></div>
+          <div class="bar"><div id="bOrbit" class="fill"></div></div>
+
+          <!-- ✅ Energy (still overcharges; yellow applies to THIS value + bar) -->
+          <div class="barLabel"><div>Energy</div><span id="vEnergy">0</span></div>
+          <div class="bar"><div id="bEnergy" class="fill"></div></div>
 
           <div class="groupGap"></div>
 
@@ -595,19 +602,21 @@
       bigCharge: $("bigCharge"),
       pct: $("pct"),
 
-      vEnergy: $("vEnergy"),
+      vLift:  $("vLift"),
       vGroove: $("vGroove"),
-      vOrbit: $("vOrbit"),
       vSmooth: $("vSmooth"),
-      vSpeed: $("vSpeed"),
-      vShake: $("vShake"),
+      vSpeed:  $("vSpeed"),
+      vOrbit:  $("vOrbit"),
+      vEnergy: $("vEnergy"),
+      vShake:  $("vShake"),
 
-      bEnergy: $("bEnergy"),
+      bLift:  $("bLift"),
       bGroove: $("bGroove"),
-      bOrbit: $("bOrbit"),
       bSmooth: $("bSmooth"),
-      bSpeed: $("bSpeed"),
-      bShake: $("bShake"),
+      bSpeed:  $("bSpeed"),
+      bOrbit:  $("bOrbit"),
+      bEnergy: $("bEnergy"),
+      bShake:  $("bShake"),
 
       shakeLamp: $("shakeLamp"),
       fatal: $("fatal"),
@@ -646,6 +655,19 @@
       el.style.width = p.toFixed(1) + "%";
     }
 
+    // =========================================================================
+    // LIFT (stub wiring for UI)
+    // - Placeholder aggregate of groove/smooth/speed.
+    // - We'll refine the true Lift model later.
+    // =========================================================================
+    function computeLift01(groove01, smooth01, speed01){
+      const g = clamp01(groove01);
+      const s = clamp01(smooth01);
+      const p = clamp01(speed01);
+      // geometric mean: requires all three to contribute
+      return clamp01(Math.pow(Math.max(0, g*s*p), 1/3));
+    }
+
     function randCode(n=6){
       const A="ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
       let s="";
@@ -681,7 +703,7 @@
     }
 
     // =========================================================================
-    // BACKGROUND (energy)
+    // BACKGROUND (energy-driven “charge” glow stays tied to energy for now)
     // =========================================================================
     const BG0 = { r: 0,   g: 0,  b: 0  };
     const BG1 = { r: 255, g: 42, b: 0  };
@@ -1119,39 +1141,54 @@
       const shake  = pick01Bounded("shake01",  "shake");
       const locked = !!d.locked;
 
-      // ✅ feed physics
+      // ✅ lift (stub)
+      const lift = computeLift01(groove, smooth, speed);
+
+      // ✅ feed physics (energy drives thrust)
       physState.energy01 = Math.max(0, Number(energy) || 0);
 
+      // background + glow stays energy-driven
       setBgFromEnergy(energy);
 
+      const liftText = toPct01(lift);
+      els.pct.textContent = isFinite(liftText) ? liftText : 0;
+
       const eText = toPctRaw(energy);
+
+      const liftP = toPct01(lift);
       const gP = toPct01(groove);
-      const oP = toPct01(orbit);
       const sP = toPct01(smooth);
       const sp = toPct01(speed);
+      const oP = toPct01(orbit);
       const sh = toPct01(shake);
 
-      els.pct.textContent = isFinite(eText) ? eText : 0;
-
-      els.vEnergy.textContent = `${isFinite(eText) ? eText : 0}%`;
+      // meter values
+      els.vLift.textContent   = `${liftP}%`;
       els.vGroove.textContent = `${gP}%${locked ? " (locked)" : ""}`;
-      els.vOrbit.textContent  = `${oP}%`;
       els.vSmooth.textContent = `${sP}%`;
       els.vSpeed.textContent  = `${sp}%`;
+      els.vOrbit.textContent  = `${oP}%`;
+
+      // ✅ Energy meter: value can exceed 100 (this is what turns yellow)
+      els.vEnergy.textContent = `${isFinite(eText) ? eText : 0}%`;
+
       els.vShake.textContent  = `${sh}%`;
 
-      setBar(els.bEnergy, energy);
+      // bars
+      setBar(els.bLift,  lift);
       setBar(els.bGroove, groove);
-      setBar(els.bOrbit,  orbit);
       setBar(els.bSmooth, smooth);
       setBar(els.bSpeed,  speed);
+      setBar(els.bOrbit,  orbit);
+      setBar(els.bEnergy, energy);
       setBar(els.bShake,  shake);
 
+      // ✅ Overcharge (yellow) applies ONLY to Energy meter value + bar
       const over = (energy > 1);
-      els.bigCharge.classList.toggle("over", over);
       els.vEnergy.classList.toggle("over", over);
       els.bEnergy.classList.toggle("over", over);
 
+      // shake lamp
       const shakeHit =
         d.shakeHit === true ||
         d.shakeEvent === true ||
