@@ -2,781 +2,1008 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no" />
-  <title>Orb — Mobile Transmitter</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Groove Orbit</title>
   <style>
-    :root{
-      --g:#32ff75;
-      --g2:rgba(50,255,117,.60);
-      --g3:rgba(50,255,117,.20);
-      --bg:#000;
-      --panel: rgba(0,0,0,.55);
-      --border: rgba(50,255,117,.18);
-      --bad:#ff5a5a;
+    :root { --green:#7dd35f; }
 
-      --amber:#ffd400;
-      --amber2:rgba(255,212,0,.55);
-
-      --red:#ff3b3b;
-      --red2:rgba(255,59,59,.55);
-
-      --ink:rgba(0,0,0,.88);
-
-      /* mode colors (full-screen field) */
-      --field0: rgba(0,0,0,1);
-      --field1: rgba(0,0,0,1);
-      --field2: rgba(0,0,0,1);
-
-      /* live tint */
-      --tintR: 0;
-      --tintG: 0;
-      --tintB: 0;
-
-      --safeTop: env(safe-area-inset-top, 0px);
-      --safeBot: env(safe-area-inset-bottom, 0px);
-      --safeL: env(safe-area-inset-left, 0px);
-      --safeR: env(safe-area-inset-right, 0px);
-    }
-
-    html,body{
-      height:100%;
-      margin:0;
-      background:#000;
-      color:var(--g);
-      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-      overflow:hidden;
-      -webkit-tap-highlight-color: transparent;
+    html, body {
+      height: 100%;
+      margin: 0;
+      background: #000;
+      color: var(--green);
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      transition: background-color 80ms linear; /* keep phone glow mapping */
       touch-action: manipulation;
     }
 
-    /* full-screen stage */
-    #stage{
-      position:fixed;
-      inset:0;
-      padding: calc(14px + var(--safeTop)) calc(14px + var(--safeR)) calc(14px + var(--safeBot)) calc(14px + var(--safeL));
-      display:flex;
-      align-items:center;
-      justify-content:center;
-      background:
-        radial-gradient(1200px 800px at 50% 35%, rgba(0,0,0,.0) 0%, rgba(0,0,0,.55) 58%, rgba(0,0,0,.92) 100%),
-        rgb(var(--tintR), var(--tintG), var(--tintB));
-      transition: background-color 120ms linear;
-      user-select:none;
+    .app {
+      min-height: 100vh;
+      display: grid;
+      place-items: center; /* center the single button */
     }
 
-    /* subtle scan vignette */
-    #stage::before{
-      content:"";
-      position:absolute;
-      inset:0;
-      pointer-events:none;
-      background:
-        radial-gradient(900px 650px at 50% 40%, rgba(255,255,255,.03) 0%, rgba(255,255,255,0) 55%),
-        linear-gradient(to bottom, rgba(0,0,0,.35), rgba(0,0,0,.10), rgba(0,0,0,.35));
-      opacity:.75;
-      mix-blend-mode:screen;
+    /* Single centered round Start button */
+    #startBtn {
+      width: min(180px, 46vw);
+      height: min(180px, 46vw);
+      border-radius: 999px;
+      border: 2px solid var(--green);
+      background: rgba(0,0,0,0.15);
+      color: var(--green);
+      font-size: 22px;
+      font-weight: 800;
+      letter-spacing: 0.02em;
+      box-shadow: 0 0 22px rgba(125,211,95,0.18);
+      -webkit-tap-highlight-color: transparent;
     }
-
-    /* center button */
-    #startBtn{
-      position:relative;
-      z-index:2;
-      border-radius:18px;
-      padding:16px 18px;
-      border:1px solid rgba(50,255,117,.28);
-      background: rgba(0,0,0,.62);
-      color: rgba(50,255,117,.95);
-      font-weight: 1000;
-      letter-spacing:.3px;
-      box-shadow:
-        0 18px 60px rgba(0,0,0,.62),
-        0 0 0 1px rgba(0,0,0,.28) inset,
-        0 0 24px rgba(50,255,117,.12);
-      cursor:pointer;
+    #startBtn:active {
+      transform: scale(0.98);
     }
-    #startBtn:active{
-      transform: translateY(1px);
-      box-shadow:
-        0 14px 44px rgba(0,0,0,.62),
-        0 0 0 1px rgba(0,0,0,.28) inset,
-        0 0 28px rgba(50,255,117,.16);
-    }
-    #startBtn small{
-      display:block;
-      margin-top:6px;
-      font-size:11px;
-      opacity:.78;
-      font-weight:800;
-    }
-
-    /* tap field overlay (hidden until started) */
-    #field{
-      position:absolute;
-      inset:0;
-      display:none;
-      z-index:1;
-    }
-    #field.on{ display:block; }
-
-    /* tiny HUD (corner) — optional but super light */
-    #hud{
-      position:fixed;
-      left: calc(12px + var(--safeL));
-      bottom: calc(12px + var(--safeBot));
-      z-index:3;
-      font-size:11px;
-      opacity:.82;
-      pointer-events:none;
-      line-height:1.35;
-      text-shadow: 0 0 14px rgba(0,0,0,.85);
-      white-space:pre;
-    }
-    #hud .dim{ opacity:.72; }
-    #hud .bad{ color: var(--bad); font-weight: 900; }
-    #hud .ok{ color: rgba(50,255,117,.95); font-weight: 900; }
-
-    /* mode badge (top) */
-    #modeBadge{
-      position:fixed;
-      top: calc(10px + var(--safeTop));
-      right: calc(10px + var(--safeR));
-      z-index:3;
-      font-size:11px;
-      padding:6px 9px;
-      border-radius:999px;
-      border:1px solid rgba(50,255,117,.22);
-      background: rgba(0,0,0,.55);
-      opacity:.78;
-      pointer-events:none;
-    }
-    #modeBadge.m0{ color: rgba(50,255,117,.85); border-color: rgba(50,255,117,.22); }
-    #modeBadge.m1{ color: rgba(255,212,0,.92); border-color: rgba(255,212,0,.22); }
-    #modeBadge.m2{ color: rgba(255,59,59,.92); border-color: rgba(255,59,59,.22); }
-
-    /* permission toast */
-    #toast{
-      position:fixed;
-      left:50%;
-      transform: translateX(-50%);
-      top: calc(14px + var(--safeTop));
-      z-index:5;
-      font-size:12px;
-      padding:10px 12px;
-      border-radius:14px;
-      border:1px solid rgba(50,255,117,.22);
-      background: rgba(0,0,0,.72);
-      box-shadow: 0 18px 80px rgba(0,0,0,.65);
-      opacity:0;
-      pointer-events:none;
-      transition: opacity 180ms ease;
-      max-width:min(92vw,520px);
-      text-align:center;
-      line-height:1.35;
-    }
-    #toast.on{ opacity:1; }
-    #toast .bad{ color: var(--bad); font-weight: 900; }
-    #toast .ok{ color: rgba(50,255,117,.92); font-weight: 900; }
-
-    /* reduce motion */
-    @media (prefers-reduced-motion: reduce){
-      #stage{ transition:none; }
-      #toast{ transition:none; }
-    }
+    #startBtn:disabled { opacity: 0.55; }
   </style>
-
-  <!-- Ably -->
-  <script src="https://cdn.ably.com/lib/ably.min-1.js"></script>
 </head>
 <body>
+  <main class="app">
+    <button id="startBtn">Start</button>
+  </main>
 
-  <div id="stage" aria-label="Orb telemetry stage">
-    <button id="startBtn">
-      START
-      <small>tap to arm + stream</small>
-    </button>
-    <div id="field" aria-label="Tap field (toggles modes)"></div>
-  </div>
-
-  <div id="modeBadge" class="m0">MODE 0</div>
-  <div id="hud"></div>
-  <div id="toast"></div>
+  <!-- Ably JS -->
+  <script src="https://cdn.ably.com/lib/ably.min-1.js"></script>
 
   <script>
+  (() => {
     // =========================================================================
-    // ORB RELAY — MOBILE TELEMETRY (SSOT CORE)
-    // - Centered START button (both axes)
-    // - On start: button disappears, full-screen tap field appears
-    // - Tap field toggles modes (0/1/2) and changes screen tint
-    // - Telemetry SSOT engine is decoupled from UI
-    // - Sends payload compatible with your Receiver telemetry modal:
-    //   speed01, energy01, groove01, orbit01, smooth01, shake01, locked, hz
-    //   + mothership fields: v, seq, t_ms, dms, mode, deviceId
+    // UI (single button only)
     // =========================================================================
+    const startBtn = document.getElementById('startBtn');
 
-    const $ = (id) => document.getElementById(id);
-    const els = {
-      stage: $("stage"),
-      startBtn: $("startBtn"),
-      field: $("field"),
-      hud: $("hud"),
-      toast: $("toast"),
-      modeBadge: $("modeBadge"),
-    };
+    // =========================================================================
+    // Keep phone glow mapping (background color), driven by energy
+    // =========================================================================
+    const BG0 = { r: 0,   g: 0,  b: 0  };
+    const BG1 = { r: 255, g: 42, b: 0  };
+    function setBgFromEnergy(e01) {
+      const t = Math.max(0, Math.min(1, e01));
+      const r = Math.round(BG0.r + (BG1.r - BG0.r) * t);
+      const g = Math.round(BG0.g + (BG1.g - BG0.g) * t);
+      const b = Math.round(BG0.b + (BG1.b - BG0.b) * t);
+      document.body.style.backgroundColor = `rgb(${r},${g},${b})`;
+    }
+    setBgFromEnergy(0);
 
-    // ------------------------------
-    // SSOT: schema + identifiers
-    // ------------------------------
-    const SCHEMA_V = 3; // bump when payload keys/meaning change
-    const deviceId = (() => {
-      // stable-ish id per browser install
-      const k = "orb_device_id";
-      let v = localStorage.getItem(k);
-      if (!v) {
-        v = "m-" + Math.random().toString(16).slice(2) + "-" + Date.now().toString(16);
-        localStorage.setItem(k, v);
-      }
-      return v;
-    })();
-
-    function clamp(v, lo, hi){ return Math.max(lo, Math.min(hi, v)); }
-    function clamp01(x){ x = Number(x); return Math.max(0, Math.min(1, isFinite(x) ? x : 0)); }
-    function lerp(a,b,t){ return a + (b-a)*t; }
-
-    // ------------------------------
-    // Room + Ably
-    // ------------------------------
+    // =========================================================================
+    // RELAY (Ably via Cloudflare Worker token) — logic preserved
+    // =========================================================================
     const WORKER_BASE = "https://orb-token.mrgarthwilliams.workers.dev";
+    const TOKEN_URL = WORKER_BASE + "/token";
 
-    function normalizeRoom(input){
-      let r = String(input || "").trim();
-      if (!r) r = "orb:test";
-      if (r.indexOf(":") === -1) r = "orb:" + r;
-      return r;
-    }
-    function readUrlRoomOrNull(){
-      try{
-        const u = new URL(location.href);
-        const r = (u.searchParams.get("room") || "").trim();
-        if (!r) return null;
-        return normalizeRoom(r);
-      }catch(_){ return null; }
-    }
-    function stripOrbPrefix(room){
-      return String(room || "").startsWith("orb:") ? String(room).slice(4) : String(room || "");
+    function parseRoom() {
+      const u = new URL(window.location.href);
+      const raw = (u.searchParams.get("room") || "test").trim();
+      const roomCode = raw.startsWith("orb:") ? raw.slice(4) : raw;
+      const channelName = "orb:" + roomCode;
+      return { raw, roomCode, channelName };
     }
 
-    const roomChannel = normalizeRoom(readUrlRoomOrNull() || "orb:test");
-    const roomCode = stripOrbPrefix(roomChannel);
+    let ably = null;
+    let ablyChannel = null;
 
-    let realtime = null;
-    let channel = null;
-    let connected = false;
+    const roomInfo = parseRoom();
+    const room = roomInfo.channelName;
+    const roomCode = roomInfo.roomCode;
 
-    function toast(msg, kind){
-      els.toast.innerHTML = msg;
-      els.toast.classList.add("on");
-      if (kind === "bad") els.toast.style.borderColor = "rgba(255,90,90,.35)";
-      else els.toast.style.borderColor = "rgba(50,255,117,.22)";
-      setTimeout(() => els.toast.classList.remove("on"), 1600);
-    }
+    async function connectRelay() {
+      try { if (ablyChannel) ablyChannel.detach(); } catch(e) {}
+      try { if (ably) ably.close(); } catch(e) {}
+      ably = null; ablyChannel = null;
 
-    async function connectAbly(){
-      if (connected) return true;
+      const authUrl =
+        TOKEN_URL +
+        "?room=" + encodeURIComponent(roomCode) +
+        "&clientId=" + encodeURIComponent("phone-" + Math.random().toString(16).slice(2,6));
 
-      if (typeof Ably === "undefined" || !Ably.Realtime) {
-        toast(`<span class="bad">Ably failed to load</span><br/>Check network / CDN`, "bad");
+      try {
+        const r = await fetch(authUrl, { method: "GET", cache: "no-store" });
+        const j = await r.json();
+        if (!r.ok || !j.token) return false;
+      } catch (e) {
         return false;
       }
 
-      const authUrl = WORKER_BASE + "/token?room=" + encodeURIComponent(roomCode) + "&v=" + Date.now();
-
-      try{
-        realtime = new Ably.Realtime({ authUrl, echoMessages:false });
-      }catch(e){
-        console.error("Ably init error:", e);
-        toast(`<span class="bad">Ably init error</span>`, "bad");
-        return false;
-      }
-
-      channel = realtime.channels.get(roomChannel);
-
-      return await new Promise((resolve) => {
-        let done = false;
-
-        realtime.connection.on("connected", () => {
-          connected = true;
-          if (!done){ done = true; resolve(true); }
-        });
-        realtime.connection.on("failed", (st) => {
-          console.error("Ably failed:", st);
-          connected = false;
-          if (!done){ done = true; resolve(false); }
-        });
-        realtime.connection.on("disconnected", () => {
-          connected = false;
-        });
-
-        channel.attach((err) => {
-          if (err) {
-            console.error("Channel attach error:", err);
-            connected = false;
-            if (!done){ done = true; resolve(false); }
-          }
-        });
-
-        setTimeout(() => { if (!done){ done = true; resolve(connected); } }, 2200);
-      });
+      ably = new Ably.Realtime({ authUrl, autoConnect: true });
+      ablyChannel = ably.channels.get(room);
+      ablyChannel.attach(() => {});
+      return true;
     }
 
-    function publishOrb(data){
-      if (!channel || !connected) return;
-      try{
-        channel.publish("orb", data);
-      }catch(e){
-        // ignore (mobile networks)
-      }
+    function disconnectRelay() {
+      try { if (ablyChannel) ablyChannel.detach(); } catch(e) {}
+      try { if (ably) ably.close(); } catch(e) {}
+      ably = null; ablyChannel = null;
     }
 
-    // ------------------------------
-    // UI: mode + tint
-    // ------------------------------
-    const MODE = {
-      // 0: normal (green-ish)
-      // 1: training/lock (amber)
-      // 2: pause/mute (red-ish; still sends so receiver sees state)
-      value: 0
+    // =========================================================================
+    // ✅ NETWORK THROTTLE (unchanged)
+    // =========================================================================
+    const SEND_HZ = 12;
+    const SEND_MIN_MS = 1000 / SEND_HZ;
+
+    const EPS = {
+      energy01: 0.006,
+      groove01: 0.008,
+      orbit01:  0.008,
+      smooth01: 0.008,
+      speed01:  0.008,
+      shake01:  0.015,
+      hz:       0.030,
     };
 
-    function setMode(m){
-      MODE.value = ((m % 3) + 3) % 3;
-      els.modeBadge.textContent = "MODE " + MODE.value;
-      els.modeBadge.classList.remove("m0","m1","m2");
-      els.modeBadge.classList.add("m" + MODE.value);
+    let nextSendAtMs = 0;
+    let lastSig = null;
+
+    function roundN(x, n=4){
+      const v = Number(x);
+      if (!isFinite(v)) return 0;
+      const p = Math.pow(10, n);
+      return Math.round(v * p) / p;
     }
 
-    // Tint is driven by (mode + energy) so the whole screen is an at-a-glance meter
-    function applyTint(mode, energy01){
-      const e = clamp01(energy01);
-
-      // Base colors per mode
-      const base = (mode === 0) ? {r: 0,   g: 0,   b: 0} :
-                   (mode === 1) ? {r: 18,  g: 10,  b: 0} :
-                                  {r: 18,  g: 0,   b: 0};
-
-      const hot  = (mode === 0) ? {r: 0,   g: 64,  b: 18} :
-                   (mode === 1) ? {r: 64,  g: 44,  b: 0} :
-                                  {r: 64,  g: 0,   b: 0};
-
-      const r = Math.round(lerp(base.r, hot.r, e));
-      const g = Math.round(lerp(base.g, hot.g, e));
-      const b = Math.round(lerp(base.b, hot.b, e));
-
-      document.documentElement.style.setProperty("--tintR", String(r));
-      document.documentElement.style.setProperty("--tintG", String(g));
-      document.documentElement.style.setProperty("--tintB", String(b));
+    function buildSigFromPayload(p){
+      return {
+        energy01: roundN(p.energy01, 4),
+        groove01: roundN(p.groove01, 4),
+        orbit01:  roundN(p.orbit01, 4),
+        smooth01: roundN(p.smooth01, 4),
+        speed01:  roundN(p.speed01, 4),
+        shake01:  roundN(p.shake01, 4),
+        locked:   !!p.locked,
+        shakeHit: !!p.shakeHit,
+        hz:       roundN(p.hz, 3),
+      };
     }
 
-    // ------------------------------
-    // Telemetry SSOT Engine
-    // ------------------------------
-    const TELE = {
-      streaming: false,
-      startedAt: 0,
-      lastAt: 0,
-      seq: 0,
+    function sigChanged(sig){
+      if (!lastSig) return true;
 
-      // sampling (rAF)
-      rafId: 0,
+      if (sig.shakeHit && !lastSig.shakeHit) return true;
+      if (sig.locked !== lastSig.locked) return true;
 
-      // orientation / motion feed
-      gotMotion: false,
-      gotOrientation: false,
+      if (Math.abs(sig.energy01 - lastSig.energy01) > EPS.energy01) return true;
+      if (Math.abs(sig.groove01 - lastSig.groove01) > EPS.groove01) return true;
+      if (Math.abs(sig.orbit01  - lastSig.orbit01 ) > EPS.orbit01 ) return true;
+      if (Math.abs(sig.smooth01 - lastSig.smooth01) > EPS.smooth01) return true;
+      if (Math.abs(sig.speed01  - lastSig.speed01 ) > EPS.speed01 ) return true;
+      if (Math.abs(sig.shake01  - lastSig.shake01 ) > EPS.shake01 ) return true;
+      if (Math.abs(sig.hz       - lastSig.hz      ) > EPS.hz      ) return true;
 
-      // raw motion (device frame)
-      ax: 0, ay: 0, az: 0,
-      gx: 0, gy: 0, gz: 0, // rotationRate (deg/s)
-      alpha: 0, beta: 0, gamma: 0,
+      return false;
+    }
 
-      // derived signals
-      accMag: 0,
-      gyrMag: 0,
+    function publishOrb(payload, dt, force=false) {
+      if (!ablyChannel) return;
 
-      // filters
-      accLP: 0,
-      accHP: 0,
-      gyrLP: 0,
+      const now = performance.now();
+      if (!force && now < nextSendAtMs) return;
 
-      // shake detector
-      shake01: 0,
-      shakeHit: false,
-      shakeCooldownMs: 0,
+      const sig = buildSigFromPayload(payload);
+      if (!force && !sigChanged(sig)) return;
 
-      // groove/tempo tracker (lightweight)
-      beatPhase: 0,
-      hz: 0,
-      locked: false,
-      lockScore: 0,
+      lastSig = sig;
+      nextSendAtMs = now + SEND_MIN_MS;
 
-      // output metrics
-      energy01: 0,
-      speed01: 0,
-      smooth01: 0,
-      groove01: 0,
-      orbit01: 0,
+      const out = {
+        ...payload,
+        t: roundN(payload.t, 1),
+        dt: roundN(payload.dt, 4),
+        wRaw: roundN(payload.wRaw, 2),
+        wCap: roundN(payload.wCap, 2),
+        wFilt: roundN(payload.wFilt, 2),
+        cap: roundN(payload.cap, 2),
+        energy01: sig.energy01,
+        groove01: sig.groove01,
+        orbit01:  sig.orbit01,
+        smooth01: sig.smooth01,
+        speed01:  sig.speed01,
+        shake01:  sig.shake01,
+        locked:   sig.locked,
+        shakeHit: sig.shakeHit,
+        hz:       sig.hz,
+      };
+
+      ablyChannel.publish("orb", out, () => {});
+    }
+
+    // =========================================================================
+    // DIAL PACK v4 — base detection (PRESERVED)
+    // =========================================================================
+    const OMEGA_LPF = 0.22;
+
+    const HUNT_WINDOW_SEC   = 1.35;
+    const STABLE_WINDOW_SEC = 3.10;
+
+    const MIN_WINDOW_SAMPLES = 55;
+    const MAX_WINDOW_SAMPLES = 260;
+
+    const MIN_OMEGA = 0.08;
+
+    const LOCK_ON  = 0.30;
+    const LOCK_OFF = 0.22;
+
+    const MIN_HZ = 0.55;
+    const MAX_HZ = 2.30;
+
+    const JERK_TIGHT = 220.0;
+    const JERK_LOOSE = 2600.0;
+
+    const ORBIT_FLOOR      = 0.25;
+    const ORBIT_STRICTNESS = 1.0;
+
+    const ENERGY_GAIN_LOCKED = 1.25;
+    const ENERGY_GAIN_FREE   = 0.65;
+
+    const ENERGY_DECAY       = 0.040;
+
+    const UI_SMOOTH   = 0.10;
+    const LOCK_SMOOTH = 0.14;
+
+    const GRACE_SEC = 0.75;
+
+    const RECENTER_SEC = 0.85;
+    const RECENTER_GROOVE_MAX = 0.22;
+
+    const NORM_ALPHA = 0.10;
+
+    // ============================================================================
+    // SPEED METER — tuned for “force” (rotationRate magnitude, deg/sec)
+    // ============================================================================
+    const SPEED_DEAD_DPS = 8.0;
+    const SPEED_CAP_DPS  = 360.0;
+
+    const SPEED_EMA_CUTOFF_FAST_HZ = 1.5;
+    const SPEED_EMA_CUTOFF_SLOW_HZ = .10;
+
+    const SPEED_ADAPT_START_DPS = 18.0;
+    const SPEED_ADAPT_END_DPS   = 130.0;
+
+    const SPEED_ADAPT_POW = 1.0;
+
+    const SPEED_NORM_DPS = 300.0;
+    const SPEED_MAP_POW  = 1.10;
+
+    const SPEED_ATTACK_HZ  = 5.0;
+    const SPEED_RELEASE_HZ = 8.0;
+
+    // =========================================================================
+    // SSOT MOBILE 2.0 — ENERGY MODEL
+    // =========================================================================
+    const GROOVE_EXP = 0.70;
+    const SMOOTH_EXP = 0.70;
+    const ORBIT_EXP  = 1.00;
+
+    const EARN_SCALE = 1.00;
+
+    const COAST_QUALITY_MIN  = 0.28;
+    const COAST_DECAY_MULT   = 0.65;
+
+    // =========================================================================
+    // ✅ ANTI-EXPLOIT: SMOOTH KILL SWITCH
+    // =========================================================================
+    const SMOOTH_KILL_THRESH     = 0.12;
+    const SMOOTH_KILL_DECAY_MULT = 3.25;
+    const SMOOTH_KILL_UNLOCK     = true;
+
+    // =========================================================================
+    // DISRUPTOR METER v1 — SHAKE
+    // =========================================================================
+    const SHAKE_BASELINE_HZ   = 0.65;
+    const SHAKE_DEADZONE     = 0.85;
+    const SHAKE_GAIN         = 3.20;
+    const SHAKE_DECAY        = 2.10;
+    const SHAKE_HIT_THRESH   = 0.85;
+    const SHAKE_ARM_THRESH   = 0.65;
+    const SHAKE_COOLDOWN_SEC = 0.55;
+    const SHAKE_CADENCE_SEC  = 0.28;
+    const SHAKE_SPIKE_GATE   = 2.2;
+
+    // =========================================================================
+    // AUDIO MAPPING (preserved)
+    // =========================================================================
+    const AUDIO_GATE   = 0.02;
+    const AUDIO_MIN_DB = -42;
+    const AUDIO_MAX_DB = -6;
+    const AUDIO_EXP    = 1.15;
+
+    const MASTER_GAIN  = 2.2;
+
+    const TONE_BASE_HZ    = 180;
+    const TONE_MAX_ADD_HZ = 220;
+
+    // =========================================================================
+    // Helpers
+    // =========================================================================
+    const clamp01 = (x) => Math.max(0, Math.min(1, x));
+    const lerp = (a,b,t) => a + (b-a)*t;
+    const mag3 = (x,y,z) => Math.sqrt(x*x+y*y+z*z);
+    const dbToGain = (db) => Math.pow(10, db/20);
+
+    function alphaFromCutoff(dt, cutoffHz){
+      const tau = 1 / (2 * Math.PI * cutoffHz);
+      return 1 / (1 + tau / Math.max(1e-4, dt));
+    }
+
+    const invLerp01 = (a, b, v) => {
+      if (Math.abs(b - a) < 1e-9) return 0;
+      return clamp01((v - a) / (b - a));
     };
 
-    // SSOT tunables (one place)
-    const CFG = {
-      // publish cadence
-      publishHz: 30,                 // network rate
-      publishMinMs: 1000/30,
-
-      // signal shaping
-      accMagNorm: 18.0,              // approx m/s^2 range for normalization
-      gyrMagNorm: 520.0,             // deg/s range for normalization
-
-      // filters
-      lpTauAcc: 0.20,                // seconds
-      lpTauGyr: 0.16,
-      hpTauAcc: 0.40,
-
-      // shake detection
-      shakeGate: 0.55,
-      shakeHitGate: 0.82,
-      shakeCooldown: 420,            // ms
-
-      // groove lock
-      grooveTau: 0.65,               // seconds (smoothing)
-      lockUp: 0.08,
-      lockDown: 0.06,
-      lockGate: 0.62,                // threshold for locked state
-
-      // orbit proxy (orientation stability)
-      orbitTau: 0.55,
-    };
-
-    function expSlew(curr, target, dt, tau){
-      // tau ~ time constant seconds
-      const a = 1 - Math.exp(-dt / Math.max(1e-3, tau));
-      return curr + (target - curr) * a;
+    function median(arr) {
+      if (!arr.length) return 0;
+      const a = arr.slice().sort((x,y) => x - y);
+      const mid = (a.length - 1) / 2;
+      const lo = Math.floor(mid), hi = Math.ceil(mid);
+      return (a[lo] + a[hi]) / 2;
     }
 
-    function mag3(x,y,z){
-      return Math.sqrt(x*x + y*y + z*z);
+    function energyToGain(e) {
+      if (e <= AUDIO_GATE) return 0;
+      const x = (e - AUDIO_GATE) / (1 - AUDIO_GATE);
+      const shaped = Math.pow(clamp01(x), AUDIO_EXP);
+      const db = AUDIO_MIN_DB + (AUDIO_MAX_DB - AUDIO_MIN_DB) * shaped;
+      return dbToGain(db);
     }
 
-    function requestIOSPermissionIfNeeded(){
-      // iOS requires explicit permission for motion/orientation
-      const needMotionPerm = (typeof DeviceMotionEvent !== "undefined" && typeof DeviceMotionEvent.requestPermission === "function");
-      const needOriPerm    = (typeof DeviceOrientationEvent !== "undefined" && typeof DeviceOrientationEvent.requestPermission === "function");
-      return { needMotionPerm, needOriPerm };
-    }
+    function eigenvaluesSym3(m00,m01,m02,m11,m12,m22) {
+      let a00=m00, a01=m01, a02=m02, a11=m11, a12=m12, a22=m22;
 
-    async function ensureSensorPermission(){
-      const { needMotionPerm, needOriPerm } = requestIOSPermissionIfNeeded();
+      const iters = 10;
+      for (let k=0;k<iters;k++) {
+        let p=0,q=1;
+        let apq = Math.abs(a01);
+        const a02abs = Math.abs(a02);
+        const a12abs = Math.abs(a12);
+        if (a02abs > apq) { apq = a02abs; p=0; q=2; }
+        if (a12abs > apq) { apq = a12abs; p=1; q=2; }
+        if (apq < 1e-12) break;
 
-      // Try requestPermission on a user gesture (we call this from START click)
-      try{
-        if (needMotionPerm) {
-          const r = await DeviceMotionEvent.requestPermission();
-          if (r !== "granted") throw new Error("motion denied");
+        let app, aqq, apqv;
+        if (p===0 && q===1) { app=a00; aqq=a11; apqv=a01; }
+        else if (p===0 && q===2) { app=a00; aqq=a22; apqv=a02; }
+        else { app=a11; aqq=a22; apqv=a12; }
+
+        const phi = 0.5 * Math.atan2(2*apqv, (aqq - app));
+        const c = Math.cos(phi);
+        const s = Math.sin(phi);
+
+        function rot(xp, xq) { return [c*xp - s*xq, s*xp + c*xq]; }
+
+        const appNew = c*c*app - 2*s*c*apqv + s*s*aqq;
+        const aqqNew = s*s*app + 2*s*c*apqv + c*c*aqq;
+
+        if (p===0 && q===1) {
+          const [a02n, a12n] = rot(a02, a12);
+          a02=a02n; a12=a12n;
+          a00=appNew; a11=aqqNew; a01=0;
+        } else if (p===0 && q===2) {
+          const [a01n, a12n] = rot(a01, a12);
+          a01=a01n; a12=a12n;
+          a00=appNew; a22=aqqNew; a02=0;
+        } else {
+          const [a01n, a02n] = rot(a01, a02);
+          a01=a01n; a02=a02n;
+          a11=appNew; a22=aqqNew; a12=0;
         }
-        if (needOriPerm) {
-          const r = await DeviceOrientationEvent.requestPermission();
-          if (r !== "granted") throw new Error("orientation denied");
-        }
-        return true;
-      }catch(e){
-        console.warn("permission flow:", e);
-        toast(`<span class="bad">Enable Motion & Orientation</span><br/>Safari → aA → Website Settings`, "bad");
-        return false;
-      }
-    }
-
-    function wireSensors(){
-      // DeviceMotionEvent: acceleration + rotationRate
-      window.addEventListener("devicemotion", (ev) => {
-        const a = ev.accelerationIncludingGravity || ev.acceleration || null;
-        const rr = ev.rotationRate || null;
-
-        if (a){
-          TELE.ax = Number(a.x) || 0;
-          TELE.ay = Number(a.y) || 0;
-          TELE.az = Number(a.z) || 0;
-          TELE.gotMotion = true;
-        }
-        if (rr){
-          TELE.gx = Number(rr.alpha) || 0;
-          TELE.gy = Number(rr.beta) || 0;
-          TELE.gz = Number(rr.gamma) || 0;
-          TELE.gotMotion = true;
-        }
-      }, { passive:true });
-
-      // DeviceOrientationEvent: alpha/beta/gamma (deg)
-      window.addEventListener("deviceorientation", (ev) => {
-        TELE.alpha = Number(ev.alpha) || 0;
-        TELE.beta  = Number(ev.beta)  || 0;
-        TELE.gamma = Number(ev.gamma) || 0;
-        TELE.gotOrientation = true;
-      }, { passive:true });
-    }
-
-    // ------------------------------
-    // Core telemetry loop (SSOT)
-    // ------------------------------
-    function startStreaming(){
-      TELE.streaming = true;
-      TELE.startedAt = performance.now();
-      TELE.lastAt = TELE.startedAt;
-      TELE.seq = 0;
-
-      // reset filters
-      TELE.accLP = 0;
-      TELE.accHP = 0;
-      TELE.gyrLP = 0;
-
-      TELE.shake01 = 0;
-      TELE.shakeHit = false;
-      TELE.shakeCooldownMs = 0;
-
-      TELE.hz = 0;
-      TELE.locked = false;
-      TELE.lockScore = 0;
-
-      TELE.groove01 = 0;
-      TELE.smooth01 = 0;
-      TELE.speed01 = 0;
-      TELE.energy01 = 0;
-      TELE.orbit01 = 0;
-
-      // run
-      if (!TELE.rafId) TELE.rafId = requestAnimationFrame(tick);
-    }
-
-    function stopStreaming(){
-      TELE.streaming = false;
-      if (TELE.rafId){
-        cancelAnimationFrame(TELE.rafId);
-        TELE.rafId = 0;
-      }
-    }
-
-    let lastPublishAt = 0;
-
-    function tick(now){
-      TELE.rafId = requestAnimationFrame(tick);
-
-      const dt = clamp((now - TELE.lastAt) / 1000, 0, 0.05);
-      TELE.lastAt = now;
-
-      // Read raw magnitudes
-      const accMag = mag3(TELE.ax, TELE.ay, TELE.az);          // ~ includes gravity
-      const gyrMag = mag3(TELE.gx, TELE.gy, TELE.gz);          // deg/s
-
-      // Lowpass + highpass (cheap but stable)
-      TELE.accLP = expSlew(TELE.accLP, accMag, dt, CFG.lpTauAcc);
-      TELE.gyrLP = expSlew(TELE.gyrLP, gyrMag, dt, CFG.lpTauGyr);
-
-      // highpass-ish: accMag - lowpass with separate tau
-      const accLP2 = expSlew(TELE.accHP, TELE.accLP, dt, CFG.hpTauAcc);
-      TELE.accHP = accLP2; // store
-      const accHPVal = accMag - accLP2;
-
-      // Normalize to 0..1
-      const acc01 = clamp01(Math.abs(accHPVal) / CFG.accMagNorm);
-      const gyr01 = clamp01(TELE.gyrLP / CFG.gyrMagNorm);
-
-      // Smoothness: inverse of jerkiness (use acc01 as jerk proxy)
-      const smoothTarget = 1 - clamp01(acc01 * 1.25);
-      TELE.smooth01 = expSlew(TELE.smooth01, smoothTarget, dt, CFG.grooveTau);
-
-      // Speed: blend accel + gyro
-      const speedTarget = clamp01(0.55*acc01 + 0.45*gyr01);
-      TELE.speed01 = expSlew(TELE.speed01, speedTarget, dt, 0.18);
-
-      // Energy: shaped speed with mild boost in mode1
-      const modeBoost = (MODE.value === 1) ? 1.10 : (MODE.value === 2 ? 0.65 : 1.0);
-      const energyTarget = clamp01(Math.pow(TELE.speed01, 1.10) * modeBoost);
-      TELE.energy01 = expSlew(TELE.energy01, energyTarget, dt, 0.20);
-
-      // Orbit proxy: orientation stability (less jitter => higher orbit)
-      // Use small changes in beta/gamma as a stability signal
-      // (we don't store prev angles globally to keep it lean—derive from gyro)
-      const orbitTarget = clamp01(1 - clamp01(gyr01 * 0.85));
-      TELE.orbit01 = expSlew(TELE.orbit01, orbitTarget, dt, CFG.orbitTau);
-
-      // Groove / lock: use a simple “consistency score” from speed stability
-      // If speed is steady-ish and not too low, lock rises
-      const active = (TELE.speed01 > 0.10);
-      const steady = (TELE.smooth01 > 0.55);
-      const grooveTarget = active ? clamp01(0.55*TELE.smooth01 + 0.45*TELE.orbit01) : 0;
-      TELE.groove01 = expSlew(TELE.groove01, grooveTarget, dt, CFG.grooveTau);
-
-      const lockInc = (active && steady) ? CFG.lockUp : -CFG.lockDown;
-      TELE.lockScore = clamp01(TELE.lockScore + lockInc * dt * 10);
-      TELE.locked = (TELE.lockScore >= CFG.lockGate);
-
-      // Hz estimate (very lightweight): map groove+speed to a plausible rhythm band
-      // (This is not a strict BPM detector; receiver telemetry modal will still help refine.)
-      const hzTarget = (active ? (0.6 + 2.4*TELE.speed01) : 0);
-      TELE.hz = expSlew(TELE.hz, hzTarget, dt, 0.45);
-
-      // Shake: derived from spikes
-      TELE.shakeCooldownMs = Math.max(0, TELE.shakeCooldownMs - dt*1000);
-      const shakeTarget = clamp01(acc01*1.15 + gyr01*0.55);
-      TELE.shake01 = expSlew(TELE.shake01, shakeTarget, dt, 0.10);
-
-      TELE.shakeHit = false;
-      if (TELE.shakeCooldownMs <= 0 && TELE.shake01 > CFG.shakeHitGate){
-        TELE.shakeHit = true;
-        TELE.shakeCooldownMs = CFG.shakeCooldown;
       }
 
-      // UI tint — always, even before publish
-      applyTint(MODE.value, TELE.energy01);
+      let l1=a00, l2=a11, l3=a22;
+      if (l1 < l2) [l1,l2]=[l2,l1];
+      if (l2 < l3) [l2,l3]=[l3,l2];
+      if (l1 < l2) [l1,l2]=[l2,l1];
+      return [l1,l2,l3];
+    }
 
-      // publish at fixed cadence
-      if (!TELE.streaming) return;
+    function autocorrPeak(signal, dt) {
+      const n = signal.length;
+      if (n < 24) return {peak: 0, lag: 0, hz: 0};
 
-      const sinceStart = now - TELE.startedAt;
-      const dms = (now - lastPublishAt);
-      if ((now - lastPublishAt) >= CFG.publishMinMs){
-        lastPublishAt = now;
+      let mean=0;
+      for (let i=0;i<n;i++) mean += signal[i];
+      mean /= n;
 
-        const payload = {
-          v: SCHEMA_V,
-          room: roomCode,
-          deviceId,
-          seq: ++TELE.seq,
-
-          // timing
-          t_ms: +sinceStart.toFixed(1),
-          dms: +Math.max(0, dms).toFixed(1),
-
-          // ui/mode
-          mode: MODE.value,
-
-          // receiver-friendly fields
-          speed01: +TELE.speed01.toFixed(4),
-          energy01: +TELE.energy01.toFixed(4),
-          groove01: +TELE.groove01.toFixed(4),
-          orbit01: +TELE.orbit01.toFixed(4),
-          smooth01: +TELE.smooth01.toFixed(4),
-          shake01: +TELE.shake01.toFixed(4),
-
-          locked: !!TELE.locked,
-          hz: +TELE.hz.toFixed(3),
-
-          // optional event hint
-          shakeHit: TELE.shakeHit ? true : undefined
-        };
-
-        publishOrb(payload);
-
-        // HUD (super light)
-        renderHud(payload);
+      let varr=0;
+      for (let i=0;i<n;i++) {
+        const d = signal[i]-mean;
+        varr += d*d;
       }
+      if (varr < 1e-9) return {peak: 0, lag: 0, hz: 0};
+
+      const minLag = Math.max(2, Math.floor(1/(MAX_HZ*dt)));
+      const maxLag = Math.min(n-3, Math.floor(1/(MIN_HZ*dt)));
+
+      let best = -1;
+      let bestLag = 0;
+
+      for (let lag=minLag; lag<=maxLag; lag++) {
+        let c=0;
+        for (let i=0;i<n-lag;i++) {
+          c += (signal[i]-mean) * (signal[i+lag]-mean);
+        }
+        const r = c / varr;
+        if (r > best) { best = r; bestLag = lag; }
+      }
+
+      const hz = bestLag > 0 ? (1/(bestLag*dt)) : 0;
+      return {peak: clamp01(best), lag: bestLag, hz};
     }
 
-    function renderHud(p){
-      const conn = connected ? "ok" : "bad";
-      const m = p.mode;
-      const modeName = (m === 0) ? "NORMAL" : (m === 1) ? "TRAIN" : "PAUSE";
-
-      const lines = [
-        `room: ${roomCode}  seq:${p.seq}`,
-        `${connected ? "CONNECTED" : "CONNECTING"}  mode:${modeName}`,
-        `speed:${Math.round(p.speed01*100)}  energy:${Math.round(p.energy01*100)}  groove:${Math.round(p.groove01*100)}`,
-        `orbit:${Math.round(p.orbit01*100)}  smooth:${Math.round(p.smooth01*100)}  shake:${Math.round(p.shake01*100)}`,
-        `locked:${p.locked ? 1 : 0}  hz:${p.hz.toFixed(2)}`
-      ].join("\n");
-
-      els.hud.innerHTML =
-        `<span class="${conn}">${lines}</span>` +
-        (TELE.gotMotion ? "" : `\n<span class="bad">no motion</span>`) +
-        (TELE.gotOrientation ? "" : `\n<span class="dim">no orientation</span>`);
+    function smoothnessFromJerk(avgJerk) {
+      const t = (JERK_LOOSE - avgJerk) / (JERK_LOOSE - JERK_TIGHT);
+      return clamp01(t);
     }
 
-    // ------------------------------
-    // Interaction: start + tap-toggle
-    // ------------------------------
-    function showField(){
-      els.startBtn.style.display = "none";
-      els.field.classList.add("on");
+    function cov3(vecs) {
+      const n = vecs.length;
+      if (n < 10) return {xx:0,xy:0,xz:0,yy:0,yz:0,zz:0, trace:0};
+
+      let mx=0,my=0,mz=0;
+      for (const v of vecs) { mx+=v.x; my+=v.y; mz+=v.z; }
+      mx/=n; my/=n; mz/=n;
+
+      let xx=0,xy=0,xz=0,yy=0,yz=0,zz=0;
+      for (const v of vecs) {
+        const x=v.x-mx, y=v.y-my, z=v.z-mz;
+        xx += x*x; xy += x*y; xz += x*z;
+        yy += y*y; yz += y*z; zz += z*z;
+      }
+      const inv = 1/(n-1);
+      xx*=inv; xy*=inv; xz*=inv; yy*=inv; yz*=inv; zz*=inv;
+      return {xx,xy,xz,yy,yz,zz, trace:(xx+yy+zz)};
     }
 
-    function hideField(){
-      els.field.classList.remove("on");
-      els.startBtn.style.display = "";
+    function orbitBonusFromDirCov(cov) {
+      const eps = 1e-9;
+      if (cov.trace < 1e-6) return ORBIT_FLOOR;
+      const [l1,l2,l3] = eigenvaluesSym3(cov.xx,cov.xy,cov.xz,cov.yy,cov.yz,cov.zz);
+      const iso = clamp01(1 - ((l1 - l3) / (l1 + eps)));
+      const shaped = Math.pow(iso, ORBIT_STRICTNESS);
+      return ORBIT_FLOOR + (1 - ORBIT_FLOOR) * shaped;
     }
 
-    function nextMode(){
-      setMode(MODE.value + 1);
-      // send an immediate “mode event” so receiver can mark it
-      if (TELE.streaming){
+    function computeAvg(arr) {
+      if (!arr.length) return 0;
+      let s=0;
+      for (const x of arr) s+=x;
+      return s/arr.length;
+    }
+
+    function trimToWindow(dtMean, targetSec, omegaMag, omegaNorm, omegaDir, jerkBuf, dtBuf) {
+      let targetN = dtMean > 1e-4 ? Math.round(targetSec / dtMean) : MAX_WINDOW_SAMPLES;
+      targetN = Math.max(MIN_WINDOW_SAMPLES, Math.min(MAX_WINDOW_SAMPLES, targetN));
+
+      while (omegaMag.length  > targetN) omegaMag.shift();
+      while (omegaNorm.length > targetN) omegaNorm.shift();
+      while (omegaDir.length  > targetN) omegaDir.shift();
+      while (jerkBuf.length   > targetN) jerkBuf.shift();
+      while (dtBuf.length     > targetN) dtBuf.shift();
+
+      return targetN;
+    }
+
+    // =========================================================================
+    // ✅ Meter continuity (logic preserved; no UI)
+    // =========================================================================
+    const METER_HOLD_SEC = 0.55;
+    const METER_FADE_HZ  = 3.0;
+
+    // =========================================================================
+    // State
+    // =========================================================================
+    let running = false;
+    let lastT = null;
+
+    let ox=0, oy=0, oz=0;
+
+    const omegaMag  = [];
+    const omegaNorm = [];
+    const omegaDir  = [];
+    const jerkBuf   = [];
+    const dtBuf     = [];
+
+    let emaMean = 0;
+    let emaVar  = 1;
+
+    let lock = false;
+    let lockStrength = 0;
+    let grooveHz = 0;
+
+    let graceLeft = 0;
+    let recenterBadTime = 0;
+
+    let energy = 0;
+    let energyUI = 0;
+
+    // ✅ SPEED v0 state (deg/s)
+    let mSpeedEMA = 0;
+    let speedOut  = 0;
+
+    // continuity memory for meters (NOT speed)
+    let meterHoldLeft = 0;
+    let lastGrooveUI = 0;
+    let lastOrbitUI  = 0;
+    let lastSmoothUI = 0;
+
+    // SHAKE state
+    let shake01 = 0;
+    let accelBaseMag = 9.81;
+    let shakeCooldownLeft = 0;
+    let lastSpikeTime = -1e9;
+    let hadRecentSpike = false;
+
+    let audioCtx = null, osc = null, gainNode = null;
+
+    function ensureAudio() {
+      if (audioCtx) return;
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      gainNode = audioCtx.createGain();
+      gainNode.gain.value = 0;
+
+      osc = audioCtx.createOscillator();
+      osc.type = 'sine';
+      osc.frequency.value = TONE_BASE_HZ;
+
+      osc.connect(gainNode);
+      gainNode.connect(audioCtx.destination);
+      osc.start();
+    }
+
+    function setAudio(eUI, groove, locked) {
+      if (!audioCtx || !gainNode || !osc) return;
+
+      const gBase = energyToGain(clamp01(eUI));
+      const gGroove = locked ? (0.30 + 0.70*groove) : (0.08 + 0.22*groove);
+      const g = MASTER_GAIN * gBase * gGroove;
+
+      const f = TONE_BASE_HZ
+              + TONE_MAX_ADD_HZ * (locked ? groove : 0.30*groove)
+              + 60 * clamp01(eUI);
+
+      const now = audioCtx.currentTime;
+      gainNode.gain.cancelScheduledValues(now);
+      gainNode.gain.setTargetAtTime(g, now, 0.06);
+
+      osc.frequency.cancelScheduledValues(now);
+      osc.frequency.setTargetAtTime(f, now, 0.06);
+    }
+
+    function flushHistorySoft() {
+      const keep = Math.min(18, omegaMag.length);
+      omegaMag.splice(0, Math.max(0, omegaMag.length - keep));
+      omegaNorm.splice(0, Math.max(0, omegaNorm.length - keep));
+      omegaDir.splice(0, Math.max(0, omegaDir.length - keep));
+      jerkBuf.splice(0, Math.max(0, jerkBuf.length - keep));
+      dtBuf.splice(0, Math.max(0, dtBuf.length - keep));
+    }
+
+    function meterHoldOrFade(dt) {
+      if (dt > 0) meterHoldLeft = Math.max(0, meterHoldLeft - dt);
+
+      const dtFade = Math.max(1e-3, dt || computeAvg(dtBuf.slice(-50)) || 1/60);
+      const aFade = alphaFromCutoff(dtFade, METER_FADE_HZ);
+      const holding = meterHoldLeft > 0;
+
+      const grooveOut = holding ? lastGrooveUI : (1 - aFade) * lastGrooveUI;
+      const orbitOut  = holding ? lastOrbitUI  : (1 - aFade) * lastOrbitUI;
+      const smoothOut = holding ? lastSmoothUI : (1 - aFade) * lastSmoothUI;
+
+      lastGrooveUI = grooveOut;
+      lastOrbitUI  = orbitOut;
+      lastSmoothUI = smoothOut;
+
+      return { grooveOut, orbitOut, smoothOut };
+    }
+
+    function updateSpeedV0(wRawDps, dt) {
+      const dtSafe = Math.max(1e-3, dt || 1/60);
+
+      const wRaw = Math.max(0, wRawDps || 0);
+      const cap  = SPEED_CAP_DPS;
+      const wCap = Math.min(wRaw, cap);
+
+      const wDz = Math.max(0, wCap - SPEED_DEAD_DPS);
+
+      const denom = Math.max(1e-6, (SPEED_ADAPT_END_DPS - SPEED_ADAPT_START_DPS));
+      let tAdapt = (wDz - SPEED_ADAPT_START_DPS) / denom;
+      tAdapt = clamp01(tAdapt);
+      tAdapt = Math.pow(tAdapt, SPEED_ADAPT_POW);
+
+      const cutoffHz = lerp(SPEED_EMA_CUTOFF_FAST_HZ, SPEED_EMA_CUTOFF_SLOW_HZ, tAdapt);
+      const aE = alphaFromCutoff(dtSafe, cutoffHz);
+
+      mSpeedEMA = (mSpeedEMA === 0) ? wDz : ((1 - aE) * mSpeedEMA + aE * wDz);
+      const wFilt = mSpeedEMA;
+
+      const n = clamp01(wFilt / SPEED_NORM_DPS);
+      const target = Math.pow(n, SPEED_MAP_POW);
+
+      const aAtk = alphaFromCutoff(dtSafe, SPEED_ATTACK_HZ);
+      const aRel = alphaFromCutoff(dtSafe, SPEED_RELEASE_HZ);
+      const a = (target >= speedOut) ? aAtk : aRel;
+      speedOut = (1 - a) * speedOut + a * target;
+
+      return { cap, dt: dtSafe, wRaw, wCap, wDz, wFilt, speed: speedOut, cutoffHz, tAdapt };
+    }
+
+    function updateShake(e, t, dt){
+      const acc = e.accelerationIncludingGravity || e.acceleration;
+      if (!acc) {
+        if (dt > 0) shake01 = Math.max(0, shake01 - SHAKE_DECAY * dt);
+        if (dt > 0) shakeCooldownLeft = Math.max(0, shakeCooldownLeft - dt);
+        return { shake01, shakeHit:false, spike:0, amag:0 };
+      }
+
+      const ax = Number(acc.x) || 0;
+      const ay = Number(acc.y) || 0;
+      const az = Number(acc.z) || 0;
+      const amag = mag3(ax, ay, az);
+
+      const dtSafe = Math.max(1e-3, dt || 1/60);
+
+      const aBase = alphaFromCutoff(dtSafe, SHAKE_BASELINE_HZ);
+      accelBaseMag = (isFinite(accelBaseMag) ? accelBaseMag : amag);
+      accelBaseMag = (1 - aBase) * accelBaseMag + aBase * amag;
+
+      const rawSpike = Math.abs(amag - accelBaseMag);
+      const spike = Math.max(0, rawSpike - SHAKE_DEADZONE);
+
+      if (spike > SHAKE_SPIKE_GATE) {
+        if ((t - lastSpikeTime) <= SHAKE_CADENCE_SEC) hadRecentSpike = true;
+        lastSpikeTime = t;
+      }
+      if ((t - lastSpikeTime) > SHAKE_CADENCE_SEC) hadRecentSpike = false;
+
+      shake01 = clamp01(shake01 + spike * SHAKE_GAIN * dtSafe - SHAKE_DECAY * dtSafe);
+
+      shakeCooldownLeft = Math.max(0, shakeCooldownLeft - dtSafe);
+
+      let shakeHit = false;
+      const armed = (shake01 >= SHAKE_ARM_THRESH);
+      const cadenceOk = hadRecentSpike;
+      if (armed && cadenceOk && shakeCooldownLeft <= 0 && shake01 >= SHAKE_HIT_THRESH) {
+        shakeHit = true;
+        shakeCooldownLeft = SHAKE_COOLDOWN_SEC;
+        shake01 = Math.max(0, shake01 - 0.40);
+      }
+
+      return { shake01, shakeHit, spike, amag };
+    }
+
+    function onMotion(e) {
+      if (!running) return;
+
+      const t = performance.now() / 1000;
+      const dt = (lastT == null) ? 0 : (t - lastT);
+      lastT = t;
+
+      if (dt > 0) dtBuf.push(dt);
+
+      const sh = updateShake(e, t, dt);
+      const rr = e.rotationRate;
+
+      // if no rr, still coast + publish
+      if (!rr) {
+        const dtMean = Math.max(1e-3, computeAvg(dtBuf.slice(-50)) || 1/60);
+        const dtForFilter = (dt > 0) ? dt : dtMean;
+        const sv = updateSpeedV0(0, dtForFilter);
+
+        if (dt > 0) {
+          energy = Math.max(0, energy - ENERGY_DECAY * dt);
+          energyUI = lerp(energyUI, energy, UI_SMOOTH);
+        }
+
+        const held = meterHoldOrFade(dt);
+
         publishOrb({
-          v: SCHEMA_V,
-          room: roomCode,
-          deviceId,
-          seq: ++TELE.seq,
-          t_ms: +Math.max(0, performance.now() - TELE.startedAt).toFixed(1),
-          mode: MODE.value,
-          verb: "mode"
-        });
+          room,
+          t: performance.now(),
+          dt: sv.dt,
+          wRaw: sv.wRaw,
+          wCap: sv.wCap,
+          wFilt: sv.wFilt,
+          cap: sv.cap,
+          energy01: energyUI,
+          groove01: held.grooveOut,
+          orbit01: held.orbitOut,
+          smooth01: held.smoothOut,
+          speed01: sv.speed,
+          shake01: sh.shake01,
+          shakeHit: sh.shakeHit,
+          locked: false,
+          hz: 0
+        }, dt);
+
+        setBgFromEnergy(clamp01(energyUI));
+        setAudio(energyUI, held.grooveOut, false);
+        return;
+      }
+
+      const x = rr.beta ?? 0;
+      const y = rr.gamma ?? 0;
+      const z = rr.alpha ?? 0;
+
+      const prevOx=ox, prevOy=oy, prevOz=oz;
+
+      ox = lerp(ox, x, OMEGA_LPF);
+      oy = lerp(oy, y, OMEGA_LPF);
+      oz = lerp(oz, z, OMEGA_LPF);
+
+      const mStability = mag3(ox,oy,oz);
+      const dtMean = Math.max(1e-3, computeAvg(dtBuf.slice(-50)));
+      const dtForFilter = (dt > 0) ? dt : dtMean;
+
+      const wRaw = mag3(x, y, z);
+      const sv = updateSpeedV0(wRaw, dtForFilter);
+
+      if (dt > 0) graceLeft = Math.max(0, graceLeft - dt);
+
+      if (mStability > MIN_OMEGA) {
+        omegaMag.push(mStability);
+
+        const d0 = mStability - emaMean;
+        emaMean = emaMean + NORM_ALPHA * d0;
+
+        const d2 = (mStability - emaMean);
+        emaVar = emaVar + NORM_ALPHA * (d2*d2 - emaVar);
+
+        const rms = Math.sqrt(Math.max(1e-6, emaVar));
+        omegaNorm.push((mStability - emaMean) / rms);
+
+        const inv = 1/mStability;
+        omegaDir.push({x:ox*inv, y:oy*inv, z:oz*inv});
+
+        if (dt > 0) {
+          const dtSafe = Math.max(dt, dtMean * 0.5, 1/120);
+          jerkBuf.push(mag3(ox-prevOx, oy-prevOy, oz-prevOz) / dtSafe);
+        }
+      } else {
+        if (omegaMag.length) omegaMag.shift();
+        if (omegaNorm.length) omegaNorm.shift();
+        if (omegaDir.length) omegaDir.shift();
+        if (jerkBuf.length)  jerkBuf.shift();
+      }
+
+      const inStableMode = lock || graceLeft > 0;
+      const windowSec = inStableMode ? STABLE_WINDOW_SEC : HUNT_WINDOW_SEC;
+      const nTarget = trimToWindow(dtMean, windowSec, omegaMag, omegaNorm, omegaDir, jerkBuf, dtBuf);
+
+      if (omegaNorm.length < Math.min(MIN_WINDOW_SAMPLES, nTarget)) {
+        if (dt > 0) {
+          energy = Math.max(0, energy - ENERGY_DECAY * dt);
+          energyUI = lerp(energyUI, energy, UI_SMOOTH);
+        }
+
+        const held = meterHoldOrFade(dt);
+
+        publishOrb({
+          room,
+          t: performance.now(),
+          dt: sv.dt,
+          wRaw: sv.wRaw,
+          wCap: sv.wCap,
+          wFilt: sv.wFilt,
+          cap: sv.cap,
+          energy01: energyUI,
+          groove01: held.grooveOut,
+          orbit01: held.orbitOut,
+          smooth01: held.smoothOut,
+          speed01: sv.speed,
+          shake01: sh.shake01,
+          shakeHit: sh.shakeHit,
+          locked: false,
+          hz: 0
+        }, dt);
+
+        setBgFromEnergy(clamp01(energyUI));
+        setAudio(energyUI, held.grooveOut, false);
+        return;
+      }
+
+      const ac = autocorrPeak(omegaNorm, dtMean);
+      lockStrength = lerp(lockStrength, ac.peak, LOCK_SMOOTH);
+      grooveHz = ac.hz;
+
+      const jerkWindow = jerkBuf.slice(-Math.min(jerkBuf.length, 70));
+      const avgJerk = median(jerkWindow);
+      const smoothScore = smoothnessFromJerk(avgJerk);
+
+      const dirCov = cov3(omegaDir);
+      const orbitBonus = orbitBonusFromDirCov(dirCov);
+      const orbitShown = (orbitBonus - ORBIT_FLOOR) / (1 - ORBIT_FLOOR);
+
+      meterHoldLeft = METER_HOLD_SEC;
+      lastGrooveUI = lockStrength;
+      lastOrbitUI  = orbitShown;
+      lastSmoothUI = smoothScore;
+
+      if (!lock) {
+        if (lockStrength > LOCK_ON) { lock = true; graceLeft = 0; }
+      } else {
+        if (lockStrength < LOCK_OFF) { lock = false; graceLeft = GRACE_SEC; }
+      }
+
+      const inGrace = (!lock && graceLeft > 0);
+      if (inGrace && lockStrength > LOCK_ON) { lock = true; graceLeft = 0; }
+
+      if (dt > 0) {
+        const badGroove = lockStrength <= RECENTER_GROOVE_MAX;
+        const notLockedNow = !lock;
+        if (badGroove && notLockedNow) recenterBadTime += dt;
+        else recenterBadTime = Math.max(0, recenterBadTime - 1.5*dt);
+
+        if (recenterBadTime >= RECENTER_SEC) {
+          flushHistorySoft();
+          recenterBadTime = 0;
+        }
+      }
+
+      if (dt > 0) {
+        const grooveTerm = Math.pow(clamp01(lockStrength), GROOVE_EXP);
+        const smoothTerm = Math.pow(clamp01(smoothScore), SMOOTH_EXP);
+        const orbitTerm  = Math.pow(clamp01(orbitBonus),  ORBIT_EXP);
+
+        const qualityTerm = grooveTerm * smoothTerm;
+        const earnBase = EARN_SCALE * grooveTerm * smoothTerm * orbitTerm;
+
+        const effectivelyLocked = lock || inGrace;
+        const gain = effectivelyLocked ? ENERGY_GAIN_LOCKED : ENERGY_GAIN_FREE;
+
+        const smoothKill = (smoothScore < SMOOTH_KILL_THRESH);
+        const earn = smoothKill ? 0 : (gain * earnBase);
+
+        let decay = ENERGY_DECAY;
+        if (qualityTerm >= COAST_QUALITY_MIN) decay *= COAST_DECAY_MULT;
+
+        if (smoothKill) {
+          decay *= SMOOTH_KILL_DECAY_MULT;
+          if (SMOOTH_KILL_UNLOCK) { lock = false; graceLeft = 0; }
+        }
+
+        energy = Math.max(0, energy + (earn - decay) * dt);
+        energyUI = lerp(energyUI, energy, UI_SMOOTH);
+      }
+
+      const lockedNow = !!(lock || inGrace);
+
+      publishOrb({
+        room,
+        t: performance.now(),
+        dt: sv.dt,
+        wRaw: sv.wRaw,
+        wCap: sv.wCap,
+        wFilt: sv.wFilt,
+        cap: sv.cap,
+        energy01: energyUI,
+        groove01: lockStrength,
+        orbit01: orbitShown,
+        smooth01: smoothScore,
+        speed01: sv.speed,
+        shake01: sh.shake01,
+        shakeHit: sh.shakeHit,
+        locked: lockedNow,
+        hz: grooveHz
+      }, dt);
+
+      setBgFromEnergy(clamp01(energyUI));
+      setAudio(energyUI, lockStrength, lockedNow);
+    }
+
+    // =========================================================================
+    // iOS permission gate (UI-less)
+    // =========================================================================
+    async function requestMotionPermissionIfNeeded() {
+      const needs = (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function')
+                 || (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function');
+
+      if (!needs) return true;
+
+      const reqs = [];
+
+      if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
+        reqs.push(DeviceMotionEvent.requestPermission().then(s => s === 'granted').catch(() => false));
+      }
+
+      if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+        reqs.push(DeviceOrientationEvent.requestPermission().then(s => s === 'granted').catch(() => false));
+      }
+
+      const results = await Promise.all(reqs);
+      return results.every(Boolean);
+    }
+
+    // =========================================================================
+    // Start/Stop (button label toggles only)
+    // =========================================================================
+    async function start() {
+      if (!window.isSecureContext) return;
+
+      startBtn.disabled = true;
+      try {
+        const ok = await requestMotionPermissionIfNeeded();
+        if (!ok) return;
+
+        ensureAudio();
+        try { await audioCtx.resume(); } catch(e) {}
+
+        nextSendAtMs = 0;
+        lastSig = null;
+        await connectRelay(); // ok if false; can run locally
+
+        running = true;
+        lastT = null;
+
+        ox=oy=oz=0;
+        omegaMag.length  = 0;
+        omegaNorm.length = 0;
+        omegaDir.length  = 0;
+        jerkBuf.length   = 0;
+        dtBuf.length     = 0;
+
+        emaMean = 0;
+        emaVar  = 1;
+
+        lock = false;
+        lockStrength = 0;
+        grooveHz = 0;
+
+        graceLeft = 0;
+        recenterBadTime = 0;
+
+        energy = 0;
+        energyUI = 0;
+
+        mSpeedEMA = 0;
+        speedOut  = 0;
+
+        meterHoldLeft = 0;
+        lastGrooveUI = 0;
+        lastOrbitUI  = 0;
+        lastSmoothUI = 0;
+
+        shake01 = 0;
+        accelBaseMag = 9.81;
+        shakeCooldownLeft = 0;
+        lastSpikeTime = -1e9;
+        hadRecentSpike = false;
+
+        setAudio(0,0,false);
+        setBgFromEnergy(0);
+
+        window.addEventListener('devicemotion', onMotion, { passive: true });
+        startBtn.textContent = 'Stop';
+      } finally {
+        startBtn.disabled = false;
       }
     }
 
-    // tap field toggles modes (no delay)
-    els.field.addEventListener("pointerdown", (e) => {
-      e.preventDefault();
-      nextMode();
-    }, { passive:false });
+    function stop() {
+      running = false;
+      window.removeEventListener('devicemotion', onMotion);
 
-    // Start button: (1) permissions (2) connect (3) stream (4) UI swap
-    els.startBtn.addEventListener("click", async () => {
-      // permission gate on iOS
-      const okPerm = await ensureSensorPermission();
-
-      // wire sensors once (safe)
-      if (!window.__ORB_SENSORS_WIRED__) {
-        wireSensors();
-        window.__ORB_SENSORS_WIRED__ = true;
+      if (audioCtx && gainNode) {
+        const now = audioCtx.currentTime;
+        gainNode.gain.cancelScheduledValues(now);
+        gainNode.gain.setTargetAtTime(0, now, 0.05);
       }
 
-      // connect ably (best effort)
-      const okConn = await connectAbly();
-      toast(okConn ? `<span class="ok">Connected</span> — ${roomCode}` : `<span class="bad">Offline</span> — still running`, okConn ? "ok" : "bad");
+      disconnectRelay();
+      startBtn.textContent = 'Start';
+      setBgFromEnergy(0);
+    }
 
-      // begin stream + swap UI
-      setMode(0);
-      showField();
-      startStreaming();
-
-      // send “armed” event
-      publishOrb({
-        v: SCHEMA_V,
-        room: roomCode,
-        deviceId,
-        seq: ++TELE.seq,
-        t_ms: 0,
-        mode: MODE.value,
-        verb: "armed"
-      });
+    startBtn.addEventListener('click', () => {
+      if (!running) start();
+      else stop();
     });
-
-    // safety: if page hides, keep running but reduce jitter (no special handling)
-    document.addEventListener("visibilitychange", () => {
-      // you can decide later whether to pause streaming when hidden
-    });
-
-    // initial UI
-    setMode(0);
-    applyTint(0, 0);
-
-    // tiny initial HUD
-    els.hud.textContent = `room: ${roomCode}\nREADY — tap START`;
-
+  })();
   </script>
 </body>
 </html>
