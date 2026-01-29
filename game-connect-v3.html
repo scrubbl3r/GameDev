@@ -467,7 +467,7 @@
           <button id="pairBtn">Pair Phone</button>
           <button id="audioBtn">Audio: Off</button>
           <button id="connect">Reconnect</button>
-          <button id="newRoom">New room</button>
+          <button id="newRoom">DEV</button>
         </div>
 
         <div class="stat">
@@ -534,7 +534,7 @@
             <span>Gravity</span>
             <strong><span id="gVal">1.00</span>x</strong>
           </div>
-          <input id="gSlider" type="range" min="0" max="3" value=".40" step="0.01" />x
+          <input id="gSlider" type="range" min="0" max="3" value=".40" step="0.01" />
         </div>
       </div>
     </div>
@@ -825,7 +825,14 @@
       els.pairModal.classList.remove("on");
       els.pairModal.setAttribute("aria-hidden","true");
     }
-    els.pairBtn.addEventListener("click", openPairModal);
+
+    // ✅ Pair Phone now mints a new room first (beta path), then opens modal
+    els.pairBtn.addEventListener("click", async () => {
+      currentRoomChannel = "orb:" + randCode(6);
+      await connect({ auto:false });
+      openPairModal();
+    });
+
     els.pairBackdrop.addEventListener("click", closePairModal);
     els.pairClose.addEventListener("click", closePairModal);
 
@@ -1260,8 +1267,9 @@
       connecting = false;
     }
 
+    // ✅ DEV button forces room=test always
     els.newRoom.addEventListener("click", async () => {
-      currentRoomChannel = "orb:" + randCode(6);
+      currentRoomChannel = "orb:test";
       await connect({ auto:false });
       if (els.pairModal.classList.contains("on")) renderQR(currentRoomChannel);
     });
