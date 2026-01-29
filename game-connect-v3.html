@@ -1341,11 +1341,15 @@
     }
 
     // ✅ DEV button forces room=test always
+    // ✅ DEV button forces room=test always + launches QR
     els.newRoom.addEventListener("click", async () => {
-      currentRoomChannel = "orb:test";
-      await connect({ auto:false });
-      if (els.pairModal.classList.contains("on")) renderQR(currentRoomChannel);
+        currentRoomChannel = "orb:test";
+        await connect({ auto:false });
+
+        // ensure QR shows the test room
+        openPairModal();            // opens modal + calls renderQR(currentRoomChannel)
     });
+
 
     els.connect.addEventListener("click", () => connect({ auto:false }));
 
