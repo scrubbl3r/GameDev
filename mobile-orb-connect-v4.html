@@ -263,7 +263,8 @@
     const JERK_LOOSE = 2600.0;
 
     const ORBIT_FLOOR      = 0.25;
-    const ORBIT_STRICTNESS = .20;
+    const ORBIT_STRICTNESS = 1.0;
+    const ORBIT_UI_EXP = 0.35;
 
     const ENERGY_GAIN_LOCKED = 1.25;
     const ENERGY_GAIN_FREE   = 0.65;
@@ -843,7 +844,8 @@
 
       const dirCov = cov3(omegaDir);
       const orbitBonus = orbitBonusFromDirCov(dirCov);
-      const orbitShown = (orbitBonus - ORBIT_FLOOR) / (1 - ORBIT_FLOOR);
+        const orbitShown = (orbitBonus - ORBIT_FLOOR) / (1 - ORBIT_FLOOR);
+        const orbitUI = Math.pow(clamp01(orbitShown), ORBIT_UI_EXP);
 
       meterHoldLeft = METER_HOLD_SEC;
       lastGrooveUI = lockStrength;
