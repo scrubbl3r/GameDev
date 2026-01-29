@@ -17,13 +17,12 @@
         touch-action: manipulation;
     }
 
-    .app {
-        min-height: 100vh;     /* fallback */
-        min-height: 100svh;    /* stable viewport height (fixes iOS address bar shift) */
+    .app{
+        height: calc(var(--vh, 1vh) * 100);
         display: grid;
-        place-items: center;   /* center the single button */
-        padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom); /* avoids notch bias */
+        place-items: center;
     }
+
 
 
     /* Single centered round Start button */
@@ -53,6 +52,30 @@
 
   <!-- Ably JS -->
   <script src="https://cdn.ably.com/lib/ably.min-1.js"></script>
+
+  <!-- center button on screen hack -->
+  <script>
+    (function setVhUnit(){
+        const root = document.documentElement;
+
+        const set = () => {
+        const vv = window.visualViewport;
+        const h = (vv && vv.height) ? vv.height : window.innerHeight;
+        root.style.setProperty('--vh', (h * 0.01) + 'px');
+        };
+
+        set();
+
+        // iOS Chrome: visualViewport changes when bars show/hide & during scroll
+        window.addEventListener('resize', set, { passive: true });
+        window.addEventListener('orientationchange', set, { passive: true });
+        if (window.visualViewport) {
+        window.visualViewport.addEventListener('resize', set, { passive: true });
+        window.visualViewport.addEventListener('scroll', set, { passive: true });
+        }
+    })();
+    </script>
+
 
   <script>
   (() => {
