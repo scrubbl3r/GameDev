@@ -91,6 +91,28 @@
     button:hover{border-color:rgba(50,255,117,.35)}
     button:disabled{ opacity:.55; cursor:default; }
 
+    /* ✅ DEV: right-justified, no box, barely visible */
+    .devLink{
+      margin-left:auto;                 /* skoot to the right edge of the row */
+      display:inline-block;
+      padding:0;
+      border:0;
+      background:transparent;
+      text-decoration:none;
+
+      font-size:11px;
+      font-weight:800;
+      letter-spacing:.18em;
+
+      color: rgba(50,255,117,.38);      /* dim green */
+      opacity: 0.85;
+      user-select:none;
+    }
+    .devLink:hover{
+      color: rgba(50,255,117,.52);
+      text-shadow: 0 0 10px rgba(50,255,117,.10);
+    }
+
     .stat{margin-top:10px; font-size:13px; line-height:1.5;}
     .dim{opacity:.78}
     .bad{color:var(--bad); font-weight:900;}
@@ -198,16 +220,6 @@
     #pairBtn:hover{
       border-color: var(--g);
       box-shadow: 0 0 18px rgba(50,255,117,.14);
-    }
-
-    #connect,
-    #newRoom{
-      opacity: 0.72;
-      font-weight: 800;
-    }
-    #connect:hover,
-    #newRoom:hover{
-      opacity: 0.92;
     }
 
     .groupGap{ height:10px; }
@@ -466,8 +478,8 @@
         <div class="row">
           <button id="pairBtn">Pair Phone</button>
           <button id="audioBtn">Audio: Off</button>
-          <button id="connect">Reconnect</button>
-          <button id="newRoom">DEV</button>
+          <!-- ✅ removed: Reconnect button -->
+          <a id="newRoom" class="devLink" href="#" aria-label="Dev room">DEV</a>
         </div>
 
         <div class="stat">
@@ -588,7 +600,6 @@
 
     const els = {
       pairBtn: $("pairBtn"),
-      connect: $("connect"),
       newRoom: $("newRoom"),
       audioBtn: $("audioBtn"),
 
@@ -653,14 +664,11 @@
 
     // =========================================================================
     // LIFT (stub wiring for UI)
-    // - Placeholder aggregate of groove/smooth/speed.
-    // - We'll refine the true Lift model later.
     // =========================================================================
     function computeLift01(groove01, smooth01, speed01){
       const g = clamp01(groove01);
       const s = clamp01(smooth01);
       const p = clamp01(speed01);
-      // geometric mean: requires all three to contribute
       return clamp01(Math.pow(Math.max(0, g*s*p), 1/3));
     }
 
@@ -699,7 +707,7 @@
     }
 
     // =========================================================================
-    // BACKGROUND (energy-driven “charge” glow stays tied to energy for now)
+    // BACKGROUND (energy-driven)
     // =========================================================================
     const BG0 = { r: 0,   g: 0,  b: 0  };
     const BG1 = { r: 255, g: 42, b: 0  };
@@ -801,7 +809,7 @@
     });
 
     // =========================================================================
-    // SHAKE LAMP (500ms strobe)
+    // SHAKE LAMP
     // =========================================================================
     let lampTO = null;
     function flashShakeLamp(ms = 500){
@@ -814,7 +822,7 @@
     }
 
     // =========================================================================
-    // PAIR MODAL (QR popup)
+    // PAIR MODAL
     // =========================================================================
     function openPairModal(){
       els.pairModal.classList.add("on");
@@ -826,7 +834,6 @@
       els.pairModal.setAttribute("aria-hidden","true");
     }
 
-    // ✅ Pair Phone now mints a new room first (beta path), then opens modal
     els.pairBtn.addEventListener("click", async () => {
       currentRoomChannel = "orb:" + randCode(6);
       await connect({ auto:false });
@@ -875,7 +882,7 @@
     }
 
     // =========================================================================
-    // ✅ SPEED TELEMETRY MODAL (record/stop/close)
+    // ✅ SPEED TELEMETRY MODAL
     // =========================================================================
     let teleRecording = false;
     let teleT0 = 0;
@@ -892,7 +899,7 @@
       els.teleRecBtn.classList.remove("recOn");
     }
     function closeTele(){
-      stopTeleRecording(); // ✅ close stops recording (prevents accidental long captures)
+      stopTeleRecording();
       els.teleModal.classList.remove("on");
       els.teleModal.setAttribute("aria-hidden","true");
     }
@@ -919,7 +926,6 @@
     els.teleClose.addEventListener("click", closeTele);
     els.teleRecBtn.addEventListener("click", toggleTeleRecord);
 
-    // global escape closes whichever modal is open
     window.addEventListener("keydown", (e) => {
       if (e.key !== "Escape") return;
       if (els.teleModal.classList.contains("on")) closeTele();
@@ -962,12 +968,10 @@
       els.teleOut.textContent += line;
       teleLines++;
 
-      // keep it sane (avoid million-line DOM)
       if (teleLines % 40 === 0) {
         els.teleOut.scrollTop = els.teleOut.scrollHeight;
       }
       if (els.teleOut.textContent.length > 220000) {
-        // hard cap: stop and mark truncated
         els.teleOut.textContent += "\n(TRUNCATED: output capped)\n";
         stopTeleRecording();
       }
@@ -990,16 +994,15 @@
     let currentRoomChannel = normalizeRoom(readUrlRoomOrNull() || "orb:test");
 
     // =========================================================================
-    // ✅ PHYSICS (ground now 15px from bottom)
-    // ✅ THRUST NOW DRIVEN BY LIFT (not energy)
+    // ✅ PHYSICS
     // =========================================================================
     const PHYS = {
-      groundFromBottomPx: 15,  // ✅ matches CSS .groundLine bottom: 15px
+      groundFromBottomPx: 15,
       groundLinePx: 2,
-      orbRadiusPx: 50,         // 100px orb
+      orbRadiusPx: 50,
 
       gBase: 2200,
-      thrustMax: 2200,         // Lift=1.0 roughly cancels gravity at 1.0x
+      thrustMax: 2200,
 
       linearDrag: 2.8,
       bounce: 0.35,
@@ -1013,8 +1016,8 @@
       lastTs: null,
       gravityMul: 1.0,
 
-      lift01: 0,     // ✅ physics thrust input
-      energy01: 0,   // keeps existing energy-driven bg/audio/overcharge
+      lift01: 0,
+      energy01: 0,
     };
 
     function clamp(v, lo, hi){ return Math.max(lo, Math.min(hi, v)); }
@@ -1022,19 +1025,14 @@
     function readStageMetrics(){
       const rect = els.physStage.getBoundingClientRect();
       const stageH = rect.height;
-
-      // ground line y is stageH - bottomOffset - lineThickness
       const groundY = stageH - PHYS.groundFromBottomPx - PHYS.groundLinePx;
-
-      // ✅ orb rests on top of the ground line
       const yGroundCenter = groundY - PHYS.orbRadiusPx;
-
       const yCeilCenter = PHYS.orbRadiusPx;
       return { stageH, yGroundCenter, yCeilCenter };
     }
 
     function applyOrbTransform(){
-      const top = physState.y - PHYS.orbRadiusPx; // center -> top-left
+      const top = physState.y - PHYS.orbRadiusPx;
       els.orb.style.transform = `translate(-50%, ${top.toFixed(2)}px)`;
     }
 
@@ -1045,7 +1043,6 @@
       applyOrbTransform();
     }
 
-    // gravity slider UI
     function setGravityMul(m){
       physState.gravityMul = clamp(Number(m) || 0, 0, 3);
       els.gVal.textContent = physState.gravityMul.toFixed(2);
@@ -1053,7 +1050,6 @@
     setGravityMul(els.gSlider.value);
     els.gSlider.addEventListener("input", (e) => setGravityMul(e.target.value));
 
-    // start with orb resting on ground
     requestAnimationFrame(resetOrbToGround);
     window.addEventListener("resize", resetOrbToGround);
 
@@ -1073,7 +1069,7 @@
       const g = PHYS.gBase * physState.gravityMul;
       const thrust = liftToThrustAccel(physState.lift01);
 
-      let a = g - thrust;                 // +down, -up
+      let a = g - thrust;
       a += (-PHYS.linearDrag * physState.v);
 
       physState.v += a * dt;
@@ -1081,13 +1077,11 @@
 
       physState.y += physState.v * dt;
 
-      // ground: stick
       if (physState.y > yGroundCenter) {
         physState.y = yGroundCenter;
         if (physState.v > 0) physState.v = 0;
       }
 
-      // ceiling: bounce
       if (physState.y < yCeilCenter) {
         physState.y = yCeilCenter;
         if (physState.v < 0) physState.v = -physState.v * PHYS.bounce;
@@ -1099,21 +1093,15 @@
     requestAnimationFrame(physicsStep);
 
     // =========================================================================
-    // ABLY RECEIVER (AUTO-CONNECT)
+    // ABLY RECEIVER
     // =========================================================================
     let realtime = null;
     let channel = null;
 
-    /* ========================================================================
-       ✅ IDLE SAFEGUARD (beta protection)
-       - Closes Ably connection after inactivity to avoid burning freebies.
-       - Idle is based on: no incoming "orb" messages.
-       - Warn first, then disconnect. Also has an optional hard session cap.
-       ======================================================================== */
     const IDLE = {
-      idleMs: 2 * 60 * 1000,      // disconnect after 2 minutes of silence
-      warnMs: 90 * 1000,          // warn at 90s
-      hardMaxMs: 15 * 60 * 1000,  // hard cap session (15 min)
+      idleMs: 2 * 60 * 1000,
+      warnMs: 90 * 1000,
+      hardMaxMs: 15 * 60 * 1000,
       checkEveryMs: 1000
     };
 
@@ -1159,12 +1147,12 @@
         }
 
         if (dt >= IDLE.idleMs){
-          idleDisconnect("Idle timeout — click Reconnect");
+          idleDisconnect("Idle timeout — refresh to reconnect");
         }
       }, IDLE.checkEveryMs);
 
       idleHardTO = setTimeout(() => {
-        idleDisconnect("Session cap reached — click Reconnect");
+        idleDisconnect("Session cap reached — refresh to reconnect");
       }, IDLE.hardMaxMs);
     }
 
@@ -1193,34 +1181,19 @@
         return (n > 1.5) ? (n / 100) : n;
       }
 
-      function pick01Bounded(newKey, oldKey){
-        if (d[newKey] != null) {
-          const n = Number(d[newKey]);
-          return isFinite(n) ? n : 0;
-        }
-        const n = Number(d[oldKey]);
-        if (!isFinite(n)) return 0;
-        return (n > 1.5) ? (n / 100) : n;
-      }
-
       const energy = pick01NewOrOld("energy01", "energy");
-      const groove = pick01Bounded("groove01", "groove");
-      const orbit  = pick01Bounded("orbit01",  "orbit");
-      const smooth = pick01Bounded("smooth01", "smooth");
-      const speed  = pick01Bounded("speed01",  "speed");
-      const shake  = pick01Bounded("shake01",  "shake");
+      const groove = pick01NewOrOld("groove01", "groove");
+      const orbit  = pick01NewOrOld("orbit01",  "orbit");
+      const smooth = pick01NewOrOld("smooth01", "smooth");
+      const speed  = pick01NewOrOld("speed01",  "speed");
+      const shake  = pick01NewOrOld("shake01",  "shake");
       const locked = !!d.locked;
 
-      // ✅ lift (stub)
       const lift = computeLift01(groove, smooth, speed);
 
-      // ✅ feed physics:
-      // - thrust is now Lift
-      // - energy remains for background/audio/overcharge
       physState.lift01 = lift;
       physState.energy01 = Math.max(0, Number(energy) || 0);
 
-      // background + glow stays energy-driven
       setBgFromEnergy(energy);
 
       const liftText = toPct01(lift);
@@ -1235,19 +1208,14 @@
       const oP = toPct01(orbit);
       const sh = toPct01(shake);
 
-      // meter values
       els.vLift.textContent   = `${liftP}%`;
       els.vGroove.textContent = `${gP}%${locked ? " (locked)" : ""}`;
       els.vSmooth.textContent = `${sP}%`;
       els.vSpeed.textContent  = `${sp}%`;
       els.vOrbit.textContent  = `${oP}%`;
-
-      // ✅ Energy meter: value can exceed 100 (this is what turns yellow)
       els.vEnergy.textContent = `${isFinite(eText) ? eText : 0}%`;
-
       els.vShake.textContent  = `${sh}%`;
 
-      // bars
       setBar(els.bLift,  lift);
       setBar(els.bGroove, groove);
       setBar(els.bSmooth, smooth);
@@ -1256,20 +1224,11 @@
       setBar(els.bEnergy, energy);
       setBar(els.bShake,  shake);
 
-      // ✅ Overcharge (yellow) applies ONLY to Energy meter value + bar
       const over = (energy > 1);
       els.vEnergy.classList.toggle("over", over);
       els.bEnergy.classList.toggle("over", over);
 
-      // shake lamp
-      const shakeHit =
-        d.shakeHit === true ||
-        d.shakeEvent === true ||
-        (typeof d.shakeEvent === "string" && d.shakeEvent) ||
-        (d.verb === "shake") ||
-        (d.action === "shock") ||
-        (d.kind === "shock");
-
+      const shakeHit = d.shakeHit === true;
       if (shakeHit) flashShakeLamp(500);
 
       setAudio(energy, groove, locked);
@@ -1290,9 +1249,8 @@
         return;
       }
 
-      setStatus(opts.auto ? `Auto-connecting… <span class="dim">(${roomChannel})</span>` : `Reconnecting… <span class="dim">(${roomChannel})</span>`, "ok");
+      setStatus(opts.auto ? `Auto-connecting… <span class="dim">(${roomChannel})</span>` : `Connecting… <span class="dim">(${roomChannel})</span>`, "ok");
 
-      // if we reconnect, clear any previous idle timers and old sockets
       idleClearTimers();
 
       try { if (channel) channel.unsubscribe(); } catch(e) {}
@@ -1306,20 +1264,17 @@
 
       realtime.connection.on("connected", () => setStatus(`Connected ✓ <span class="dim">(${roomChannel})</span>`, "ok"));
       realtime.connection.on("failed", (st) => { console.error("Ably failed:", st); setStatus("FAILED — see console", "bad"); });
-      realtime.connection.on("disconnected", () => setStatus("Disconnected (refresh / reconnect)", "bad"));
+      realtime.connection.on("disconnected", () => setStatus("Disconnected (refresh)", "bad"));
 
       channel = realtime.channels.get(roomChannel);
 
       channel.attach((err) => {
         if (err) { console.error("Channel attach failed:", err); setStatus("Channel attach FAILED — see console", "bad"); return; }
         setStatus(`Connected ✓ (listening…) <span class="dim">(${roomChannel})</span>`, "ok");
-
-        // ✅ start the idle watchdog only once we’re actually attached
         idleStartTimers();
       });
 
       channel.subscribe("orb", (msg) => {
-        // ✅ any message counts as activity
         idleMarkActivity();
 
         const d = (msg && msg.data) ? msg.data : {};
@@ -1331,37 +1286,19 @@
 
         if (els.pairModal.classList.contains("on")) closePairModal();
 
-        // ✅ record telemetry if active (using the exact receiver-visible payload)
         teleMaybeLog(d);
-
         scheduleUIUpdate(d);
       });
 
       connecting = false;
     }
 
-    // ✅ DEV button forces room=test always
-    // ✅ DEV button forces room=test always + launches QR
-    els.newRoom.addEventListener("click", async () => {
-        currentRoomChannel = "orb:test";
-        await connect({ auto:false });
-
-        // ensure QR shows the test room
-        openPairModal();            // opens modal + calls renderQR(currentRoomChannel)
-    });
-
-
-    els.connect.addEventListener("click", () => connect({ auto:false }));
-
-    // ✅ if the tab is hidden for a while, proactively idle-disconnect
-    // (optional but very effective for beta testers who background the page)
-    document.addEventListener("visibilitychange", () => {
-      if (document.hidden) {
-        // give it a grace period; if they come back quickly, no disconnect
-        // (we just rely on the idle watchdog)
-      } else {
-        // on returning visible, if we were disconnected by idle, they can click Reconnect
-      }
+    // ✅ DEV link forces room=test always + launches QR
+    els.newRoom.addEventListener("click", async (e) => {
+      e.preventDefault();
+      currentRoomChannel = "orb:test";
+      await connect({ auto:false });
+      openPairModal();
     });
 
     (async function init(){
