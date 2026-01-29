@@ -514,12 +514,12 @@
     // Low-speed EMA cutoff.
     // ↑ higher = snappier at low speeds (less smoothing)
     // ↓ lower  = steadier at low speeds (more smoothing)
-    const SPEED_EMA_CUTOFF_FAST_HZ = 2.0;
+    const SPEED_EMA_CUTOFF_FAST_HZ = 1.5;
 
     // High-speed EMA cutoff.
     // ↑ higher = less smoothing at high speeds (more spiky)
     // ↓ lower  = more smoothing at high speeds (steadier)
-    const SPEED_EMA_CUTOFF_SLOW_HZ = .15;
+    const SPEED_EMA_CUTOFF_SLOW_HZ = .10;
 
     // Where the adaptive blend happens, using wDz (deg/s AFTER deadzone).
     // Below START: mostly FAST cutoff.
@@ -531,7 +531,7 @@
 
     // ↑ higher END = takes longer to fully reach “slow/smooth” (less smoothing overall)
     // ↓ lower  END = reaches “slow/smooth” sooner (more smoothing overall)
-    const SPEED_ADAPT_END_DPS   = 140.0;
+    const SPEED_ADAPT_END_DPS   = 130.0;
 
     // Shapes how quickly we slide from FAST → SLOW across the adapt range.
     // ↑ higher = smoothing ramps in later (keeps midrange snappier, then smooths hard near top)
