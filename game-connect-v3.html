@@ -91,28 +91,6 @@
     button:hover{border-color:rgba(50,255,117,.35)}
     button:disabled{ opacity:.55; cursor:default; }
 
-    /* ✅ DEV: right-justified, no box, barely visible */
-    .devLink{
-      margin-left:auto;                 /* skoot to the right edge of the row */
-      display:inline-block;
-      padding:0;
-      border:0;
-      background:transparent;
-      text-decoration:none;
-
-      font-size:11px;
-      font-weight:800;
-      letter-spacing:.18em;
-
-      color: rgba(50,255,117,.38);      /* dim green */
-      opacity: 0.85;
-      user-select:none;
-    }
-    .devLink:hover{
-      color: rgba(50,255,117,.52);
-      text-shadow: 0 0 10px rgba(50,255,117,.10);
-    }
-
     .stat{margin-top:10px; font-size:13px; line-height:1.5;}
     .dim{opacity:.78}
     .bad{color:var(--bad); font-weight:900;}
@@ -212,6 +190,16 @@
       text-shadow: none;
     }
 
+    /* ✅ Telemetry button: same size, slightly dimmer */
+    #teleBtn{
+      opacity: 0.68;
+      font-weight: 800;
+    }
+    #teleBtn:hover{
+      opacity: 0.86;
+      border-color: rgba(50,255,117,.30);
+    }
+
     #pairBtn{
       font-weight: 1000;
       border-color: var(--g);
@@ -220,6 +208,16 @@
     #pairBtn:hover{
       border-color: var(--g);
       box-shadow: 0 0 18px rgba(50,255,117,.14);
+    }
+
+    #connect,
+    #newRoom{
+      opacity: 0.72;
+      font-weight: 800;
+    }
+    #connect:hover,
+    #newRoom:hover{
+      opacity: 0.92;
     }
 
     .groupGap{ height:10px; }
@@ -402,19 +400,6 @@
     /* ============================================================
        ✅ SPEED TELEMETRY MODAL
        ============================================================ */
-    .clickLabel{
-      cursor:pointer;
-      user-select:none;
-      padding:2px 6px;
-      border-radius:8px;
-      border:1px solid rgba(50,255,117,.18);
-      background: rgba(0,0,0,.22);
-    }
-    .clickLabel:hover{
-      border-color: rgba(50,255,117,.35);
-      box-shadow: 0 0 18px rgba(50,255,117,.10);
-    }
-
     .teleCard{
       width: min(760px, 94vw);
     }
@@ -478,8 +463,9 @@
         <div class="row">
           <button id="pairBtn">Pair Phone</button>
           <button id="audioBtn">Audio: Off</button>
-          <!-- ✅ removed: Reconnect button -->
-          <a id="newRoom" class="devLink" href="#" aria-label="Dev room">DEV</a>
+          <button id="teleBtn">Telemetry</button>
+          <button id="connect">Reconnect</button>
+          <button id="newRoom">DEV</button>
         </div>
 
         <div class="stat">
@@ -506,9 +492,9 @@
           <div class="barLabel"><div>Smooth</div><span id="vSmooth">0</span></div>
           <div class="bar"><div id="bSmooth" class="fill"></div></div>
 
-          <!-- ✅ CLICKABLE SPEED LABEL -->
+          <!-- ✅ Speed label is now plain text (no click, no outline) -->
           <div class="barLabel">
-            <div id="speedLabel" class="clickLabel" title="Open speed telemetry">Speed</div>
+            <div>Speed</div>
             <span id="vSpeed">0</span>
           </div>
           <div class="bar"><div id="bSpeed" class="fill"></div></div>
@@ -600,8 +586,10 @@
 
     const els = {
       pairBtn: $("pairBtn"),
+      connect: $("connect"),
       newRoom: $("newRoom"),
       audioBtn: $("audioBtn"),
+      teleBtn: $("teleBtn"),
 
       status: $("status"),
       last: $("last"),
@@ -643,7 +631,6 @@
       copyUrl: $("copyUrl"),
 
       // ✅ telemetry
-      speedLabel: $("speedLabel"),
       teleModal: $("teleModal"),
       teleBackdrop: $("teleBackdrop"),
       teleClose: $("teleClose"),
@@ -707,7 +694,7 @@
     }
 
     // =========================================================================
-    // BACKGROUND (energy-driven)
+    // BACKGROUND (energy-driven “charge” glow stays tied to energy for now)
     // =========================================================================
     const BG0 = { r: 0,   g: 0,  b: 0  };
     const BG1 = { r: 255, g: 42, b: 0  };
@@ -809,7 +796,7 @@
     });
 
     // =========================================================================
-    // SHAKE LAMP
+    // SHAKE LAMP (500ms strobe)
     // =========================================================================
     let lampTO = null;
     function flashShakeLamp(ms = 500){
@@ -822,7 +809,7 @@
     }
 
     // =========================================================================
-    // PAIR MODAL
+    // PAIR MODAL (QR popup)
     // =========================================================================
     function openPairModal(){
       els.pairModal.classList.add("on");
@@ -834,6 +821,7 @@
       els.pairModal.setAttribute("aria-hidden","true");
     }
 
+    // ✅ Pair Phone now mints a new room first (beta path), then opens modal
     els.pairBtn.addEventListener("click", async () => {
       currentRoomChannel = "orb:" + randCode(6);
       await connect({ auto:false });
@@ -882,7 +870,7 @@
     }
 
     // =========================================================================
-    // ✅ SPEED TELEMETRY MODAL
+    // ✅ SPEED TELEMETRY MODAL (record/stop/close)
     // =========================================================================
     let teleRecording = false;
     let teleT0 = 0;
@@ -899,7 +887,7 @@
       els.teleRecBtn.classList.remove("recOn");
     }
     function closeTele(){
-      stopTeleRecording();
+      stopTeleRecording(); // ✅ close stops recording (prevents accidental long captures)
       els.teleModal.classList.remove("on");
       els.teleModal.setAttribute("aria-hidden","true");
     }
@@ -921,11 +909,14 @@
       else stopTeleRecording();
     }
 
-    els.speedLabel.addEventListener("click", () => openTele());
+    // ✅ Telemetry opens the modal (replaces old Speed label click)
+    els.teleBtn.addEventListener("click", openTele);
+
     els.teleBackdrop.addEventListener("click", closeTele);
     els.teleClose.addEventListener("click", closeTele);
     els.teleRecBtn.addEventListener("click", toggleTeleRecord);
 
+    // global escape closes whichever modal is open
     window.addEventListener("keydown", (e) => {
       if (e.key !== "Escape") return;
       if (els.teleModal.classList.contains("on")) closeTele();
@@ -1025,6 +1016,7 @@
     function readStageMetrics(){
       const rect = els.physStage.getBoundingClientRect();
       const stageH = rect.height;
+
       const groundY = stageH - PHYS.groundFromBottomPx - PHYS.groundLinePx;
       const yGroundCenter = groundY - PHYS.orbRadiusPx;
       const yCeilCenter = PHYS.orbRadiusPx;
@@ -1093,7 +1085,7 @@
     requestAnimationFrame(physicsStep);
 
     // =========================================================================
-    // ABLY RECEIVER
+    // ABLY RECEIVER (AUTO-CONNECT)
     // =========================================================================
     let realtime = null;
     let channel = null;
@@ -1147,12 +1139,12 @@
         }
 
         if (dt >= IDLE.idleMs){
-          idleDisconnect("Idle timeout — refresh to reconnect");
+          idleDisconnect("Idle timeout — click Reconnect");
         }
       }, IDLE.checkEveryMs);
 
       idleHardTO = setTimeout(() => {
-        idleDisconnect("Session cap reached — refresh to reconnect");
+        idleDisconnect("Session cap reached — click Reconnect");
       }, IDLE.hardMaxMs);
     }
 
@@ -1181,12 +1173,22 @@
         return (n > 1.5) ? (n / 100) : n;
       }
 
+      function pick01Bounded(newKey, oldKey){
+        if (d[newKey] != null) {
+          const n = Number(d[newKey]);
+          return isFinite(n) ? n : 0;
+        }
+        const n = Number(d[oldKey]);
+        if (!isFinite(n)) return 0;
+        return (n > 1.5) ? (n / 100) : n;
+      }
+
       const energy = pick01NewOrOld("energy01", "energy");
-      const groove = pick01NewOrOld("groove01", "groove");
-      const orbit  = pick01NewOrOld("orbit01",  "orbit");
-      const smooth = pick01NewOrOld("smooth01", "smooth");
-      const speed  = pick01NewOrOld("speed01",  "speed");
-      const shake  = pick01NewOrOld("shake01",  "shake");
+      const groove = pick01Bounded("groove01", "groove");
+      const orbit  = pick01Bounded("orbit01",  "orbit");
+      const smooth = pick01Bounded("smooth01", "smooth");
+      const speed  = pick01Bounded("speed01",  "speed");
+      const shake  = pick01Bounded("shake01",  "shake");
       const locked = !!d.locked;
 
       const lift = computeLift01(groove, smooth, speed);
@@ -1213,6 +1215,7 @@
       els.vSmooth.textContent = `${sP}%`;
       els.vSpeed.textContent  = `${sp}%`;
       els.vOrbit.textContent  = `${oP}%`;
+
       els.vEnergy.textContent = `${isFinite(eText) ? eText : 0}%`;
       els.vShake.textContent  = `${sh}%`;
 
@@ -1228,7 +1231,14 @@
       els.vEnergy.classList.toggle("over", over);
       els.bEnergy.classList.toggle("over", over);
 
-      const shakeHit = d.shakeHit === true;
+      const shakeHit =
+        d.shakeHit === true ||
+        d.shakeEvent === true ||
+        (typeof d.shakeEvent === "string" && d.shakeEvent) ||
+        (d.verb === "shake") ||
+        (d.action === "shock") ||
+        (d.kind === "shock");
+
       if (shakeHit) flashShakeLamp(500);
 
       setAudio(energy, groove, locked);
@@ -1249,7 +1259,7 @@
         return;
       }
 
-      setStatus(opts.auto ? `Auto-connecting… <span class="dim">(${roomChannel})</span>` : `Connecting… <span class="dim">(${roomChannel})</span>`, "ok");
+      setStatus(opts.auto ? `Auto-connecting… <span class="dim">(${roomChannel})</span>` : `Reconnecting… <span class="dim">(${roomChannel})</span>`, "ok");
 
       idleClearTimers();
 
@@ -1264,7 +1274,7 @@
 
       realtime.connection.on("connected", () => setStatus(`Connected ✓ <span class="dim">(${roomChannel})</span>`, "ok"));
       realtime.connection.on("failed", (st) => { console.error("Ably failed:", st); setStatus("FAILED — see console", "bad"); });
-      realtime.connection.on("disconnected", () => setStatus("Disconnected (refresh)", "bad"));
+      realtime.connection.on("disconnected", () => setStatus("Disconnected (refresh / reconnect)", "bad"));
 
       channel = realtime.channels.get(roomChannel);
 
@@ -1293,12 +1303,21 @@
       connecting = false;
     }
 
-    // ✅ DEV link forces room=test always + launches QR
-    els.newRoom.addEventListener("click", async (e) => {
-      e.preventDefault();
+    // ✅ DEV button forces room=test always + launches QR
+    els.newRoom.addEventListener("click", async () => {
       currentRoomChannel = "orb:test";
       await connect({ auto:false });
       openPairModal();
+    });
+
+    els.connect.addEventListener("click", () => connect({ auto:false }));
+
+    document.addEventListener("visibilitychange", () => {
+      if (document.hidden) {
+        // rely on watchdog
+      } else {
+        // no-op
+      }
     });
 
     (async function init(){
