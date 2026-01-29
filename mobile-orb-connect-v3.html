@@ -514,12 +514,12 @@
     // Low-speed EMA cutoff.
     // ↑ higher = snappier at low speeds (less smoothing)
     // ↓ lower  = steadier at low speeds (more smoothing)
-    const SPEED_EMA_CUTOFF_FAST_HZ = 4.0;
+    const SPEED_EMA_CUTOFF_FAST_HZ = 2.0;
 
     // High-speed EMA cutoff.
     // ↑ higher = less smoothing at high speeds (more spiky)
     // ↓ lower  = more smoothing at high speeds (steadier)
-    const SPEED_EMA_CUTOFF_SLOW_HZ = .20;
+    const SPEED_EMA_CUTOFF_SLOW_HZ = .15;
 
     // Where the adaptive blend happens, using wDz (deg/s AFTER deadzone).
     // Below START: mostly FAST cutoff.
@@ -542,7 +542,7 @@
     // Normalization point for 100% (before the curve).
     // ↑ higher = harder to reach 100% (needs more deg/s)
     // ↓ lower  = easier to reach 100%
-    const SPEED_NORM_DPS = 350.0;
+    const SPEED_NORM_DPS = 300.0;
 
     // Curve on normalized value (n^pow).
     // ↑ higher (>1) = softer low/mid, harder near top (more “effort” to climb)
