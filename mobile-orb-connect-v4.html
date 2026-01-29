@@ -1,0 +1,782 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no" />
+  <title>Orb Relay — Mobile Telemetry</title>
+  <style>
+    :root{
+      --g:#32ff75;
+      --g2:rgba(50,255,117,.60);
+      --g3:rgba(50,255,117,.20);
+      --bg:#000;
+      --panel: rgba(0,0,0,.55);
+      --border: rgba(50,255,117,.18);
+      --bad:#ff5a5a;
+
+      --amber:#ffd400;
+      --amber2:rgba(255,212,0,.55);
+
+      --red:#ff3b3b;
+      --red2:rgba(255,59,59,.55);
+
+      --ink:rgba(0,0,0,.88);
+
+      /* mode colors (full-screen field) */
+      --field0: rgba(0,0,0,1);
+      --field1: rgba(0,0,0,1);
+      --field2: rgba(0,0,0,1);
+
+      /* live tint */
+      --tintR: 0;
+      --tintG: 0;
+      --tintB: 0;
+
+      --safeTop: env(safe-area-inset-top, 0px);
+      --safeBot: env(safe-area-inset-bottom, 0px);
+      --safeL: env(safe-area-inset-left, 0px);
+      --safeR: env(safe-area-inset-right, 0px);
+    }
+
+    html,body{
+      height:100%;
+      margin:0;
+      background:#000;
+      color:var(--g);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      overflow:hidden;
+      -webkit-tap-highlight-color: transparent;
+      touch-action: manipulation;
+    }
+
+    /* full-screen stage */
+    #stage{
+      position:fixed;
+      inset:0;
+      padding: calc(14px + var(--safeTop)) calc(14px + var(--safeR)) calc(14px + var(--safeBot)) calc(14px + var(--safeL));
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      background:
+        radial-gradient(1200px 800px at 50% 35%, rgba(0,0,0,.0) 0%, rgba(0,0,0,.55) 58%, rgba(0,0,0,.92) 100%),
+        rgb(var(--tintR), var(--tintG), var(--tintB));
+      transition: background-color 120ms linear;
+      user-select:none;
+    }
+
+    /* subtle scan vignette */
+    #stage::before{
+      content:"";
+      position:absolute;
+      inset:0;
+      pointer-events:none;
+      background:
+        radial-gradient(900px 650px at 50% 40%, rgba(255,255,255,.03) 0%, rgba(255,255,255,0) 55%),
+        linear-gradient(to bottom, rgba(0,0,0,.35), rgba(0,0,0,.10), rgba(0,0,0,.35));
+      opacity:.75;
+      mix-blend-mode:screen;
+    }
+
+    /* center button */
+    #startBtn{
+      position:relative;
+      z-index:2;
+      border-radius:18px;
+      padding:16px 18px;
+      border:1px solid rgba(50,255,117,.28);
+      background: rgba(0,0,0,.62);
+      color: rgba(50,255,117,.95);
+      font-weight: 1000;
+      letter-spacing:.3px;
+      box-shadow:
+        0 18px 60px rgba(0,0,0,.62),
+        0 0 0 1px rgba(0,0,0,.28) inset,
+        0 0 24px rgba(50,255,117,.12);
+      cursor:pointer;
+    }
+    #startBtn:active{
+      transform: translateY(1px);
+      box-shadow:
+        0 14px 44px rgba(0,0,0,.62),
+        0 0 0 1px rgba(0,0,0,.28) inset,
+        0 0 28px rgba(50,255,117,.16);
+    }
+    #startBtn small{
+      display:block;
+      margin-top:6px;
+      font-size:11px;
+      opacity:.78;
+      font-weight:800;
+    }
+
+    /* tap field overlay (hidden until started) */
+    #field{
+      position:absolute;
+      inset:0;
+      display:none;
+      z-index:1;
+    }
+    #field.on{ display:block; }
+
+    /* tiny HUD (corner) — optional but super light */
+    #hud{
+      position:fixed;
+      left: calc(12px + var(--safeL));
+      bottom: calc(12px + var(--safeBot));
+      z-index:3;
+      font-size:11px;
+      opacity:.82;
+      pointer-events:none;
+      line-height:1.35;
+      text-shadow: 0 0 14px rgba(0,0,0,.85);
+      white-space:pre;
+    }
+    #hud .dim{ opacity:.72; }
+    #hud .bad{ color: var(--bad); font-weight: 900; }
+    #hud .ok{ color: rgba(50,255,117,.95); font-weight: 900; }
+
+    /* mode badge (top) */
+    #modeBadge{
+      position:fixed;
+      top: calc(10px + var(--safeTop));
+      right: calc(10px + var(--safeR));
+      z-index:3;
+      font-size:11px;
+      padding:6px 9px;
+      border-radius:999px;
+      border:1px solid rgba(50,255,117,.22);
+      background: rgba(0,0,0,.55);
+      opacity:.78;
+      pointer-events:none;
+    }
+    #modeBadge.m0{ color: rgba(50,255,117,.85); border-color: rgba(50,255,117,.22); }
+    #modeBadge.m1{ color: rgba(255,212,0,.92); border-color: rgba(255,212,0,.22); }
+    #modeBadge.m2{ color: rgba(255,59,59,.92); border-color: rgba(255,59,59,.22); }
+
+    /* permission toast */
+    #toast{
+      position:fixed;
+      left:50%;
+      transform: translateX(-50%);
+      top: calc(14px + var(--safeTop));
+      z-index:5;
+      font-size:12px;
+      padding:10px 12px;
+      border-radius:14px;
+      border:1px solid rgba(50,255,117,.22);
+      background: rgba(0,0,0,.72);
+      box-shadow: 0 18px 80px rgba(0,0,0,.65);
+      opacity:0;
+      pointer-events:none;
+      transition: opacity 180ms ease;
+      max-width:min(92vw,520px);
+      text-align:center;
+      line-height:1.35;
+    }
+    #toast.on{ opacity:1; }
+    #toast .bad{ color: var(--bad); font-weight: 900; }
+    #toast .ok{ color: rgba(50,255,117,.92); font-weight: 900; }
+
+    /* reduce motion */
+    @media (prefers-reduced-motion: reduce){
+      #stage{ transition:none; }
+      #toast{ transition:none; }
+    }
+  </style>
+
+  <!-- Ably -->
+  <script src="https://cdn.ably.com/lib/ably.min-1.js"></script>
+</head>
+<body>
+
+  <div id="stage" aria-label="Orb telemetry stage">
+    <button id="startBtn">
+      START
+      <small>tap to arm + stream</small>
+    </button>
+    <div id="field" aria-label="Tap field (toggles modes)"></div>
+  </div>
+
+  <div id="modeBadge" class="m0">MODE 0</div>
+  <div id="hud"></div>
+  <div id="toast"></div>
+
+  <script>
+    // =========================================================================
+    // ORB RELAY — MOBILE TELEMETRY (SSOT CORE)
+    // - Centered START button (both axes)
+    // - On start: button disappears, full-screen tap field appears
+    // - Tap field toggles modes (0/1/2) and changes screen tint
+    // - Telemetry SSOT engine is decoupled from UI
+    // - Sends payload compatible with your Receiver telemetry modal:
+    //   speed01, energy01, groove01, orbit01, smooth01, shake01, locked, hz
+    //   + mothership fields: v, seq, t_ms, dms, mode, deviceId
+    // =========================================================================
+
+    const $ = (id) => document.getElementById(id);
+    const els = {
+      stage: $("stage"),
+      startBtn: $("startBtn"),
+      field: $("field"),
+      hud: $("hud"),
+      toast: $("toast"),
+      modeBadge: $("modeBadge"),
+    };
+
+    // ------------------------------
+    // SSOT: schema + identifiers
+    // ------------------------------
+    const SCHEMA_V = 3; // bump when payload keys/meaning change
+    const deviceId = (() => {
+      // stable-ish id per browser install
+      const k = "orb_device_id";
+      let v = localStorage.getItem(k);
+      if (!v) {
+        v = "m-" + Math.random().toString(16).slice(2) + "-" + Date.now().toString(16);
+        localStorage.setItem(k, v);
+      }
+      return v;
+    })();
+
+    function clamp(v, lo, hi){ return Math.max(lo, Math.min(hi, v)); }
+    function clamp01(x){ x = Number(x); return Math.max(0, Math.min(1, isFinite(x) ? x : 0)); }
+    function lerp(a,b,t){ return a + (b-a)*t; }
+
+    // ------------------------------
+    // Room + Ably
+    // ------------------------------
+    const WORKER_BASE = "https://orb-token.mrgarthwilliams.workers.dev";
+
+    function normalizeRoom(input){
+      let r = String(input || "").trim();
+      if (!r) r = "orb:test";
+      if (r.indexOf(":") === -1) r = "orb:" + r;
+      return r;
+    }
+    function readUrlRoomOrNull(){
+      try{
+        const u = new URL(location.href);
+        const r = (u.searchParams.get("room") || "").trim();
+        if (!r) return null;
+        return normalizeRoom(r);
+      }catch(_){ return null; }
+    }
+    function stripOrbPrefix(room){
+      return String(room || "").startsWith("orb:") ? String(room).slice(4) : String(room || "");
+    }
+
+    const roomChannel = normalizeRoom(readUrlRoomOrNull() || "orb:test");
+    const roomCode = stripOrbPrefix(roomChannel);
+
+    let realtime = null;
+    let channel = null;
+    let connected = false;
+
+    function toast(msg, kind){
+      els.toast.innerHTML = msg;
+      els.toast.classList.add("on");
+      if (kind === "bad") els.toast.style.borderColor = "rgba(255,90,90,.35)";
+      else els.toast.style.borderColor = "rgba(50,255,117,.22)";
+      setTimeout(() => els.toast.classList.remove("on"), 1600);
+    }
+
+    async function connectAbly(){
+      if (connected) return true;
+
+      if (typeof Ably === "undefined" || !Ably.Realtime) {
+        toast(`<span class="bad">Ably failed to load</span><br/>Check network / CDN`, "bad");
+        return false;
+      }
+
+      const authUrl = WORKER_BASE + "/token?room=" + encodeURIComponent(roomCode) + "&v=" + Date.now();
+
+      try{
+        realtime = new Ably.Realtime({ authUrl, echoMessages:false });
+      }catch(e){
+        console.error("Ably init error:", e);
+        toast(`<span class="bad">Ably init error</span>`, "bad");
+        return false;
+      }
+
+      channel = realtime.channels.get(roomChannel);
+
+      return await new Promise((resolve) => {
+        let done = false;
+
+        realtime.connection.on("connected", () => {
+          connected = true;
+          if (!done){ done = true; resolve(true); }
+        });
+        realtime.connection.on("failed", (st) => {
+          console.error("Ably failed:", st);
+          connected = false;
+          if (!done){ done = true; resolve(false); }
+        });
+        realtime.connection.on("disconnected", () => {
+          connected = false;
+        });
+
+        channel.attach((err) => {
+          if (err) {
+            console.error("Channel attach error:", err);
+            connected = false;
+            if (!done){ done = true; resolve(false); }
+          }
+        });
+
+        setTimeout(() => { if (!done){ done = true; resolve(connected); } }, 2200);
+      });
+    }
+
+    function publishOrb(data){
+      if (!channel || !connected) return;
+      try{
+        channel.publish("orb", data);
+      }catch(e){
+        // ignore (mobile networks)
+      }
+    }
+
+    // ------------------------------
+    // UI: mode + tint
+    // ------------------------------
+    const MODE = {
+      // 0: normal (green-ish)
+      // 1: training/lock (amber)
+      // 2: pause/mute (red-ish; still sends so receiver sees state)
+      value: 0
+    };
+
+    function setMode(m){
+      MODE.value = ((m % 3) + 3) % 3;
+      els.modeBadge.textContent = "MODE " + MODE.value;
+      els.modeBadge.classList.remove("m0","m1","m2");
+      els.modeBadge.classList.add("m" + MODE.value);
+    }
+
+    // Tint is driven by (mode + energy) so the whole screen is an at-a-glance meter
+    function applyTint(mode, energy01){
+      const e = clamp01(energy01);
+
+      // Base colors per mode
+      const base = (mode === 0) ? {r: 0,   g: 0,   b: 0} :
+                   (mode === 1) ? {r: 18,  g: 10,  b: 0} :
+                                  {r: 18,  g: 0,   b: 0};
+
+      const hot  = (mode === 0) ? {r: 0,   g: 64,  b: 18} :
+                   (mode === 1) ? {r: 64,  g: 44,  b: 0} :
+                                  {r: 64,  g: 0,   b: 0};
+
+      const r = Math.round(lerp(base.r, hot.r, e));
+      const g = Math.round(lerp(base.g, hot.g, e));
+      const b = Math.round(lerp(base.b, hot.b, e));
+
+      document.documentElement.style.setProperty("--tintR", String(r));
+      document.documentElement.style.setProperty("--tintG", String(g));
+      document.documentElement.style.setProperty("--tintB", String(b));
+    }
+
+    // ------------------------------
+    // Telemetry SSOT Engine
+    // ------------------------------
+    const TELE = {
+      streaming: false,
+      startedAt: 0,
+      lastAt: 0,
+      seq: 0,
+
+      // sampling (rAF)
+      rafId: 0,
+
+      // orientation / motion feed
+      gotMotion: false,
+      gotOrientation: false,
+
+      // raw motion (device frame)
+      ax: 0, ay: 0, az: 0,
+      gx: 0, gy: 0, gz: 0, // rotationRate (deg/s)
+      alpha: 0, beta: 0, gamma: 0,
+
+      // derived signals
+      accMag: 0,
+      gyrMag: 0,
+
+      // filters
+      accLP: 0,
+      accHP: 0,
+      gyrLP: 0,
+
+      // shake detector
+      shake01: 0,
+      shakeHit: false,
+      shakeCooldownMs: 0,
+
+      // groove/tempo tracker (lightweight)
+      beatPhase: 0,
+      hz: 0,
+      locked: false,
+      lockScore: 0,
+
+      // output metrics
+      energy01: 0,
+      speed01: 0,
+      smooth01: 0,
+      groove01: 0,
+      orbit01: 0,
+    };
+
+    // SSOT tunables (one place)
+    const CFG = {
+      // publish cadence
+      publishHz: 30,                 // network rate
+      publishMinMs: 1000/30,
+
+      // signal shaping
+      accMagNorm: 18.0,              // approx m/s^2 range for normalization
+      gyrMagNorm: 520.0,             // deg/s range for normalization
+
+      // filters
+      lpTauAcc: 0.20,                // seconds
+      lpTauGyr: 0.16,
+      hpTauAcc: 0.40,
+
+      // shake detection
+      shakeGate: 0.55,
+      shakeHitGate: 0.82,
+      shakeCooldown: 420,            // ms
+
+      // groove lock
+      grooveTau: 0.65,               // seconds (smoothing)
+      lockUp: 0.08,
+      lockDown: 0.06,
+      lockGate: 0.62,                // threshold for locked state
+
+      // orbit proxy (orientation stability)
+      orbitTau: 0.55,
+    };
+
+    function expSlew(curr, target, dt, tau){
+      // tau ~ time constant seconds
+      const a = 1 - Math.exp(-dt / Math.max(1e-3, tau));
+      return curr + (target - curr) * a;
+    }
+
+    function mag3(x,y,z){
+      return Math.sqrt(x*x + y*y + z*z);
+    }
+
+    function requestIOSPermissionIfNeeded(){
+      // iOS requires explicit permission for motion/orientation
+      const needMotionPerm = (typeof DeviceMotionEvent !== "undefined" && typeof DeviceMotionEvent.requestPermission === "function");
+      const needOriPerm    = (typeof DeviceOrientationEvent !== "undefined" && typeof DeviceOrientationEvent.requestPermission === "function");
+      return { needMotionPerm, needOriPerm };
+    }
+
+    async function ensureSensorPermission(){
+      const { needMotionPerm, needOriPerm } = requestIOSPermissionIfNeeded();
+
+      // Try requestPermission on a user gesture (we call this from START click)
+      try{
+        if (needMotionPerm) {
+          const r = await DeviceMotionEvent.requestPermission();
+          if (r !== "granted") throw new Error("motion denied");
+        }
+        if (needOriPerm) {
+          const r = await DeviceOrientationEvent.requestPermission();
+          if (r !== "granted") throw new Error("orientation denied");
+        }
+        return true;
+      }catch(e){
+        console.warn("permission flow:", e);
+        toast(`<span class="bad">Enable Motion & Orientation</span><br/>Safari → aA → Website Settings`, "bad");
+        return false;
+      }
+    }
+
+    function wireSensors(){
+      // DeviceMotionEvent: acceleration + rotationRate
+      window.addEventListener("devicemotion", (ev) => {
+        const a = ev.accelerationIncludingGravity || ev.acceleration || null;
+        const rr = ev.rotationRate || null;
+
+        if (a){
+          TELE.ax = Number(a.x) || 0;
+          TELE.ay = Number(a.y) || 0;
+          TELE.az = Number(a.z) || 0;
+          TELE.gotMotion = true;
+        }
+        if (rr){
+          TELE.gx = Number(rr.alpha) || 0;
+          TELE.gy = Number(rr.beta) || 0;
+          TELE.gz = Number(rr.gamma) || 0;
+          TELE.gotMotion = true;
+        }
+      }, { passive:true });
+
+      // DeviceOrientationEvent: alpha/beta/gamma (deg)
+      window.addEventListener("deviceorientation", (ev) => {
+        TELE.alpha = Number(ev.alpha) || 0;
+        TELE.beta  = Number(ev.beta)  || 0;
+        TELE.gamma = Number(ev.gamma) || 0;
+        TELE.gotOrientation = true;
+      }, { passive:true });
+    }
+
+    // ------------------------------
+    // Core telemetry loop (SSOT)
+    // ------------------------------
+    function startStreaming(){
+      TELE.streaming = true;
+      TELE.startedAt = performance.now();
+      TELE.lastAt = TELE.startedAt;
+      TELE.seq = 0;
+
+      // reset filters
+      TELE.accLP = 0;
+      TELE.accHP = 0;
+      TELE.gyrLP = 0;
+
+      TELE.shake01 = 0;
+      TELE.shakeHit = false;
+      TELE.shakeCooldownMs = 0;
+
+      TELE.hz = 0;
+      TELE.locked = false;
+      TELE.lockScore = 0;
+
+      TELE.groove01 = 0;
+      TELE.smooth01 = 0;
+      TELE.speed01 = 0;
+      TELE.energy01 = 0;
+      TELE.orbit01 = 0;
+
+      // run
+      if (!TELE.rafId) TELE.rafId = requestAnimationFrame(tick);
+    }
+
+    function stopStreaming(){
+      TELE.streaming = false;
+      if (TELE.rafId){
+        cancelAnimationFrame(TELE.rafId);
+        TELE.rafId = 0;
+      }
+    }
+
+    let lastPublishAt = 0;
+
+    function tick(now){
+      TELE.rafId = requestAnimationFrame(tick);
+
+      const dt = clamp((now - TELE.lastAt) / 1000, 0, 0.05);
+      TELE.lastAt = now;
+
+      // Read raw magnitudes
+      const accMag = mag3(TELE.ax, TELE.ay, TELE.az);          // ~ includes gravity
+      const gyrMag = mag3(TELE.gx, TELE.gy, TELE.gz);          // deg/s
+
+      // Lowpass + highpass (cheap but stable)
+      TELE.accLP = expSlew(TELE.accLP, accMag, dt, CFG.lpTauAcc);
+      TELE.gyrLP = expSlew(TELE.gyrLP, gyrMag, dt, CFG.lpTauGyr);
+
+      // highpass-ish: accMag - lowpass with separate tau
+      const accLP2 = expSlew(TELE.accHP, TELE.accLP, dt, CFG.hpTauAcc);
+      TELE.accHP = accLP2; // store
+      const accHPVal = accMag - accLP2;
+
+      // Normalize to 0..1
+      const acc01 = clamp01(Math.abs(accHPVal) / CFG.accMagNorm);
+      const gyr01 = clamp01(TELE.gyrLP / CFG.gyrMagNorm);
+
+      // Smoothness: inverse of jerkiness (use acc01 as jerk proxy)
+      const smoothTarget = 1 - clamp01(acc01 * 1.25);
+      TELE.smooth01 = expSlew(TELE.smooth01, smoothTarget, dt, CFG.grooveTau);
+
+      // Speed: blend accel + gyro
+      const speedTarget = clamp01(0.55*acc01 + 0.45*gyr01);
+      TELE.speed01 = expSlew(TELE.speed01, speedTarget, dt, 0.18);
+
+      // Energy: shaped speed with mild boost in mode1
+      const modeBoost = (MODE.value === 1) ? 1.10 : (MODE.value === 2 ? 0.65 : 1.0);
+      const energyTarget = clamp01(Math.pow(TELE.speed01, 1.10) * modeBoost);
+      TELE.energy01 = expSlew(TELE.energy01, energyTarget, dt, 0.20);
+
+      // Orbit proxy: orientation stability (less jitter => higher orbit)
+      // Use small changes in beta/gamma as a stability signal
+      // (we don't store prev angles globally to keep it lean—derive from gyro)
+      const orbitTarget = clamp01(1 - clamp01(gyr01 * 0.85));
+      TELE.orbit01 = expSlew(TELE.orbit01, orbitTarget, dt, CFG.orbitTau);
+
+      // Groove / lock: use a simple “consistency score” from speed stability
+      // If speed is steady-ish and not too low, lock rises
+      const active = (TELE.speed01 > 0.10);
+      const steady = (TELE.smooth01 > 0.55);
+      const grooveTarget = active ? clamp01(0.55*TELE.smooth01 + 0.45*TELE.orbit01) : 0;
+      TELE.groove01 = expSlew(TELE.groove01, grooveTarget, dt, CFG.grooveTau);
+
+      const lockInc = (active && steady) ? CFG.lockUp : -CFG.lockDown;
+      TELE.lockScore = clamp01(TELE.lockScore + lockInc * dt * 10);
+      TELE.locked = (TELE.lockScore >= CFG.lockGate);
+
+      // Hz estimate (very lightweight): map groove+speed to a plausible rhythm band
+      // (This is not a strict BPM detector; receiver telemetry modal will still help refine.)
+      const hzTarget = (active ? (0.6 + 2.4*TELE.speed01) : 0);
+      TELE.hz = expSlew(TELE.hz, hzTarget, dt, 0.45);
+
+      // Shake: derived from spikes
+      TELE.shakeCooldownMs = Math.max(0, TELE.shakeCooldownMs - dt*1000);
+      const shakeTarget = clamp01(acc01*1.15 + gyr01*0.55);
+      TELE.shake01 = expSlew(TELE.shake01, shakeTarget, dt, 0.10);
+
+      TELE.shakeHit = false;
+      if (TELE.shakeCooldownMs <= 0 && TELE.shake01 > CFG.shakeHitGate){
+        TELE.shakeHit = true;
+        TELE.shakeCooldownMs = CFG.shakeCooldown;
+      }
+
+      // UI tint — always, even before publish
+      applyTint(MODE.value, TELE.energy01);
+
+      // publish at fixed cadence
+      if (!TELE.streaming) return;
+
+      const sinceStart = now - TELE.startedAt;
+      const dms = (now - lastPublishAt);
+      if ((now - lastPublishAt) >= CFG.publishMinMs){
+        lastPublishAt = now;
+
+        const payload = {
+          v: SCHEMA_V,
+          room: roomCode,
+          deviceId,
+          seq: ++TELE.seq,
+
+          // timing
+          t_ms: +sinceStart.toFixed(1),
+          dms: +Math.max(0, dms).toFixed(1),
+
+          // ui/mode
+          mode: MODE.value,
+
+          // receiver-friendly fields
+          speed01: +TELE.speed01.toFixed(4),
+          energy01: +TELE.energy01.toFixed(4),
+          groove01: +TELE.groove01.toFixed(4),
+          orbit01: +TELE.orbit01.toFixed(4),
+          smooth01: +TELE.smooth01.toFixed(4),
+          shake01: +TELE.shake01.toFixed(4),
+
+          locked: !!TELE.locked,
+          hz: +TELE.hz.toFixed(3),
+
+          // optional event hint
+          shakeHit: TELE.shakeHit ? true : undefined
+        };
+
+        publishOrb(payload);
+
+        // HUD (super light)
+        renderHud(payload);
+      }
+    }
+
+    function renderHud(p){
+      const conn = connected ? "ok" : "bad";
+      const m = p.mode;
+      const modeName = (m === 0) ? "NORMAL" : (m === 1) ? "TRAIN" : "PAUSE";
+
+      const lines = [
+        `room: ${roomCode}  seq:${p.seq}`,
+        `${connected ? "CONNECTED" : "CONNECTING"}  mode:${modeName}`,
+        `speed:${Math.round(p.speed01*100)}  energy:${Math.round(p.energy01*100)}  groove:${Math.round(p.groove01*100)}`,
+        `orbit:${Math.round(p.orbit01*100)}  smooth:${Math.round(p.smooth01*100)}  shake:${Math.round(p.shake01*100)}`,
+        `locked:${p.locked ? 1 : 0}  hz:${p.hz.toFixed(2)}`
+      ].join("\n");
+
+      els.hud.innerHTML =
+        `<span class="${conn}">${lines}</span>` +
+        (TELE.gotMotion ? "" : `\n<span class="bad">no motion</span>`) +
+        (TELE.gotOrientation ? "" : `\n<span class="dim">no orientation</span>`);
+    }
+
+    // ------------------------------
+    // Interaction: start + tap-toggle
+    // ------------------------------
+    function showField(){
+      els.startBtn.style.display = "none";
+      els.field.classList.add("on");
+    }
+
+    function hideField(){
+      els.field.classList.remove("on");
+      els.startBtn.style.display = "";
+    }
+
+    function nextMode(){
+      setMode(MODE.value + 1);
+      // send an immediate “mode event” so receiver can mark it
+      if (TELE.streaming){
+        publishOrb({
+          v: SCHEMA_V,
+          room: roomCode,
+          deviceId,
+          seq: ++TELE.seq,
+          t_ms: +Math.max(0, performance.now() - TELE.startedAt).toFixed(1),
+          mode: MODE.value,
+          verb: "mode"
+        });
+      }
+    }
+
+    // tap field toggles modes (no delay)
+    els.field.addEventListener("pointerdown", (e) => {
+      e.preventDefault();
+      nextMode();
+    }, { passive:false });
+
+    // Start button: (1) permissions (2) connect (3) stream (4) UI swap
+    els.startBtn.addEventListener("click", async () => {
+      // permission gate on iOS
+      const okPerm = await ensureSensorPermission();
+
+      // wire sensors once (safe)
+      if (!window.__ORB_SENSORS_WIRED__) {
+        wireSensors();
+        window.__ORB_SENSORS_WIRED__ = true;
+      }
+
+      // connect ably (best effort)
+      const okConn = await connectAbly();
+      toast(okConn ? `<span class="ok">Connected</span> — ${roomCode}` : `<span class="bad">Offline</span> — still running`, okConn ? "ok" : "bad");
+
+      // begin stream + swap UI
+      setMode(0);
+      showField();
+      startStreaming();
+
+      // send “armed” event
+      publishOrb({
+        v: SCHEMA_V,
+        room: roomCode,
+        deviceId,
+        seq: ++TELE.seq,
+        t_ms: 0,
+        mode: MODE.value,
+        verb: "armed"
+      });
+    });
+
+    // safety: if page hides, keep running but reduce jitter (no special handling)
+    document.addEventListener("visibilitychange", () => {
+      // you can decide later whether to pause streaming when hidden
+    });
+
+    // initial UI
+    setMode(0);
+    applyTint(0, 0);
+
+    // tiny initial HUD
+    els.hud.textContent = `room: ${roomCode}\nREADY — tap START`;
+
+  </script>
+</body>
+</html>
