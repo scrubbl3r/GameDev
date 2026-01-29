@@ -245,10 +245,10 @@
     // =========================================================================
     const OMEGA_LPF = 0.22;
 
-    const HUNT_WINDOW_SEC   = 1.35;
-    const STABLE_WINDOW_SEC = 3.10;
+    const HUNT_WINDOW_SEC   = .80; // was 1.35
+    const STABLE_WINDOW_SEC = 1.60; // was 3.10
 
-    const MIN_WINDOW_SAMPLES = 55;
+    const MIN_WINDOW_SAMPLES = 28;  // was 55
     const MAX_WINDOW_SAMPLES = 260;
 
     const MIN_OMEGA = 0.08;
@@ -263,7 +263,7 @@
     const JERK_LOOSE = 2600.0;
 
     const ORBIT_FLOOR      = 0.25;
-    const ORBIT_STRICTNESS = 1.2;
+    const ORBIT_STRICTNESS = 1.1;
     const ORBIT_UI_EXP = 0.35;
 
     const ENERGY_GAIN_LOCKED = 1.25;
