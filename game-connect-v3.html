@@ -190,7 +190,7 @@
       text-shadow: none;
     }
 
-    /* ✅ Telemetry button: same size, slightly dimmer */
+    /* ✅ Telemetry button: same size, dimmer */
     #teleBtn{
       opacity: 0.68;
       font-weight: 800;
@@ -210,14 +210,15 @@
       box-shadow: 0 0 18px rgba(50,255,117,.14);
     }
 
-    #connect,
+    /* ✅ DEV: super dim + right-justified */
     #newRoom{
-      opacity: 0.72;
+      opacity: 0.26;
       font-weight: 800;
+      margin-left: auto; /* pushes DEV to far-right in the row */
     }
-    #connect:hover,
     #newRoom:hover{
-      opacity: 0.92;
+      opacity: 0.46;
+      border-color: rgba(50,255,117,.24);
     }
 
     .groupGap{ height:10px; }
@@ -464,7 +465,6 @@
           <button id="pairBtn">Pair Phone</button>
           <button id="audioBtn">Audio: Off</button>
           <button id="teleBtn">Telemetry</button>
-          <button id="connect">Reconnect</button>
           <button id="newRoom">DEV</button>
         </div>
 
@@ -477,7 +477,7 @@
           <span id="last" class="lastText">(none yet)</span>
         </div>
 
-        <!-- ✅ BIG HEADLINE = LIFT (no overcharge yellow yet) -->
+        <!-- ✅ BIG HEADLINE = LIFT -->
         <div id="bigCharge" class="big"><span id="pct">0</span>%</div>
 
         <div class="bars">
@@ -492,7 +492,6 @@
           <div class="barLabel"><div>Smooth</div><span id="vSmooth">0</span></div>
           <div class="bar"><div id="bSmooth" class="fill"></div></div>
 
-          <!-- ✅ Speed label is now plain text (no click, no outline) -->
           <div class="barLabel">
             <div>Speed</div>
             <span id="vSpeed">0</span>
@@ -502,7 +501,6 @@
           <div class="barLabel"><div>Orbit</div><span id="vOrbit">0</span></div>
           <div class="bar"><div id="bOrbit" class="fill"></div></div>
 
-          <!-- ✅ Energy (still overcharges; yellow applies to THIS value + bar) -->
           <div class="barLabel"><div>Energy</div><span id="vEnergy">0</span></div>
           <div class="bar"><div id="bEnergy" class="fill"></div></div>
 
@@ -586,7 +584,6 @@
 
     const els = {
       pairBtn: $("pairBtn"),
-      connect: $("connect"),
       newRoom: $("newRoom"),
       audioBtn: $("audioBtn"),
       teleBtn: $("teleBtn"),
@@ -630,7 +627,7 @@
       urlText: $("urlText"),
       copyUrl: $("copyUrl"),
 
-      // ✅ telemetry
+      // telemetry
       teleModal: $("teleModal"),
       teleBackdrop: $("teleBackdrop"),
       teleClose: $("teleClose"),
@@ -649,9 +646,6 @@
       el.style.width = p.toFixed(1) + "%";
     }
 
-    // =========================================================================
-    // LIFT (stub wiring for UI)
-    // =========================================================================
     function computeLift01(groove01, smooth01, speed01){
       const g = clamp01(groove01);
       const s = clamp01(smooth01);
@@ -694,7 +688,7 @@
     }
 
     // =========================================================================
-    // BACKGROUND (energy-driven “charge” glow stays tied to energy for now)
+    // BACKGROUND (energy-driven “charge” glow stays tied to energy)
     // =========================================================================
     const BG0 = { r: 0,   g: 0,  b: 0  };
     const BG1 = { r: 255, g: 42, b: 0  };
@@ -821,7 +815,6 @@
       els.pairModal.setAttribute("aria-hidden","true");
     }
 
-    // ✅ Pair Phone now mints a new room first (beta path), then opens modal
     els.pairBtn.addEventListener("click", async () => {
       currentRoomChannel = "orb:" + randCode(6);
       await connect({ auto:false });
@@ -870,7 +863,7 @@
     }
 
     // =========================================================================
-    // ✅ SPEED TELEMETRY MODAL (record/stop/close)
+    // SPEED TELEMETRY MODAL (record/stop/close)
     // =========================================================================
     let teleRecording = false;
     let teleT0 = 0;
@@ -887,7 +880,7 @@
       els.teleRecBtn.classList.remove("recOn");
     }
     function closeTele(){
-      stopTeleRecording(); // ✅ close stops recording (prevents accidental long captures)
+      stopTeleRecording();
       els.teleModal.classList.remove("on");
       els.teleModal.setAttribute("aria-hidden","true");
     }
@@ -909,14 +902,11 @@
       else stopTeleRecording();
     }
 
-    // ✅ Telemetry opens the modal (replaces old Speed label click)
     els.teleBtn.addEventListener("click", openTele);
-
     els.teleBackdrop.addEventListener("click", closeTele);
     els.teleClose.addEventListener("click", closeTele);
     els.teleRecBtn.addEventListener("click", toggleTeleRecord);
 
-    // global escape closes whichever modal is open
     window.addEventListener("keydown", (e) => {
       if (e.key !== "Escape") return;
       if (els.teleModal.classList.contains("on")) closeTele();
@@ -985,7 +975,7 @@
     let currentRoomChannel = normalizeRoom(readUrlRoomOrNull() || "orb:test");
 
     // =========================================================================
-    // ✅ PHYSICS
+    // PHYSICS
     // =========================================================================
     const PHYS = {
       groundFromBottomPx: 15,
@@ -1139,12 +1129,12 @@
         }
 
         if (dt >= IDLE.idleMs){
-          idleDisconnect("Idle timeout — click Reconnect");
+          idleDisconnect("Idle timeout — refresh page");
         }
       }, IDLE.checkEveryMs);
 
       idleHardTO = setTimeout(() => {
-        idleDisconnect("Session cap reached — click Reconnect");
+        idleDisconnect("Session cap reached — refresh page");
       }, IDLE.hardMaxMs);
     }
 
@@ -1259,7 +1249,12 @@
         return;
       }
 
-      setStatus(opts.auto ? `Auto-connecting… <span class="dim">(${roomChannel})</span>` : `Reconnecting… <span class="dim">(${roomChannel})</span>`, "ok");
+      setStatus(
+        opts.auto
+          ? `Auto-connecting… <span class="dim">(${roomChannel})</span>`
+          : `Connecting… <span class="dim">(${roomChannel})</span>`,
+        "ok"
+      );
 
       idleClearTimers();
 
@@ -1274,7 +1269,7 @@
 
       realtime.connection.on("connected", () => setStatus(`Connected ✓ <span class="dim">(${roomChannel})</span>`, "ok"));
       realtime.connection.on("failed", (st) => { console.error("Ably failed:", st); setStatus("FAILED — see console", "bad"); });
-      realtime.connection.on("disconnected", () => setStatus("Disconnected (refresh / reconnect)", "bad"));
+      realtime.connection.on("disconnected", () => setStatus("Disconnected <span class=\"dim\">(refresh page)</span>", "bad"));
 
       channel = realtime.channels.get(roomChannel);
 
@@ -1309,8 +1304,6 @@
       await connect({ auto:false });
       openPairModal();
     });
-
-    els.connect.addEventListener("click", () => connect({ auto:false }));
 
     document.addEventListener("visibilitychange", () => {
       if (document.hidden) {
