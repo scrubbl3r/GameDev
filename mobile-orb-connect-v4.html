@@ -8,20 +8,22 @@
     :root { --green:#7dd35f; }
 
     html, body {
-      height: 100%;
-      margin: 0;
-      background: #000;
-      color: var(--green);
-      font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
-      transition: background-color 80ms linear; /* keep phone glow mapping */
-      touch-action: manipulation;
+        height: 100%;
+        margin: 0;
+        background: #000;
+        color: var(--green);
+        font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+        transition: background-color 80ms linear; /* keep phone glow mapping */
+        touch-action: manipulation;
     }
 
-    .app {
-      min-height: 100vh;
-      display: grid;
-      place-items: center; /* center the single button */
+    .app{
+        height: calc(var(--vh, 1vh) * 100);
+        display: grid;
+        place-items: center;
     }
+
+
 
     /* Single centered round Start button */
     #startBtn {
@@ -50,6 +52,30 @@
 
   <!-- Ably JS -->
   <script src="https://cdn.ably.com/lib/ably.min-1.js"></script>
+
+  <!-- center button on screen hack -->
+  <script>
+    (function setVhUnit(){
+        const root = document.documentElement;
+
+        const set = () => {
+        const vv = window.visualViewport;
+        const h = (vv && vv.height) ? vv.height : window.innerHeight;
+        root.style.setProperty('--vh', (h * 0.01) + 'px');
+        };
+
+        set();
+
+        // iOS Chrome: visualViewport changes when bars show/hide & during scroll
+        window.addEventListener('resize', set, { passive: true });
+        window.addEventListener('orientationchange', set, { passive: true });
+        if (window.visualViewport) {
+        window.visualViewport.addEventListener('resize', set, { passive: true });
+        window.visualViewport.addEventListener('scroll', set, { passive: true });
+        }
+    })();
+    </script>
+
 
   <script>
   (() => {
@@ -217,12 +243,12 @@
     // =========================================================================
     // DIAL PACK v4 — base detection (PRESERVED)
     // =========================================================================
-    const OMEGA_LPF = 0.22;
+    const OMEGA_LPF = 0.80; // was .80
 
-    const HUNT_WINDOW_SEC   = 1.35;
-    const STABLE_WINDOW_SEC = 3.10;
+    const HUNT_WINDOW_SEC   = .80; // was 1.35
+    const STABLE_WINDOW_SEC = 1.60; // was 3.10
 
-    const MIN_WINDOW_SAMPLES = 55;
+    const MIN_WINDOW_SAMPLES = 28;  // was 55
     const MAX_WINDOW_SAMPLES = 260;
 
     const MIN_OMEGA = 0.08;
@@ -236,21 +262,44 @@
     const JERK_TIGHT = 220.0;
     const JERK_LOOSE = 2600.0;
 
-    // =========================================================================
-    // ✅ ORBIT v2 — Lissajous / tri-axial bonus (NEW)
-    // - Uses covariance of raw filtered omega vectors (NOT normalized direction)
-    // - Rewards: balanced energy across x/y/z (tri-axial) + simultaneous coupling
-    // - Penalizes: “one-axis at a time” alternation (low cross-cov coupling)
-    // Output: orbitBonus in [ORBIT_FLOOR..1], orbitShown in [0..1]
-    // =========================================================================
-    const ORBIT_FLOOR = 0.25;
+    const ORBIT_FLOOR      = 0.25;
+    const ORBIT_STRICTNESS = 1.1;
+    const ORBIT_UI_EXP = 0.35;
 
-    // Balance shaping (0..1 where 1 = equal variance on all three axes)
-    const ORBIT_BALANCE_POW = 1.00;
+    const ENERGY_GAIN_LOCKED = 1.25;
+    const ENERGY_GAIN_FREE   = 0.65;
 
-    // Coupling shaping (0..1 where 1 = strong simultaneous multi-axis relationship)
-    const ORBIT_COUPLE_GAIN = 2.20;  // raises sensitivity; 1.0 = raw ratio
-    const ORBIT_COUPLE_POW  = 1.00;
+    const ENERGY_DECAY       = 0.040;
+
+    const UI_SMOOTH   = 0.10;
+    const LOCK_SMOOTH = 0.14;
+
+    const GRACE_SEC = 0.75;
+
+    const RECENTER_SEC = 0.85;
+    const RECENTER_GROOVE_MAX = 0.22;
+
+    const NORM_ALPHA = 0.10;
+
+    // ============================================================================
+    // SPEED METER — tuned for “force” (rotationRate magnitude, deg/sec)
+    // ============================================================================
+    const SPEED_DEAD_DPS = 8.0;
+    const SPEED_CAP_DPS  = 360.0;
+
+    const SPEED_EMA_CUTOFF_FAST_HZ = 1.5;
+    const SPEED_EMA_CUTOFF_SLOW_HZ = .10;
+
+    const SPEED_ADAPT_START_DPS = 18.0;
+    const SPEED_ADAPT_END_DPS   = 130.0;
+
+    const SPEED_ADAPT_POW = 1.0;
+
+    const SPEED_NORM_DPS = 300.0;
+    const SPEED_MAP_POW  = 1.10;
+
+    const SPEED_ATTACK_HZ  = 5.0;
+    const SPEED_RELEASE_HZ = 8.0;
 
     // =========================================================================
     // SSOT MOBILE 2.0 — ENERGY MODEL
@@ -419,10 +468,7 @@
       return clamp01(t);
     }
 
-    // =========================================================================
-    // ✅ ORBIT v2 core (NEW)
-    // =========================================================================
-    function covOmega3(vecs) {
+    function cov3(vecs) {
       const n = vecs.length;
       if (n < 10) return {xx:0,xy:0,xz:0,yy:0,yz:0,zz:0, trace:0};
 
@@ -441,31 +487,13 @@
       return {xx,xy,xz,yy,yz,zz, trace:(xx+yy+zz)};
     }
 
-    function orbitBonusFromOmegaCov(cov) {
-      const eps = 1e-12;
-      const tr = cov.trace;
-      if (tr < 1e-9) return ORBIT_FLOOR;
-
-      // eigenvalues describe how the variance is distributed across principal axes
+    function orbitBonusFromDirCov(cov) {
+      const eps = 1e-9;
+      if (cov.trace < 1e-6) return ORBIT_FLOOR;
       const [l1,l2,l3] = eigenvaluesSym3(cov.xx,cov.xy,cov.xz,cov.yy,cov.yz,cov.zz);
-      const s = (l1 + l2 + l3) + eps;
-
-      // balance: entropy of normalized eigenvalues (1 = perfectly balanced tri-axial)
-      const p1 = Math.max(eps, l1 / s);
-      const p2 = Math.max(eps, l2 / s);
-      const p3 = Math.max(eps, l3 / s);
-      const H = -(p1*Math.log(p1) + p2*Math.log(p2) + p3*Math.log(p3));
-      const Hn = clamp01(H / Math.log(3)); // 0..1
-
-      const balance = Math.pow(Hn, ORBIT_BALANCE_POW);
-
-      // coupling: encourages simultaneous multi-axis patterns (Lissajous / figure-8 / tri-axial)
-      const coupleRaw = (Math.abs(cov.xy) + Math.abs(cov.xz) + Math.abs(cov.yz)) / (tr + eps);
-      const couple = Math.pow(clamp01(coupleRaw * ORBIT_COUPLE_GAIN), ORBIT_COUPLE_POW);
-
-      const core = clamp01(balance * couple);
-
-      return ORBIT_FLOOR + (1 - ORBIT_FLOOR) * core;
+      const iso = clamp01(1 - ((l1 - l3) / (l1 + eps)));
+      const shaped = Math.pow(iso, ORBIT_STRICTNESS);
+      return ORBIT_FLOOR + (1 - ORBIT_FLOOR) * shaped;
     }
 
     function computeAvg(arr) {
@@ -475,13 +503,13 @@
       return s/arr.length;
     }
 
-    function trimToWindow(dtMean, targetSec, omegaMag, omegaNorm, omegaVec, jerkBuf, dtBuf) {
+    function trimToWindow(dtMean, targetSec, omegaMag, omegaNorm, omegaDir, jerkBuf, dtBuf) {
       let targetN = dtMean > 1e-4 ? Math.round(targetSec / dtMean) : MAX_WINDOW_SAMPLES;
       targetN = Math.max(MIN_WINDOW_SAMPLES, Math.min(MAX_WINDOW_SAMPLES, targetN));
 
       while (omegaMag.length  > targetN) omegaMag.shift();
       while (omegaNorm.length > targetN) omegaNorm.shift();
-      while (omegaVec.length  > targetN) omegaVec.shift();
+      while (omegaDir.length  > targetN) omegaDir.shift();
       while (jerkBuf.length   > targetN) jerkBuf.shift();
       while (dtBuf.length     > targetN) dtBuf.shift();
 
@@ -504,7 +532,7 @@
 
     const omegaMag  = [];
     const omegaNorm = [];
-    const omegaVec  = [];   // ✅ ORBIT v2: raw omega vectors (filtered), NOT normalized dir
+    const omegaDir  = [];
     const jerkBuf   = [];
     const dtBuf     = [];
 
@@ -578,7 +606,7 @@
       const keep = Math.min(18, omegaMag.length);
       omegaMag.splice(0, Math.max(0, omegaMag.length - keep));
       omegaNorm.splice(0, Math.max(0, omegaNorm.length - keep));
-      omegaVec.splice(0, Math.max(0, omegaVec.length - keep));
+      omegaDir.splice(0, Math.max(0, omegaDir.length - keep));
       jerkBuf.splice(0, Math.max(0, jerkBuf.length - keep));
       dtBuf.splice(0, Math.max(0, dtBuf.length - keep));
     }
@@ -600,26 +628,6 @@
 
       return { grooveOut, orbitOut, smoothOut };
     }
-
-    // ============================================================================
-    // SPEED METER — tuned for “force” (rotationRate magnitude, deg/sec)
-    // ============================================================================
-    const SPEED_DEAD_DPS = 8.0;
-    const SPEED_CAP_DPS  = 360.0;
-
-    const SPEED_EMA_CUTOFF_FAST_HZ = 1.5;
-    const SPEED_EMA_CUTOFF_SLOW_HZ = .10;
-
-    const SPEED_ADAPT_START_DPS = 18.0;
-    const SPEED_ADAPT_END_DPS   = 130.0;
-
-    const SPEED_ADAPT_POW = 1.0;
-
-    const SPEED_NORM_DPS = 300.0;
-    const SPEED_MAP_POW  = 1.10;
-
-    const SPEED_ATTACK_HZ  = 5.0;
-    const SPEED_RELEASE_HZ = 8.0;
 
     function updateSpeedV0(wRawDps, dt) {
       const dtSafe = Math.max(1e-3, dt || 1/60);
@@ -776,8 +784,8 @@
         const rms = Math.sqrt(Math.max(1e-6, emaVar));
         omegaNorm.push((mStability - emaMean) / rms);
 
-        // ✅ ORBIT v2: store the raw filtered vector (not normalized direction)
-        omegaVec.push({x:ox, y:oy, z:oz});
+        const inv = 1/mStability;
+        omegaDir.push({x:ox*inv, y:oy*inv, z:oz*inv});
 
         if (dt > 0) {
           const dtSafe = Math.max(dt, dtMean * 0.5, 1/120);
@@ -786,13 +794,13 @@
       } else {
         if (omegaMag.length) omegaMag.shift();
         if (omegaNorm.length) omegaNorm.shift();
-        if (omegaVec.length) omegaVec.shift();
+        if (omegaDir.length) omegaDir.shift();
         if (jerkBuf.length)  jerkBuf.shift();
       }
 
       const inStableMode = lock || graceLeft > 0;
       const windowSec = inStableMode ? STABLE_WINDOW_SEC : HUNT_WINDOW_SEC;
-      const nTarget = trimToWindow(dtMean, windowSec, omegaMag, omegaNorm, omegaVec, jerkBuf, dtBuf);
+      const nTarget = trimToWindow(dtMean, windowSec, omegaMag, omegaNorm, omegaDir, jerkBuf, dtBuf);
 
       if (omegaNorm.length < Math.min(MIN_WINDOW_SAMPLES, nTarget)) {
         if (dt > 0) {
@@ -834,10 +842,10 @@
       const avgJerk = median(jerkWindow);
       const smoothScore = smoothnessFromJerk(avgJerk);
 
-      // ✅ ORBIT v2 compute
-      const omegaCov = covOmega3(omegaVec);
-      const orbitBonus = orbitBonusFromOmegaCov(omegaCov);
-      const orbitShown = (orbitBonus - ORBIT_FLOOR) / (1 - ORBIT_FLOOR);
+      const dirCov = cov3(omegaDir);
+      const orbitBonus = orbitBonusFromDirCov(dirCov);
+        const orbitShown = (orbitBonus - ORBIT_FLOOR) / (1 - ORBIT_FLOOR);
+        const orbitUI = Math.pow(clamp01(orbitShown), ORBIT_UI_EXP);
 
       meterHoldLeft = METER_HOLD_SEC;
       lastGrooveUI = lockStrength;
@@ -963,7 +971,7 @@
         ox=oy=oz=0;
         omegaMag.length  = 0;
         omegaNorm.length = 0;
-        omegaVec.length  = 0;
+        omegaDir.length  = 0;
         jerkBuf.length   = 0;
         dtBuf.length     = 0;
 
@@ -1002,6 +1010,15 @@
       } finally {
         startBtn.disabled = false;
       }
+      // Attempt to lock to portrait (best-effort; may fail on iOS depending on context)
+        if (screen.orientation && screen.orientation.lock) {
+        try {
+            await screen.orientation.lock('portrait-primary');
+        } catch (e) {
+            // no-op: user can still use iOS Control Center orientation lock
+        }
+        }
+
     }
 
     function stop() {
