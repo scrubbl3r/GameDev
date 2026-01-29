@@ -1008,6 +1008,15 @@
       } finally {
         startBtn.disabled = false;
       }
+      // Attempt to lock to portrait (best-effort; may fail on iOS depending on context)
+        if (screen.orientation && screen.orientation.lock) {
+        try {
+            await screen.orientation.lock('portrait-primary');
+        } catch (e) {
+            // no-op: user can still use iOS Control Center orientation lock
+        }
+        }
+
     }
 
     function stop() {
