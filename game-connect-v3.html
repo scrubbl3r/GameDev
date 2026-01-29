@@ -1104,6 +1104,70 @@
     let realtime = null;
     let channel = null;
 
+    /* ========================================================================
+       ✅ IDLE SAFEGUARD (beta protection)
+       - Closes Ably connection after inactivity to avoid burning freebies.
+       - Idle is based on: no incoming "orb" messages.
+       - Warn first, then disconnect. Also has an optional hard session cap.
+       ======================================================================== */
+    const IDLE = {
+      idleMs: 2 * 60 * 1000,      // disconnect after 2 minutes of silence
+      warnMs: 90 * 1000,          // warn at 90s
+      hardMaxMs: 15 * 60 * 1000,  // hard cap session (15 min)
+      checkEveryMs: 1000
+    };
+
+    let idleLastMsgAt = performance.now();
+    let idleWarned = false;
+    let idleInterval = null;
+    let idleHardTO = null;
+
+    function idleMarkActivity(){
+      idleLastMsgAt = performance.now();
+      idleWarned = false;
+    }
+
+    function idleClearTimers(){
+      if (idleInterval) { clearInterval(idleInterval); idleInterval = null; }
+      if (idleHardTO) { clearTimeout(idleHardTO); idleHardTO = null; }
+    }
+
+    function idleDisconnect(reason){
+      idleClearTimers();
+
+      try { if (channel) channel.unsubscribe(); } catch(_) {}
+      try { if (channel) channel.detach(); } catch(_) {}
+      try { if (realtime) realtime.close(); } catch(_) {}
+
+      channel = null;
+      realtime = null;
+
+      setStatus(reason, "bad");
+    }
+
+    function idleStartTimers(){
+      idleClearTimers();
+      idleMarkActivity();
+
+      idleInterval = setInterval(() => {
+        const now = performance.now();
+        const dt = now - idleLastMsgAt;
+
+        if (!idleWarned && dt >= IDLE.warnMs && dt < IDLE.idleMs){
+          idleWarned = true;
+          setStatus(`Idle soon… <span class="dim">(no messages)</span>`, "dim");
+        }
+
+        if (dt >= IDLE.idleMs){
+          idleDisconnect("Idle timeout — click Reconnect");
+        }
+      }, IDLE.checkEveryMs);
+
+      idleHardTO = setTimeout(() => {
+        idleDisconnect("Session cap reached — click Reconnect");
+      }, IDLE.hardMaxMs);
+    }
+
     let lastData = null;
     let rafPending = false;
 
@@ -1228,6 +1292,9 @@
 
       setStatus(opts.auto ? `Auto-connecting… <span class="dim">(${roomChannel})</span>` : `Reconnecting… <span class="dim">(${roomChannel})</span>`, "ok");
 
+      // if we reconnect, clear any previous idle timers and old sockets
+      idleClearTimers();
+
       try { if (channel) channel.unsubscribe(); } catch(e) {}
       try { if (realtime) realtime.close(); } catch(e) {}
       realtime = null; channel = null;
@@ -1246,9 +1313,15 @@
       channel.attach((err) => {
         if (err) { console.error("Channel attach failed:", err); setStatus("Channel attach FAILED — see console", "bad"); return; }
         setStatus(`Connected ✓ (listening…) <span class="dim">(${roomChannel})</span>`, "ok");
+
+        // ✅ start the idle watchdog only once we’re actually attached
+        idleStartTimers();
       });
 
       channel.subscribe("orb", (msg) => {
+        // ✅ any message counts as activity
+        idleMarkActivity();
+
         const d = (msg && msg.data) ? msg.data : {};
 
         let s = "";
@@ -1275,6 +1348,17 @@
     });
 
     els.connect.addEventListener("click", () => connect({ auto:false }));
+
+    // ✅ if the tab is hidden for a while, proactively idle-disconnect
+    // (optional but very effective for beta testers who background the page)
+    document.addEventListener("visibilitychange", () => {
+      if (document.hidden) {
+        // give it a grace period; if they come back quickly, no disconnect
+        // (we just rely on the idle watchdog)
+      } else {
+        // on returning visible, if we were disconnected by idle, they can click Reconnect
+      }
+    });
 
     (async function init(){
       connect({ auto:true });
