@@ -2,150 +2,665 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
-  <title>Orb Relay — Mobile</title>
-
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Groove Orbit</title>
   <style>
-    :root{
-      --bg0: #000;
-      --g: #32ff75;
+    :root { --green:#7dd35f; --over:#ffd400; }
 
-      /* energy glow (0..1) */
-      --e: 0;
-
-      /* glow colors */
-      --glowCore: rgba(50,255,117, 0.85);
-      --glowHalo: rgba(50,255,117, 0.20);
+    html, body {
+      height: 100%;
+      margin: 0;
+      background: #000;
+      color: var(--green);
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      transition: background-color 80ms linear;
     }
 
-    html,body{
-      height:100%;
-      margin:0;
-      background: var(--bg0);
-      color: var(--g);
-      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-      overflow:hidden;
-      touch-action: manipulation;
+    .app {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      padding: 18px 14px 22px;
+      box-sizing: border-box;
+      text-align: center;
+      gap: 14px;
     }
 
-    /* energy-driven glow */
-    body{
-      background:
-        radial-gradient(
-          900px 900px at 50% 45%,
-          rgba(50,255,117, calc(0.08 + 0.35 * var(--e))) 0%,
-          rgba(50,255,117, calc(0.02 + 0.14 * var(--e))) 35%,
-          rgba(0,0,0, 1.0) 75%
-        ),
-        radial-gradient(
-          1200px 900px at 50% 40%,
-          rgba(255, 42, 0, calc(0.00 + 0.12 * var(--e))) 0%,
-          rgba(0,0,0, 1.0) 70%
-        );
-      transition: background 70ms linear;
+    .bigCharge {
+      font-weight: 900;
+      font-size: clamp(72px, 18vw, 180px);
+      letter-spacing: -0.05em;
+      color: var(--green);
+      line-height: 0.95;
+      text-shadow: 0 0 18px rgba(125,211,95,0.16);
+      margin-top: 4px;
+    }
+    .bigSub {
+      margin-top: -6px;
+      font-size: 14px;
+      opacity: 0.78;
     }
 
-    .center{
-      position:fixed;
-      inset:0;
-      display:grid;
-      place-items:center;
+    .over { color: var(--over) !important; }
+    .bigCharge.over { text-shadow: 0 0 18px rgba(255, 212, 0, 0.22); }
+    .fill.over { background: var(--over) !important; }
+
+    .panel {
+      width: min(560px, 92vw);
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      margin-top: 6px;
     }
 
-    #startBtn{
-      padding:18px 22px;
-      border-radius:18px;
-      border:1px solid rgba(50,255,117,.30);
-      background: rgba(0,0,0,.40);
-      color: var(--g);
-      font-weight: 1000;
+    .metric {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      align-items: center;
+    }
+    .label {
+      font-size: 16px;
+      display: flex;
+      gap: 10px;
+      align-items: baseline;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+    .label .muted {
+      opacity: 0.72;
+      font-size: 13px;
+    }
+
+    .bar {
+      height: 18px;
+      width: 100%;
+      border: 1px solid rgba(125,211,95,0.60);
+      border-radius: 10px;
+      overflow: hidden;
+      background: rgba(125,211,95,0.08);
+      box-sizing: border-box;
+    }
+    .fill {
+      height: 100%;
+      width: 0%;
+      background: var(--green);
+      transition: width 80ms linear;
+    }
+
+    .small {
+      width: min(560px, 92vw);
+      opacity: 0.75;
+      font-size: 13px;
+      line-height: 1.35;
+      margin-top: 2px;
+    }
+    code {
+      background: rgba(125,211,95,0.08);
+      border: 1px solid rgba(125,211,95,0.35);
+      padding: 2px 6px;
+      border-radius: 6px;
+    }
+
+    button {
       font-size: 18px;
-      letter-spacing:.4px;
-      cursor:pointer;
-      user-select:none;
-      -webkit-tap-highlight-color: transparent;
-      box-shadow:
-        0 0 calc(18px + 60px * var(--e)) rgba(50,255,117, calc(0.08 + 0.22 * var(--e))),
-        inset 0 0 0 1px rgba(0,0,0,.35);
+      padding: 12px 16px;
+      background: transparent;
+      border: 1px solid var(--green);
+      color: var(--green);
+      border-radius: 10px;
+      width: min(560px, 92vw);
     }
+    button:disabled { opacity: 0.55; }
 
-    #startBtn:active{
-      transform: translateY(1px);
+    .diag {
+      width: min(560px, 92vw);
+      border: 1px solid rgba(125,211,95,0.35);
+      background: rgba(0,0,0,0.28);
+      border-radius: 12px;
+      padding: 10px 10px;
+      text-align: left;
+      font: 12px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      line-height: 1.35;
     }
-
-    #startBtn[disabled]{
-      opacity:.65;
-      cursor:default;
+    .diag .row { display:flex; flex-wrap:wrap; gap:10px; align-items:baseline; }
+    .diag .k { opacity:0.80; }
+    .diag .v { font-weight:800; }
+    .diag .ok { color:#7dffab; font-weight:900; }
+    .diag .warn { color:#ffd37d; font-weight:900; }
+    .diag .bad { color:#ff6b6b; font-weight:900; }
+    .diag .log {
+      margin-top: 8px;
+      padding-top: 8px;
+      border-top: 1px solid rgba(125,211,95,0.18);
+      max-height: 180px;
+      overflow: auto;
+      white-space: pre-wrap;
+      word-break: break-word;
+      color: rgba(125,211,95,0.92);
     }
-
-    /* subtle “connected” hide */
-    .gone{
-      opacity:0;
-      pointer-events:none;
-      transform: scale(.98);
-      transition: opacity 260ms ease, transform 260ms ease;
-    }
+    .diag .log .muted { opacity:0.70; }
   </style>
-
-  <!-- Ably -->
-  <script src="https://cdn.ably.com/lib/ably.min-1.js"></script>
 </head>
-
 <body>
-  <div class="center">
-    <button id="startBtn">START</button>
-  </div>
+  <main class="app">
+    <div>
+      <div id="bigCharge" class="bigCharge">0%</div>
+      <div class="bigSub">energy</div>
+    </div>
+
+    <section class="panel">
+      <div class="metric">
+        <div class="label">
+          Groove <span id="groove">0</span>
+          <span class="muted">(periodicity / lock strength)</span>
+        </div>
+        <div class="bar"><div id="grooveBar" class="fill"></div></div>
+      </div>
+
+      <div class="metric">
+        <div class="label">
+          Orbit <span id="orbit">0</span>
+          <span class="muted">(multi-axis bonus)</span>
+        </div>
+        <div class="bar"><div id="orbitBar" class="fill"></div></div>
+      </div>
+
+      <div class="metric">
+        <div class="label">
+          Smooth <span id="smooth">0</span>
+          <span class="muted">(low jerk)</span>
+        </div>
+        <div class="bar"><div id="smoothBar" class="fill"></div></div>
+      </div>
+
+      <div class="metric">
+        <div class="label">
+          Speed <span id="speed">0</span>
+          <span class="muted">(FORCE / rebuilt)</span>
+        </div>
+        <div class="bar"><div id="speedBar" class="fill"></div></div>
+      </div>
+
+      <div class="metric">
+        <div class="label">Energy <span id="energy">0</span></div>
+        <div class="bar"><div id="energyBar" class="fill"></div></div>
+      </div>
+
+      <br>
+      <button id="startBtn">Start</button>
+
+      <div class="small">
+        Requires <code>https</code> + motion permission + audio started from the button (iOS).<br>
+        Relay: pass <code>?room=orb:XXXX</code> or <code>?room=XXXX</code> in the URL to pair with the game.
+      </div>
+
+      <div id="diag" class="diag" aria-label="Diagnostics">
+        <div class="row">
+          <span class="k">Run:</span> <span id="dRun" class="v dim">idle</span>
+          <span class="k">Secure:</span> <span id="dSecure" class="v dim">?</span>
+          <span class="k">Permission:</span> <span id="dPerm" class="v dim">?</span>
+        </div>
+        <div class="row" style="margin-top:6px;">
+          <span class="k">Relay:</span> <span id="dRelay" class="v dim">idle</span>
+          <span class="k">Motion:</span> <span id="dMotion" class="v dim">0</span>
+          <span class="k">Last dt:</span> <span id="dDt" class="v dim">0</span>
+        </div>
+        <div class="row" style="margin-top:6px;">
+          <span class="k">Last rr:</span> <span id="dRR" class="v dim">none</span>
+        </div>
+
+        <div class="row" style="margin-top:6px;">
+          <span class="k">wRaw:</span> <span id="dOmega" class="v dim">0</span>
+          <span class="k">wCap:</span> <span id="dOmegaC" class="v dim">0</span>
+          <span class="k">wFilt:</span> <span id="dOmegaF" class="v dim">0</span>
+          <span class="k">speed:</span> <span id="dSpeed" class="v dim">0</span>
+        </div>
+
+        <div class="row" style="margin-top:6px;">
+          <span class="k">Start stage:</span> <span id="dStage" class="v dim">—</span>
+        </div>
+        <div class="row" style="margin-top:6px;">
+          <span class="k">Last error:</span> <span id="dErr" class="v dim">—</span>
+        </div>
+        <div id="dLog" class="log"><span class="muted">(log)</span></div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Ably JS -->
+  <script src="https://cdn.ably.com/lib/ably.min-1.js"></script>
 
   <script>
-    // ============================================================
-    // CONFIG
-    // ============================================================
-    const WORKER_BASE = "https://orb-token.mrgarthwilliams.workers.dev"; // same as receiver
-    const DEFAULT_ROOM = "test";
-    const PUBLISH_HZ = 30;                 // outbound rate
-    const SMOOTH_ALPHA = 0.18;             // smoothing on some signals
-    const SHAKE_THRESH = 2.6;              // g-ish bump threshold (tune)
-    const LOCK_HZ_MIN = 0.8;               // lock detection band
-    const LOCK_HZ_MAX = 2.6;
-    const LOCK_STABLE_MS = 650;
+  (() => {
+    // =========================================================================
+    // Diagnostics helpers
+    // =========================================================================
+    const $ = (id) => document.getElementById(id);
 
-    // ============================================================
-    // DOM
-    // ============================================================
-    const startBtn = document.getElementById("startBtn");
+    const d = {
+      run: $("dRun"),
+      secure: $("dSecure"),
+      perm: $("dPerm"),
+      relay: $("dRelay"),
+      motion: $("dMotion"),
+      dt: $("dDt"),
+      rr: $("dRR"),
+      stage: $("dStage"),
+      err: $("dErr"),
+      log: $("dLog"),
 
-    // ============================================================
-    // SMALL UTILS
-    // ============================================================
-    const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
-    const clamp01 = (x) => clamp(Number(x) || 0, 0, 1);
-    const lerp = (a,b,t) => a + (b-a)*t;
+      omega: $("dOmega"),
+      omegaC: $("dOmegaC"),
+      omegaF: $("dOmegaF"),
+      speed: $("dSpeed"),
+    };
 
-    function readRoomFromUrl(){
-      try{
-        const u = new URL(location.href);
-        const r = (u.searchParams.get("room") || "").trim();
-        return r || DEFAULT_ROOM;
-      }catch(_){
-        return DEFAULT_ROOM;
-      }
+    const t0 = performance.now();
+    function nowMs(){ return Math.round(performance.now() - t0); }
+
+    function cls(el, c){
+      el.classList.remove("ok","warn","bad","dim");
+      if (c) el.classList.add(c);
     }
 
-    // ============================================================
-    // AUDIO (energy -> gain, energy -> tone)
-    // ============================================================
-    let audioCtx = null, osc = null, gainNode = null;
-    let audioOn = false;
+    function setRun(text, level="dim"){ d.run.textContent = text; cls(d.run, level); }
+    function setSecure(v){ d.secure.textContent = v ? "yes" : "no"; cls(d.secure, v ? "ok" : "bad"); }
+    function setPerm(text, level="dim"){ d.perm.textContent = text; cls(d.perm, level); }
+    function setRelay(text, level="dim"){ d.relay.textContent = text; cls(d.relay, level); }
+    function setStage(text, level="dim"){ d.stage.textContent = text; cls(d.stage, level); }
+    function setErr(text, level="dim"){ d.err.textContent = text; cls(d.err, level); }
 
+    function log(msg, obj){
+      let line = `[${nowMs()}ms] ${msg}`;
+      if (obj !== undefined) {
+        try { line += " " + JSON.stringify(obj); }
+        catch(e){ line += " " + String(obj); }
+      }
+      const div = document.createElement("div");
+      div.textContent = line;
+      d.log.appendChild(div);
+      d.log.scrollTop = d.log.scrollHeight;
+      console.log(line);
+    }
+
+    log("boot url=" + window.location.href);
+    log("ua=" + navigator.userAgent);
+    log("secureContext=" + !!window.isSecureContext);
+
+    setSecure(!!window.isSecureContext);
+    setPerm("unknown", "dim");
+    setRelay("idle", "dim");
+    setRun("idle", "dim");
+    setStage("—", "dim");
+    setErr("—", "dim");
+
+    // =========================================================================
+    // UI
+    // =========================================================================
+    const startBtn = document.getElementById('startBtn');
+    const bigChargeEl = document.getElementById('bigCharge');
+
+    const grooveEl = document.getElementById('groove');
+    const orbitEl  = document.getElementById('orbit');
+    const smoothEl = document.getElementById('smooth');
+    const speedEl  = document.getElementById('speed');
+    const energyEl = document.getElementById('energy');
+
+    const grooveBar = document.getElementById('grooveBar');
+    const orbitBar  = document.getElementById('orbitBar');
+    const smoothBar = document.getElementById('smoothBar');
+    const speedBar  = document.getElementById('speedBar');
+    const energyBar = document.getElementById('energyBar');
+
+    const BG0 = { r: 0,   g: 0,  b: 0  };
+    const BG1 = { r: 255, g: 42, b: 0  };
+    function setBgFromEnergy(e01) {
+      const t = Math.max(0, Math.min(1, e01));
+      const r = Math.round(BG0.r + (BG1.r - BG0.r) * t);
+      const g = Math.round(BG0.g + (BG1.g - BG0.g) * t);
+      const b = Math.round(BG0.b + (BG1.b - BG0.b) * t);
+      document.body.style.backgroundColor = `rgb(${r},${g},${b})`;
+    }
+    setBgFromEnergy(0);
+
+    // =========================================================================
+    // RELAY (Ably via Cloudflare Worker token)
+    // =========================================================================
+    const WORKER_BASE = "https://orb-token.mrgarthwilliams.workers.dev";
+    const TOKEN_URL = WORKER_BASE + "/token";
+
+    function parseRoom() {
+      const u = new URL(window.location.href);
+      const raw = (u.searchParams.get("room") || "test").trim();
+      const roomCode = raw.startsWith("orb:") ? raw.slice(4) : raw;
+      const channelName = "orb:" + roomCode;
+      return { raw, roomCode, channelName };
+    }
+
+    let ably = null;
+    let ablyChannel = null;
+
+    const roomInfo = parseRoom();
+    const room = roomInfo.channelName;
+    const roomCode = roomInfo.roomCode;
+
+    log("room parsed", { room, roomCode });
+
+    async function connectRelay() {
+      log("connectRelay: begin", { room, roomCode });
+
+      try { if (ablyChannel) ablyChannel.detach(); } catch(e) {}
+      try { if (ably) ably.close(); } catch(e) {}
+      ably = null; ablyChannel = null;
+
+      setRelay("minting token…", "warn");
+
+      const authUrl =
+        TOKEN_URL +
+        "?room=" + encodeURIComponent(roomCode) +
+        "&clientId=" + encodeURIComponent("phone-" + Math.random().toString(16).slice(2,6));
+
+      log("token authUrl", authUrl);
+
+      try {
+        const r = await fetch(authUrl, { method: "GET", cache: "no-store" });
+        const j = await r.json();
+        log("token preflight", { ok: r.ok, status: r.status, keys: Object.keys(j || {}) });
+
+        if (!r.ok || !j.token) {
+          setRelay("token FAILED", "bad");
+          console.error("TOKEN ERROR:", r.status, j);
+          setErr("token FAILED (see console)", "bad");
+          return false;
+        }
+        setRelay("token ok, connecting…", "warn");
+      } catch (e) {
+        setRelay("token fetch FAILED", "bad");
+        console.error("TOKEN FETCH FAILED:", e);
+        setErr("token fetch FAILED: " + (e?.message || String(e)), "bad");
+        return false;
+      }
+
+      ably = new Ably.Realtime({ authUrl, autoConnect: true });
+
+      ably.connection.on("connected", () => {
+        log("ably connected");
+        setRelay("ably connected ✓", "ok");
+      });
+      ably.connection.on("failed", (st) => {
+        log("ably FAILED", st);
+        setRelay("ably FAILED", "bad");
+        setErr("ably FAILED (see console)", "bad");
+        console.error("ABLY FAILED:", st);
+      });
+      ably.connection.on("disconnected", (st) => {
+        log("ably disconnected", st);
+        setRelay("ably disconnected", "warn");
+        console.warn("ABLY disconnected:", st);
+      });
+
+      ablyChannel = ably.channels.get(room);
+      ablyChannel.attach((err) => {
+        if (err) {
+          log("channel attach FAILED", err);
+          setRelay("channel attach FAILED", "bad");
+          setErr("channel attach FAILED (see console)", "bad");
+          console.error("CHANNEL ATTACH ERROR:", err);
+        } else {
+          log("channel attached " + room);
+          setRelay("channel attached ✓", "ok");
+        }
+      });
+
+      return true;
+    }
+
+    function disconnectRelay() {
+      try { if (ablyChannel) ablyChannel.detach(); } catch(e) {}
+      try { if (ably) ably.close(); } catch(e) {}
+      ably = null; ablyChannel = null;
+      setRelay("idle", "dim");
+      log("disconnectRelay");
+    }
+
+    // =========================================================================
+    // ✅ NETWORK THROTTLE (Ably cost control)
+    // - Hard cap send rate (SEND_HZ)
+    // - Only send when values change meaningfully (eps thresholds)
+    // - Force-send on discrete events (shakeHit) or state flips (locked)
+    // =========================================================================
+    const SEND_HZ = 12;
+    const SEND_MIN_MS = 1000 / SEND_HZ;
+
+    const EPS = {
+      energy01: 0.006,
+      groove01: 0.008,
+      orbit01:  0.008,
+      smooth01: 0.008,
+      speed01:  0.008,
+      shake01:  0.015,
+      hz:       0.030,
+    };
+
+    let nextSendAtMs = 0;
+    let lastSig = null;
+
+    function roundN(x, n=4){
+      const v = Number(x);
+      if (!isFinite(v)) return 0;
+      const p = Math.pow(10, n);
+      return Math.round(v * p) / p;
+    }
+
+    function buildSigFromPayload(p){
+      return {
+        energy01: roundN(p.energy01, 4),
+        groove01: roundN(p.groove01, 4),
+        orbit01:  roundN(p.orbit01, 4),
+        smooth01: roundN(p.smooth01, 4),
+        speed01:  roundN(p.speed01, 4),
+        shake01:  roundN(p.shake01, 4),
+        locked:   !!p.locked,
+        shakeHit: !!p.shakeHit,
+        hz:       roundN(p.hz, 3),
+      };
+    }
+
+    function sigChanged(sig){
+      if (!lastSig) return true;
+
+      if (sig.shakeHit && !lastSig.shakeHit) return true;
+      if (sig.locked !== lastSig.locked) return true;
+
+      if (Math.abs(sig.energy01 - lastSig.energy01) > EPS.energy01) return true;
+      if (Math.abs(sig.groove01 - lastSig.groove01) > EPS.groove01) return true;
+      if (Math.abs(sig.orbit01  - lastSig.orbit01 ) > EPS.orbit01 ) return true;
+      if (Math.abs(sig.smooth01 - lastSig.smooth01) > EPS.smooth01) return true;
+      if (Math.abs(sig.speed01  - lastSig.speed01 ) > EPS.speed01 ) return true;
+      if (Math.abs(sig.shake01  - lastSig.shake01 ) > EPS.shake01 ) return true;
+      if (Math.abs(sig.hz       - lastSig.hz      ) > EPS.hz      ) return true;
+
+      return false;
+    }
+
+    function publishOrb(payload, dt, force=false) {
+      if (!ablyChannel) return;
+
+      const now = performance.now();
+      if (!force && now < nextSendAtMs) return;
+
+      const sig = buildSigFromPayload(payload);
+      if (!force && !sigChanged(sig)) return;
+
+      lastSig = sig;
+      nextSendAtMs = now + SEND_MIN_MS;
+
+      const out = {
+        ...payload,
+        t: roundN(payload.t, 1),
+        dt: roundN(payload.dt, 4),
+        wRaw: roundN(payload.wRaw, 2),
+        wCap: roundN(payload.wCap, 2),
+        wFilt: roundN(payload.wFilt, 2),
+        cap: roundN(payload.cap, 2),
+        energy01: sig.energy01,
+        groove01: sig.groove01,
+        orbit01:  sig.orbit01,
+        smooth01: sig.smooth01,
+        speed01:  sig.speed01,
+        shake01:  sig.shake01,
+        locked:   sig.locked,
+        shakeHit: sig.shakeHit,
+        hz:       sig.hz,
+      };
+
+      ablyChannel.publish("orb", out, (err) => {
+        if (err) {
+          setRelay("publish error", "bad");
+          setErr("publish error (see console)", "bad");
+          console.error("PUBLISH ERROR:", err);
+        }
+      });
+    }
+
+    // =========================================================================
+    // DIAL PACK v4 — base detection (PRESERVED)
+    // =========================================================================
+    const OMEGA_LPF = 0.22;
+
+    const HUNT_WINDOW_SEC   = 1.35;
+    const STABLE_WINDOW_SEC = 3.10;
+
+    const MIN_WINDOW_SAMPLES = 55;
+    const MAX_WINDOW_SAMPLES = 260;
+
+    const MIN_OMEGA = 0.08;
+
+    const LOCK_ON  = 0.30;
+    const LOCK_OFF = 0.22;
+
+    const MIN_HZ = 0.55;
+    const MAX_HZ = 2.30;
+
+    const JERK_TIGHT = 220.0;
+    const JERK_LOOSE = 2600.0;
+
+    const ORBIT_FLOOR      = 0.25;
+    const ORBIT_STRICTNESS = 1.0;
+
+    const ENERGY_GAIN_LOCKED = 1.25;
+    const ENERGY_GAIN_FREE   = 0.65;
+
+    const ENERGY_DECAY       = 0.040;
+
+    const UI_SMOOTH   = 0.10;
+    const LOCK_SMOOTH = 0.14;
+
+    const GRACE_SEC = 0.75;
+
+    const RECENTER_SEC = 0.85;
+    const RECENTER_GROOVE_MAX = 0.22;
+
+    const NORM_ALPHA = 0.10;
+
+    // ============================================================================
+    // SPEED METER — tuned for “force” (rotationRate magnitude, deg/sec)
+    // ============================================================================
+    const SPEED_DEAD_DPS = 8.0;
+    const SPEED_CAP_DPS  = 360.0;
+
+    const SPEED_EMA_CUTOFF_FAST_HZ = 1.5;
+    const SPEED_EMA_CUTOFF_SLOW_HZ = .10;
+
+    const SPEED_ADAPT_START_DPS = 18.0;
+    const SPEED_ADAPT_END_DPS   = 130.0;
+
+    const SPEED_ADAPT_POW = 1.0;
+
+    const SPEED_NORM_DPS = 300.0;
+    const SPEED_MAP_POW  = 1.10;
+
+    const SPEED_ATTACK_HZ  = 5.0;
+    const SPEED_RELEASE_HZ = 8.0;
+
+    // =========================================================================
+    // SSOT MOBILE 2.0 — ENERGY MODEL (still present, but speed-decoupled below)
+    // =========================================================================
+    const GROOVE_EXP = 0.70;
+    const SMOOTH_EXP = 0.70;
+    const ORBIT_EXP  = 1.00;
+
+    const EARN_SCALE = 1.00;
+
+    const COAST_QUALITY_MIN  = 0.28;
+    const COAST_DECAY_MULT   = 0.65;
+
+    // =========================================================================
+    // ✅ ANTI-EXPLOIT: SMOOTH KILL SWITCH (deal-breaker)
+    // =========================================================================
+    const SMOOTH_KILL_THRESH     = 0.12;
+    const SMOOTH_KILL_DECAY_MULT = 3.25;
+    const SMOOTH_KILL_UNLOCK     = true;
+
+    // =========================================================================
+    // DISRUPTOR METER v1 — SHAKE
+    // =========================================================================
+    const SHAKE_BASELINE_HZ   = 0.65;
+    const SHAKE_DEADZONE     = 0.85;
+    const SHAKE_GAIN         = 3.20;
+    const SHAKE_DECAY        = 2.10;
+    const SHAKE_HIT_THRESH   = 0.85;
+    const SHAKE_ARM_THRESH   = 0.65;
+    const SHAKE_COOLDOWN_SEC = 0.55;
+    const SHAKE_CADENCE_SEC  = 0.28;
+    const SHAKE_SPIKE_GATE   = 2.2;
+
+    // =========================================================================
+    // AUDIO MAPPING
+    // =========================================================================
     const AUDIO_GATE   = 0.02;
-    const AUDIO_MIN_DB = -44;
-    const AUDIO_MAX_DB = -8;
-    const AUDIO_EXP    = 1.18;
+    const AUDIO_MIN_DB = -42;
+    const AUDIO_MAX_DB = -6;
+    const AUDIO_EXP    = 1.15;
 
-    const TONE_BASE_HZ    = 170;
-    const TONE_MAX_ADD_HZ = 250;
+    const MASTER_GAIN  = 2.2;
 
+    const TONE_BASE_HZ    = 180;
+    const TONE_MAX_ADD_HZ = 220;
+
+    // =========================================================================
+    // Helpers
+    // =========================================================================
+    const clamp01 = (x) => Math.max(0, Math.min(1, x));
+    const lerp = (a,b,t) => a + (b-a)*t;
+    const mag3 = (x,y,z) => Math.sqrt(x*x+y*y+z*z);
     const dbToGain = (db) => Math.pow(10, db/20);
+
+    function alphaFromCutoff(dt, cutoffHz){
+      const tau = 1 / (2 * Math.PI * cutoffHz);
+      return 1 / (1 + tau / Math.max(1e-4, dt));
+    }
+
+    const smoothstep01 = (t) => {
+        t = clamp01(t);
+        return t * t * (3 - 2 * t);
+    };
+
+    const invLerp01 = (a, b, v) => {
+        if (Math.abs(b - a) < 1e-9) return 0;
+        return clamp01((v - a) / (b - a));
+    };
+
+    function median(arr) {
+      if (!arr.length) return 0;
+      const a = arr.slice().sort((x,y) => x - y);
+      const mid = (a.length - 1) / 2;
+      const lo = Math.floor(mid), hi = Math.ceil(mid);
+      return (a[lo] + a[hi]) / 2;
+    }
 
     function energyToGain(e) {
       if (e <= AUDIO_GATE) return 0;
@@ -155,33 +670,228 @@
       return dbToGain(db);
     }
 
-    function ensureAudio(){
+    function eigenvaluesSym3(m00,m01,m02,m11,m12,m22) {
+      let a00=m00, a01=m01, a02=m02, a11=m11, a12=m12, a22=m22;
+
+      const iters = 10;
+      for (let k=0;k<iters;k++) {
+        let p=0,q=1;
+        let apq = Math.abs(a01);
+        const a02abs = Math.abs(a02);
+        const a12abs = Math.abs(a12);
+        if (a02abs > apq) { apq = a02abs; p=0; q=2; }
+        if (a12abs > apq) { apq = a12abs; p=1; q=2; }
+        if (apq < 1e-12) break;
+
+        let app, aqq, apqv;
+        if (p===0 && q===1) { app=a00; aqq=a11; apqv=a01; }
+        else if (p===0 && q===2) { app=a00; aqq=a22; apqv=a02; }
+        else { app=a11; aqq=a22; apqv=a12; }
+
+        const phi = 0.5 * Math.atan2(2*apqv, (aqq - app));
+        const c = Math.cos(phi);
+        const s = Math.sin(phi);
+
+        function rot(xp, xq) { return [c*xp - s*xq, s*xp + c*xq]; }
+
+        const appNew = c*c*app - 2*s*c*apqv + s*s*aqq;
+        const aqqNew = s*s*app + 2*s*c*apqv + c*c*aqq;
+
+        if (p===0 && q===1) {
+          const [a02n, a12n] = rot(a02, a12);
+          a02=a02n; a12=a12n;
+          a00=appNew; a11=aqqNew; a01=0;
+        } else if (p===0 && q===2) {
+          const [a01n, a12n] = rot(a01, a12);
+          a01=a01n; a12=a12n;
+          a00=appNew; a22=aqqNew; a02=0;
+        } else {
+          const [a01n, a02n] = rot(a01, a02);
+          a01=a01n; a02=a02n;
+          a11=appNew; a22=aqqNew; a12=0;
+        }
+      }
+
+      let l1=a00, l2=a11, l3=a22;
+      if (l1 < l2) [l1,l2]=[l2,l1];
+      if (l2 < l3) [l2,l3]=[l3,l2];
+      if (l1 < l2) [l1,l2]=[l2,l1];
+      return [l1,l2,l3];
+    }
+
+    function autocorrPeak(signal, dt) {
+      const n = signal.length;
+      if (n < 24) return {peak: 0, lag: 0, hz: 0};
+
+      let mean=0;
+      for (let i=0;i<n;i++) mean += signal[i];
+      mean /= n;
+
+      let varr=0;
+      for (let i=0;i<n;i++) {
+        const d = signal[i]-mean;
+        varr += d*d;
+      }
+      if (varr < 1e-9) return {peak: 0, lag: 0, hz: 0};
+
+      const minLag = Math.max(2, Math.floor(1/(MAX_HZ*dt)));
+      const maxLag = Math.min(n-3, Math.floor(1/(MIN_HZ*dt)));
+
+      let best = -1;
+      let bestLag = 0;
+
+      for (let lag=minLag; lag<=maxLag; lag++) {
+        let c=0;
+        for (let i=0;i<n-lag;i++) {
+          c += (signal[i]-mean) * (signal[i+lag]-mean);
+        }
+        const r = c / varr;
+        if (r > best) { best = r; bestLag = lag; }
+      }
+
+      const hz = bestLag > 0 ? (1/(bestLag*dt)) : 0;
+      return {peak: clamp01(best), lag: bestLag, hz};
+    }
+
+    function smoothnessFromJerk(avgJerk) {
+      const t = (JERK_LOOSE - avgJerk) / (JERK_LOOSE - JERK_TIGHT);
+      return clamp01(t);
+    }
+
+    function cov3(vecs) {
+      const n = vecs.length;
+      if (n < 10) return {xx:0,xy:0,xz:0,yy:0,yz:0,zz:0, trace:0};
+
+      let mx=0,my=0,mz=0;
+      for (const v of vecs) { mx+=v.x; my+=v.y; mz+=v.z; }
+      mx/=n; my/=n; mz/=n;
+
+      let xx=0,xy=0,xz=0,yy=0,yz=0,zz=0;
+      for (const v of vecs) {
+        const x=v.x-mx, y=v.y-my, z=v.z-mz;
+        xx += x*x; xy += x*y; xz += x*z;
+        yy += y*y; yz += y*z; zz += z*z;
+      }
+      const inv = 1/(n-1);
+      xx*=inv; xy*=inv; xz*=inv; yy*=inv; yz*=inv; zz*=inv;
+      return {xx,xy,xz,yy,yz,zz, trace:(xx+yy+zz)};
+    }
+
+    function orbitBonusFromDirCov(cov) {
+      const eps = 1e-9;
+      if (cov.trace < 1e-6) return ORBIT_FLOOR;
+      const [l1,l2,l3] = eigenvaluesSym3(cov.xx,cov.xy,cov.xz,cov.yy,cov.yz,cov.zz);
+      const iso = clamp01(1 - ((l1 - l3) / (l1 + eps)));
+      const shaped = Math.pow(iso, ORBIT_STRICTNESS);
+      return ORBIT_FLOOR + (1 - ORBIT_FLOOR) * shaped;
+    }
+
+    function computeAvg(arr) {
+      if (!arr.length) return 0;
+      let s=0;
+      for (const x of arr) s+=x;
+      return s/arr.length;
+    }
+
+    function trimToWindow(dtMean, targetSec, omegaMag, omegaNorm, omegaDir, jerkBuf, dtBuf) {
+      let targetN = dtMean > 1e-4 ? Math.round(targetSec / dtMean) : MAX_WINDOW_SAMPLES;
+      targetN = Math.max(MIN_WINDOW_SAMPLES, Math.min(MAX_WINDOW_SAMPLES, targetN));
+
+      while (omegaMag.length  > targetN) omegaMag.shift();
+      while (omegaNorm.length > targetN) omegaNorm.shift();
+      while (omegaDir.length  > targetN) omegaDir.shift();
+      while (jerkBuf.length   > targetN) jerkBuf.shift();
+      while (dtBuf.length     > targetN) dtBuf.shift();
+
+      return targetN;
+    }
+
+    // =========================================================================
+    // ✅ Meter continuity (kept for groove/orbit/smooth ONLY)
+    // =========================================================================
+    const METER_HOLD_SEC = 0.55;
+    const METER_FADE_HZ  = 3.0;
+
+    // =========================================================================
+    // State
+    // =========================================================================
+    let running = false;
+    let lastT = null;
+
+    let ox=0, oy=0, oz=0;
+
+    const omegaMag  = [];
+    const omegaNorm = [];
+    const omegaDir  = [];
+    const jerkBuf   = [];
+    const dtBuf     = [];
+
+    let emaMean = 0;
+    let emaVar  = 1;
+
+    let lock = false;
+    let lockStrength = 0;
+    let grooveHz = 0;
+
+    let graceLeft = 0;
+    let recenterBadTime = 0;
+
+    let energy = 0;
+    let energyUI = 0;
+
+    // ✅ SPEED v0 state (deg/s)
+    let mSpeedEMA = 0;
+    let speedOut  = 0;
+
+    // continuity memory for meters (NOT speed)
+    let meterHoldLeft = 0;
+    let lastGrooveUI = 0;
+    let lastOrbitUI  = 0;
+    let lastSmoothUI = 0;
+
+    // SHAKE state
+    let shake01 = 0;
+    let accelBaseMag = 9.81;
+    let shakeCooldownLeft = 0;
+    let lastSpikeTime = -1e9;
+    let hadRecentSpike = false;
+
+    // (ONLY ONE declaration now)
+    let motionCount = 0;
+
+    let audioCtx = null, osc = null, gainNode = null;
+
+    function ensureAudio() {
       if (audioCtx) return;
       audioCtx = new (window.AudioContext || window.webkitAudioContext)();
       gainNode = audioCtx.createGain();
       gainNode.gain.value = 0;
 
       osc = audioCtx.createOscillator();
-      osc.type = "sine";
+      osc.type = 'sine';
       osc.frequency.value = TONE_BASE_HZ;
 
       osc.connect(gainNode);
       gainNode.connect(audioCtx.destination);
       osc.start();
+      log("audio: created");
     }
 
-    async function startAudio(){
-      ensureAudio();
-      try { await audioCtx.resume(); } catch(_) {}
-      audioOn = true;
+    function energyToGainSafe(eUI) {
+      return energyToGain(clamp01(eUI));
     }
 
-    function setAudioFromEnergy(e01){
-      if (!audioOn || !audioCtx || !gainNode || !osc) return;
+    function setAudio(eUI, groove, locked) {
+      if (!audioCtx || !gainNode || !osc) return;
 
-      const e = clamp01(e01);
-      const g = energyToGain(e);
-      const f = TONE_BASE_HZ + TONE_MAX_ADD_HZ * e + 55 * e;
+      const gBase = energyToGainSafe(eUI);
+      const gGroove = locked ? (0.30 + 0.70*groove) : (0.08 + 0.22*groove);
+
+      const g = MASTER_GAIN * gBase * gGroove;
+
+      const f = TONE_BASE_HZ
+              + TONE_MAX_ADD_HZ * (locked ? groove : 0.30*groove)
+              + 60 * clamp01(eUI);
 
       const now = audioCtx.currentTime;
       gainNode.gain.cancelScheduledValues(now);
@@ -191,258 +901,572 @@
       osc.frequency.setTargetAtTime(f, now, 0.06);
     }
 
-    // ============================================================
-    // VISUAL GLOW (energy -> CSS var)
-    // ============================================================
-    function setGlow(e01){
-      document.documentElement.style.setProperty("--e", String(clamp01(e01)));
+    function updateUI(vals) {
+      const toPct01 = (x) => Math.round(clamp01(x) * 100);
+      const toPctRaw = (x) => Math.round(Math.max(0, x) * 100);
+
+      const grooveP = toPct01(vals.groove);
+      const orbitP  = toPct01(vals.orbit);
+      const smoothP = toPct01(vals.smooth);
+      const speedP  = toPct01(vals.speed);
+
+      const energyPText = toPctRaw(vals.energy);
+      const energyPBar  = toPct01(vals.energy);
+
+      grooveEl.textContent = grooveP;
+      orbitEl.textContent  = orbitP;
+      smoothEl.textContent = smoothP;
+      speedEl.textContent  = speedP;
+
+      energyEl.textContent = energyPText;
+
+      grooveBar.style.width = `${grooveP}%`;
+      orbitBar.style.width  = `${orbitP}%`;
+      smoothBar.style.width = `${smoothP}%`;
+      speedBar.style.width  = `${speedP}%`;
+      energyBar.style.width = `${energyPBar}%`;
+
+      bigChargeEl.textContent = `${energyPText}%`;
+
+      const over = (vals.energy > 1);
+      bigChargeEl.classList.toggle("over", over);
+      energyEl.classList.toggle("over", over);
+      energyBar.classList.toggle("over", over);
+
+      setBgFromEnergy(clamp01(vals.energy));
     }
 
-    // ============================================================
-    // MOTION INGEST + METRICS
-    // - This is intentionally compact; we can “true-model” later.
-    // - Output keys match receiver:
-    //   energy01, speed01, groove01, orbit01, smooth01, shake01, locked, hz
-    // ============================================================
-    let lastTs = null;
-
-    // raw
-    let ax=0, ay=0, az=0;         // accel incl gravity
-    let rx=0, ry=0, rz=0;         // rotation rate (deg/s)
-    let alpha=0, beta=0, gamma=0; // orientation
-
-    // derived + smoothed
-    let energy01 = 0;
-    let speed01  = 0;
-    let smooth01 = 0;
-    let groove01 = 0;
-    let orbit01  = 0;
-    let shake01  = 0;
-
-    // lock detection (rhythm-ish)
-    let hz = 0;
-    let locked = false;
-    let lockStableSince = 0;
-
-    // for hz estimate (zero-crossing-ish on “speed”)
-    let prevSpeed = 0;
-    let lastPeakMs = 0;
-
-    // for shake
-    let lastShakeMs = 0;
-
-    function ema(prev, next, a){
-      return lerp(prev, next, clamp01(a));
+    function flushHistorySoft() {
+      const keep = Math.min(18, omegaMag.length);
+      omegaMag.splice(0, Math.max(0, omegaMag.length - keep));
+      omegaNorm.splice(0, Math.max(0, omegaNorm.length - keep));
+      omegaDir.splice(0, Math.max(0, omegaDir.length - keep));
+      jerkBuf.splice(0, Math.max(0, jerkBuf.length - keep));
+      dtBuf.splice(0, Math.max(0, dtBuf.length - keep));
     }
 
-    function onMotion(e){
-      const acc = e.accelerationIncludingGravity || e.acceleration || {};
-      ax = Number(acc.x) || 0;
-      ay = Number(acc.y) || 0;
-      az = Number(acc.z) || 0;
+    function meterHoldOrFade(dt) {
+      if (dt > 0) meterHoldLeft = Math.max(0, meterHoldLeft - dt);
 
-      const rot = e.rotationRate || {};
-      // iOS uses alpha/beta/gamma in deg/s; some browsers use different axes — good enough for now
-      rx = Number(rot.alpha) || 0;
-      ry = Number(rot.beta)  || 0;
-      rz = Number(rot.gamma) || 0;
+      const dtFade = Math.max(1e-3, dt || computeAvg(dtBuf.slice(-50)) || 1/60);
+      const aFade = alphaFromCutoff(dtFade, METER_FADE_HZ);
+      const holding = meterHoldLeft > 0;
 
-      const now = performance.now();
-      if (lastTs == null) lastTs = now;
-      const dt = clamp((now - lastTs) / 1000, 0.001, 0.05);
-      lastTs = now;
+      const grooveOut = holding ? lastGrooveUI : (1 - aFade) * lastGrooveUI;
+      const orbitOut  = holding ? lastOrbitUI  : (1 - aFade) * lastOrbitUI;
+      const smoothOut = holding ? lastSmoothUI : (1 - aFade) * lastSmoothUI;
 
-      // magnitude-ish signals
-      const aMag = Math.sqrt(ax*ax + ay*ay + az*az);              // ~9.8 at rest if gravity included
-      const rMag = Math.sqrt(rx*rx + ry*ry + rz*rz) / 360;        // normalized-ish
+      lastGrooveUI = grooveOut;
+      lastOrbitUI  = orbitOut;
+      lastSmoothUI = smoothOut;
 
-      // speed: more rotation rate = more speed
-      const speedRaw = clamp01(rMag * 1.35);
+      return { grooveOut, orbitOut, smoothOut };
+    }
 
-      // “effort”: accel changes beyond gravity baseline become energy
-      const effort = Math.abs(aMag - 9.8) / 6.0;                 // tune
-      const energyRaw = clamp01(0.15 * speedRaw + 0.85 * clamp01(effort));
+    function updateSpeedV0(wRawDps, dt) {
+        const dtSafe = Math.max(1e-3, dt || 1/60);
 
-      // smooth: inverse of jerkiness (use accel delta)
-      // cheap proxy: if energy spikes hard, smooth drops
-      const jerk = Math.abs(energyRaw - energy01) / Math.max(0.001, dt);
-      const smoothRaw = clamp01(1.0 - clamp01(jerk * 0.06));
+        const wRaw = Math.max(0, wRawDps || 0);
+        const cap  = SPEED_CAP_DPS;
+        const wCap = Math.min(wRaw, cap);
 
-      // orbit: more orientation “tilt travel” (beta/gamma) — we’ll fill from onOrient too,
-      // but motion-only fallback uses accel x/y ratio
-      const orbitRaw = clamp01(Math.sqrt(ax*ax + ay*ay) / 12.0);
+        const wDz = Math.max(0, wCap - SPEED_DEAD_DPS);
 
-      // shake: sharp effort spikes
-      const shakeHit = (Math.abs(aMag - 9.8) > SHAKE_THRESH);
-      if (shakeHit) lastShakeMs = now;
-      const shakeRaw = clamp01((now - lastShakeMs) < 220 ? 1 : 0);
+        const denom = Math.max(1e-6, (SPEED_ADAPT_END_DPS - SPEED_ADAPT_START_DPS));
+        let tAdapt = (wDz - SPEED_ADAPT_START_DPS) / denom;
+        tAdapt = clamp01(tAdapt);
+        tAdapt = Math.pow(tAdapt, SPEED_ADAPT_POW);
 
-      // groove: rhythm confidence — derived from hz estimate below (0..1)
-      // (we’ll compute hz using peaks in speed)
-      // peak detect
-      const sp = speedRaw;
-      const rising = (sp > prevSpeed);
-      if (!rising && prevSpeed > 0.55 && sp < prevSpeed) {
-        const tMs = now;
-        if (lastPeakMs > 0) {
-          const period = (tMs - lastPeakMs) / 1000;
-          if (period > 0.18 && period < 2.2) {
-            hz = 1 / period;
-          }
+        const cutoffHz = lerp(SPEED_EMA_CUTOFF_FAST_HZ, SPEED_EMA_CUTOFF_SLOW_HZ, tAdapt);
+        const aE = alphaFromCutoff(dtSafe, cutoffHz);
+
+        mSpeedEMA = (mSpeedEMA === 0) ? wDz : ((1 - aE) * mSpeedEMA + aE * wDz);
+        const wFilt = mSpeedEMA;
+
+        const n = clamp01(wFilt / SPEED_NORM_DPS);
+        const target = Math.pow(n, SPEED_MAP_POW);
+
+        const aAtk = alphaFromCutoff(dtSafe, SPEED_ATTACK_HZ);
+        const aRel = alphaFromCutoff(dtSafe, SPEED_RELEASE_HZ);
+        const a = (target >= speedOut) ? aAtk : aRel;
+        speedOut = (1 - a) * speedOut + a * target;
+
+        return { cap, dt: dtSafe, wRaw, wCap, wDz, wFilt, speed: speedOut, cutoffHz, tAdapt };
+    }
+
+    function updateShake(e, t, dt){
+      const acc = e.accelerationIncludingGravity || e.acceleration;
+      if (!acc) {
+        if (dt > 0) shake01 = Math.max(0, shake01 - SHAKE_DECAY * dt);
+        if (dt > 0) shakeCooldownLeft = Math.max(0, shakeCooldownLeft - dt);
+        return { shake01, shakeHit:false, spike:0, amag:0 };
+      }
+
+      const ax = Number(acc.x) || 0;
+      const ay = Number(acc.y) || 0;
+      const az = Number(acc.z) || 0;
+      const amag = mag3(ax, ay, az);
+
+      const dtSafe = Math.max(1e-3, dt || 1/60);
+
+      const aBase = alphaFromCutoff(dtSafe, SHAKE_BASELINE_HZ);
+      accelBaseMag = (isFinite(accelBaseMag) ? accelBaseMag : amag);
+      accelBaseMag = (1 - aBase) * accelBaseMag + aBase * amag;
+
+      const rawSpike = Math.abs(amag - accelBaseMag);
+      const spike = Math.max(0, rawSpike - SHAKE_DEADZONE);
+
+      if (spike > SHAKE_SPIKE_GATE) {
+        if ((t - lastSpikeTime) <= SHAKE_CADENCE_SEC) hadRecentSpike = true;
+        lastSpikeTime = t;
+      }
+      if ((t - lastSpikeTime) > SHAKE_CADENCE_SEC) hadRecentSpike = false;
+
+      shake01 = clamp01(shake01 + spike * SHAKE_GAIN * dtSafe - SHAKE_DECAY * dtSafe);
+
+      shakeCooldownLeft = Math.max(0, shakeCooldownLeft - dtSafe);
+
+      let shakeHit = false;
+      const armed = (shake01 >= SHAKE_ARM_THRESH);
+      const cadenceOk = hadRecentSpike;
+      if (armed && cadenceOk && shakeCooldownLeft <= 0 && shake01 >= SHAKE_HIT_THRESH) {
+        shakeHit = true;
+        shakeCooldownLeft = SHAKE_COOLDOWN_SEC;
+        shake01 = Math.max(0, shake01 - 0.40);
+      }
+
+      return { shake01, shakeHit, spike, amag };
+    }
+
+    function onMotion(e) {
+      if (!running) return;
+
+      const t = performance.now() / 1000;
+      const dt = (lastT == null) ? 0 : (t - lastT);
+      lastT = t;
+
+      if (dt > 0) d.dt.textContent = dt.toFixed(3);
+      motionCount++;
+      d.motion.textContent = String(motionCount);
+
+      if (dt > 0) dtBuf.push(dt);
+
+      const sh = updateShake(e, t, dt);
+      const rr = e.rotationRate;
+
+      if (!rr) {
+        d.rr.textContent = "none";
+
+        const dtMean = Math.max(1e-3, computeAvg(dtBuf.slice(-50)) || 1/60);
+        const dtForFilter = (dt > 0) ? dt : dtMean;
+
+        const sv = updateSpeedV0(0, dtForFilter);
+
+        d.omega.textContent  = sv.wRaw.toFixed(1);
+        d.omegaC.textContent = sv.wCap.toFixed(1);
+        d.omegaF.textContent = sv.wFilt.toFixed(1);
+        d.speed.textContent  = sv.speed.toFixed(3);
+
+        if (dt > 0) {
+          energy = Math.max(0, energy - ENERGY_DECAY * dt);
+          energyUI = lerp(energyUI, energy, UI_SMOOTH);
         }
-        lastPeakMs = tMs;
+
+        const held = meterHoldOrFade(dt);
+
+        publishOrb({
+          room,
+          t: performance.now(),
+          dt: sv.dt,
+          wRaw: sv.wRaw,
+          wCap: sv.wCap,
+          wFilt: sv.wFilt,
+          cap: sv.cap,
+          energy01: energyUI,
+          groove01: held.grooveOut,
+          orbit01: held.orbitOut,
+          smooth01: held.smoothOut,
+          speed01: sv.speed,
+          shake01: sh.shake01,
+          shakeHit: sh.shakeHit,
+          locked: false,
+          hz: 0
+        }, dt);
+
+        updateUI({
+          groove: held.grooveOut,
+          orbit: held.orbitOut,
+          smooth: held.smoothOut,
+          speed: sv.speed,
+          energy: energyUI
+        });
+        setAudio(energyUI, held.grooveOut, false);
+        return;
       }
-      prevSpeed = sp;
 
-      const hzInBand = (hz >= LOCK_HZ_MIN && hz <= LOCK_HZ_MAX);
-      const grooveRaw = hzInBand ? clamp01((hz - LOCK_HZ_MIN) / (LOCK_HZ_MAX - LOCK_HZ_MIN)) : 0;
+      const x = rr.beta ?? 0;
+      const y = rr.gamma ?? 0;
+      const z = rr.alpha ?? 0;
 
-      // lock requires stability over time while energy present
-      const wantsLock = hzInBand && energyRaw > 0.18;
-      if (wantsLock) {
-        if (!lockStableSince) lockStableSince = now;
-        const stableFor = now - lockStableSince;
-        locked = stableFor >= LOCK_STABLE_MS;
+      d.rr.textContent = `β:${x.toFixed(2)} γ:${y.toFixed(2)} α:${z.toFixed(2)}`;
+
+      const prevOx=ox, prevOy=oy, prevOz=oz;
+
+      ox = lerp(ox, x, OMEGA_LPF);
+      oy = lerp(oy, y, OMEGA_LPF);
+      oz = lerp(oz, z, OMEGA_LPF);
+
+      const mStability = mag3(ox,oy,oz);
+      const dtMean = Math.max(1e-3, computeAvg(dtBuf.slice(-50)));
+      const dtForFilter = (dt > 0) ? dt : dtMean;
+
+      const wRaw = mag3(x, y, z);
+      const sv = updateSpeedV0(wRaw, dtForFilter);
+
+      d.omega.textContent  = sv.wRaw.toFixed(1);
+      d.omegaC.textContent = sv.wCap.toFixed(1);
+      d.omegaF.textContent = sv.wFilt.toFixed(1);
+      d.speed.textContent  = sv.speed.toFixed(3);
+
+      if (dt > 0) graceLeft = Math.max(0, graceLeft - dt);
+
+      if (mStability > MIN_OMEGA) {
+        omegaMag.push(mStability);
+
+        const d0 = mStability - emaMean;
+        emaMean = emaMean + NORM_ALPHA * d0;
+
+        const d2 = (mStability - emaMean);
+        emaVar = emaVar + NORM_ALPHA * (d2*d2 - emaVar);
+
+        const rms = Math.sqrt(Math.max(1e-6, emaVar));
+        omegaNorm.push((mStability - emaMean) / rms);
+
+        const inv = 1/mStability;
+        omegaDir.push({x:ox*inv, y:oy*inv, z:oz*inv});
+
+        if (dt > 0) {
+          const dtSafe = Math.max(dt, dtMean * 0.5, 1/120);
+          jerkBuf.push(mag3(ox-prevOx, oy-prevOy, oz-prevOz) / dtSafe);
+        }
       } else {
-        lockStableSince = 0;
-        locked = false;
+        if (omegaMag.length) omegaMag.shift();
+        if (omegaNorm.length) omegaNorm.shift();
+        if (omegaDir.length) omegaDir.shift();
+        if (jerkBuf.length)  jerkBuf.shift();
       }
 
-      // smooth outputs
-      speed01  = ema(speed01,  speedRaw,  SMOOTH_ALPHA);
-      energy01 = ema(energy01, energyRaw, SMOOTH_ALPHA);
-      smooth01 = ema(smooth01, smoothRaw, SMOOTH_ALPHA);
-      orbit01  = ema(orbit01,  orbitRaw,  SMOOTH_ALPHA);
-      shake01  = ema(shake01,  shakeRaw,  0.35);
-      groove01 = ema(groove01, grooveRaw, 0.22);
+      const inStableMode = lock || graceLeft > 0;
+      const windowSec = inStableMode ? STABLE_WINDOW_SEC : HUNT_WINDOW_SEC;
+      const nTarget = trimToWindow(dtMean, windowSec, omegaMag, omegaNorm, omegaDir, jerkBuf, dtBuf);
 
-      // visuals + audio
-      setGlow(energy01);
-      setAudioFromEnergy(energy01);
-    }
+      if (omegaNorm.length < Math.min(MIN_WINDOW_SAMPLES, nTarget)) {
+        if (dt > 0) {
+          energy = Math.max(0, energy - ENERGY_DECAY * dt);
+          energyUI = lerp(energyUI, energy, UI_SMOOTH);
+        }
 
-    function onOrient(e){
-      // optional: orientation contributes lightly to orbit
-      const b = Number(e.beta)  || 0;
-      const g = Number(e.gamma) || 0;
-      const tilt = Math.sqrt(b*b + g*g) / 90; // ~0..1
-      orbit01 = ema(orbit01, clamp01(tilt), 0.08);
-    }
+        const held = meterHoldOrFade(dt);
 
-    // ============================================================
-    // ABLY PUBLISH
-    // ============================================================
-    let realtime = null;
-    let channel = null;
-    let publishTimer = null;
+        publishOrb({
+          room,
+          t: performance.now(),
+          dt: sv.dt,
+          wRaw: sv.wRaw,
+          wCap: sv.wCap,
+          wFilt: sv.wFilt,
+          cap: sv.cap,
+          energy01: energyUI,
+          groove01: held.grooveOut,
+          orbit01: held.orbitOut,
+          smooth01: held.smoothOut,
+          speed01: sv.speed,
+          shake01: sh.shake01,
+          shakeHit: sh.shakeHit,
+          locked: false,
+          hz: 0
+        }, dt);
 
-    async function connectAbly(roomCode){
-      if (typeof Ably === "undefined" || !Ably.Realtime) {
-        throw new Error("Ably lib failed to load.");
+        updateUI({
+          groove: held.grooveOut,
+          orbit: held.orbitOut,
+          smooth: held.smoothOut,
+          speed: sv.speed,
+          energy: energyUI
+        });
+        setAudio(energyUI, held.grooveOut, false);
+        return;
       }
 
-      const authUrl = WORKER_BASE + "/token?room=" + encodeURIComponent(roomCode) + "&v=" + Date.now();
-      realtime = new Ably.Realtime({ authUrl, echoMessages:false });
-      channel = realtime.channels.get("orb:" + roomCode);
+      const ac = autocorrPeak(omegaNorm, dtMean);
+      lockStrength = lerp(lockStrength, ac.peak, LOCK_SMOOTH);
+      grooveHz = ac.hz;
 
-      // attach to validate room token quickly
-      await new Promise((resolve, reject) => {
-        channel.attach((err) => err ? reject(err) : resolve());
+      const jerkWindow = jerkBuf.slice(-Math.min(jerkBuf.length, 70));
+      const avgJerk = median(jerkWindow);
+      const smoothScore = smoothnessFromJerk(avgJerk);
+
+      const dirCov = cov3(omegaDir);
+      const orbitBonus = orbitBonusFromDirCov(dirCov);
+      const orbitShown = (orbitBonus - ORBIT_FLOOR) / (1 - ORBIT_FLOOR);
+
+      meterHoldLeft = METER_HOLD_SEC;
+      lastGrooveUI = lockStrength;
+      lastOrbitUI  = orbitShown;
+      lastSmoothUI = smoothScore;
+
+      if (!lock) {
+        if (lockStrength > LOCK_ON) { lock = true; graceLeft = 0; }
+      } else {
+        if (lockStrength < LOCK_OFF) { lock = false; graceLeft = GRACE_SEC; }
+      }
+
+      const inGrace = (!lock && graceLeft > 0);
+      if (inGrace && lockStrength > LOCK_ON) { lock = true; graceLeft = 0; }
+
+      if (dt > 0) {
+        const badGroove = lockStrength <= RECENTER_GROOVE_MAX;
+        const notLockedNow = !lock;
+        if (badGroove && notLockedNow) recenterBadTime += dt;
+        else recenterBadTime = Math.max(0, recenterBadTime - 1.5*dt);
+
+        if (recenterBadTime >= RECENTER_SEC) {
+          flushHistorySoft();
+          recenterBadTime = 0;
+        }
+      }
+
+      if (dt > 0) {
+        const grooveTerm = Math.pow(clamp01(lockStrength), GROOVE_EXP);
+        const smoothTerm = Math.pow(clamp01(smoothScore), SMOOTH_EXP);
+        const orbitTerm  = Math.pow(clamp01(orbitBonus),  ORBIT_EXP);
+
+        const qualityTerm = grooveTerm * smoothTerm;
+        const earnBase = EARN_SCALE * grooveTerm * smoothTerm * orbitTerm;
+
+        const effectivelyLocked = lock || inGrace;
+        const gain = effectivelyLocked ? ENERGY_GAIN_LOCKED : ENERGY_GAIN_FREE;
+
+        const smoothKill = (smoothScore < SMOOTH_KILL_THRESH);
+        const earn = smoothKill ? 0 : (gain * earnBase);
+
+        let decay = ENERGY_DECAY;
+        if (qualityTerm >= COAST_QUALITY_MIN) decay *= COAST_DECAY_MULT;
+
+        if (smoothKill) {
+          decay *= SMOOTH_KILL_DECAY_MULT;
+          if (SMOOTH_KILL_UNLOCK) { lock = false; graceLeft = 0; }
+        }
+
+        energy = Math.max(0, energy + (earn - decay) * dt);
+        energyUI = lerp(energyUI, energy, UI_SMOOTH);
+      }
+
+      const lockedNow = !!(lock || inGrace);
+
+      publishOrb({
+        room,
+        t: performance.now(),
+        dt: sv.dt,
+        wRaw: sv.wRaw,
+        wCap: sv.wCap,
+        wFilt: sv.wFilt,
+        cap: sv.cap,
+        energy01: energyUI,
+        groove01: lockStrength,
+        orbit01: orbitShown,
+        smooth01: smoothScore,
+        speed01: sv.speed,
+        shake01: sh.shake01,
+        shakeHit: sh.shakeHit,
+        locked: lockedNow,
+        hz: grooveHz
+      }, dt);
+
+      updateUI({
+        groove: lockStrength,
+        orbit: orbitShown,
+        smooth: smoothScore,
+        speed: sv.speed,
+        energy: energyUI
       });
+
+      setAudio(energyUI, lockStrength, lockedNow);
     }
 
-    function startPublishing(){
-      const periodMs = Math.round(1000 / PUBLISH_HZ);
-      publishTimer = setInterval(() => {
-        if (!channel) return;
+    // =========================================================================
+    // iOS permission gate
+    // =========================================================================
+    async function requestMotionPermissionIfNeeded() {
+      const needs = (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function')
+                 || (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function');
 
-        const payload = {
-          ts: Date.now(),
-          energy01,
-          speed01,
-          groove01,
-          orbit01,
-          smooth01,
-          shake01,
-          locked,
-          hz
-        };
-
-        channel.publish("orb", payload);
-      }, periodMs);
-    }
-
-    function stopPublishing(){
-      if (publishTimer) clearInterval(publishTimer);
-      publishTimer = null;
-      try { if (channel) channel.detach(); } catch(_) {}
-      try { if (realtime) realtime.close(); } catch(_) {}
-      channel = null;
-      realtime = null;
-    }
-
-    // ============================================================
-    // PERMISSIONS + START FLOW
-    // ============================================================
-    async function requestMotionPerms(){
-      // iOS 13+ requires explicit permission calls
-      if (typeof DeviceMotionEvent !== "undefined" && typeof DeviceMotionEvent.requestPermission === "function") {
-        const r = await DeviceMotionEvent.requestPermission();
-        if (r !== "granted") throw new Error("Motion permission denied.");
+      if (!needs) {
+        setPerm("not required", "ok");
+        log("motion permission: not required");
+        return true;
       }
-      if (typeof DeviceOrientationEvent !== "undefined" && typeof DeviceOrientationEvent.requestPermission === "function") {
-        const r = await DeviceOrientationEvent.requestPermission();
-        // some iOS versions only gate motion; orientation may be denied while motion works
-        // don't hard-fail unless BOTH are blocked
+
+      setPerm("requesting…", "warn");
+      log("motion permission: requesting…");
+
+      const reqs = [];
+
+      if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
+        reqs.push(
+          DeviceMotionEvent.requestPermission()
+            .then(s => (log("DeviceMotionEvent permission result", { s }), s === 'granted'))
+            .catch(e => (log("DeviceMotionEvent permission error", { message: e?.message || String(e) }), false))
+        );
       }
+
+      if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+        reqs.push(
+          DeviceOrientationEvent.requestPermission()
+            .then(s => (log("DeviceOrientationEvent permission result", { s }), s === 'granted'))
+            .catch(e => (log("DeviceOrientationEvent permission error", { message: e?.message || String(e) }), false))
+        );
+      }
+
+      const results = await Promise.all(reqs);
+      const ok = results.every(Boolean);
+
+      if (ok) setPerm("granted", "ok");
+      else setPerm("denied", "bad");
+
+      return ok;
     }
 
-    function bindSensors(){
-      window.addEventListener("devicemotion", onMotion, { passive:true });
-      window.addEventListener("deviceorientation", onOrient, { passive:true });
-    }
+    // =========================================================================
+    // Start/Stop
+    // =========================================================================
+    async function start() {
+      setRun("starting…", "warn");
+      setStage("start(): click", "warn");
+      setErr("—", "dim");
 
-    // stop if tab hidden (saves freebies)
-    document.addEventListener("visibilitychange", () => {
-      if (document.hidden) {
-        // aggressive: stop everything when hidden
-        stopPublishing();
-      } else {
-        // user must hit START again to resume (keeps UI minimal & avoids surprise audio)
+      if (!window.isSecureContext) {
+        setRun("error", "bad");
+        setErr("Not a secure context (https required)", "bad");
+        log("start(): blocked (not secure)");
+        return;
       }
-    });
 
-    // try to stop on pagehide
-    window.addEventListener("pagehide", stopPublishing);
-
-    startBtn.addEventListener("click", async () => {
       startBtn.disabled = true;
-      startBtn.textContent = "Starting…";
 
-      try{
-        const room = readRoomFromUrl();
+      try {
+        setStage("motion permission", "warn");
+        const ok = await requestMotionPermissionIfNeeded();
+        if (!ok) {
+          setRun("error", "bad");
+          setStage("start(): permission denied", "bad");
+          setErr("Motion permission denied", "bad");
+          return;
+        }
 
-        await requestMotionPerms();
-        await startAudio();
-        bindSensors();
+        setStage("audio init/resume", "warn");
+        ensureAudio();
+        try { await audioCtx.resume(); log("audio: resumed"); }
+        catch(e){ log("audio: resume failed", { message: e?.message || String(e) }); }
 
-        await connectAbly(room);
-        startPublishing();
+        setStage("relay connect", "warn");
+        nextSendAtMs = 0;
+        lastSig = null;
+        const okRelay = await connectRelay();
+        if (!okRelay) log("Relay connect failed; running locally only.");
 
-        // hide button (UI disappears)
-        startBtn.classList.add("gone");
+        running = true;
+        lastT = null;
+        motionCount = 0;
+        d.motion.textContent = "0";
+        d.dt.textContent = "0";
+        d.rr.textContent = "none";
 
-        // haptic tap (if supported)
-        try { navigator.vibrate && navigator.vibrate(20); } catch(_) {}
+        d.omega.textContent = "0";
+        d.omegaC.textContent = "0";
+        d.omegaF.textContent = "0";
+        d.speed.textContent = "0";
 
-      }catch(err){
-        console.error(err);
+        ox=oy=oz=0;
+
+        omegaMag.length  = 0;
+        omegaNorm.length = 0;
+        omegaDir.length  = 0;
+        jerkBuf.length   = 0;
+        dtBuf.length     = 0;
+
+        emaMean = 0;
+        emaVar  = 1;
+
+        lock = false;
+        lockStrength = 0;
+        grooveHz = 0;
+
+        graceLeft = 0;
+        recenterBadTime = 0;
+
+        energy = 0;
+        energyUI = 0;
+
+        mSpeedEMA = 0;
+        speedOut  = 0;
+
+        meterHoldLeft = 0;
+        lastGrooveUI = 0;
+        lastOrbitUI  = 0;
+        lastSmoothUI = 0;
+
+        shake01 = 0;
+        accelBaseMag = 9.81;
+        shakeCooldownLeft = 0;
+        lastSpikeTime = -1e9;
+        hadRecentSpike = false;
+
+        setAudio(0,0,false);
+        setBgFromEnergy(0);
+
+        setStage("listening devicemotion", "ok");
+        window.addEventListener('devicemotion', onMotion, { passive: true });
+
+        startBtn.textContent = 'Stop';
+        setRun("running", "ok");
+        log("start(): running ✓");
+      } catch (e) {
+        const msg = e?.message || String(e);
+        setRun("error", "bad");
+        setStage("start(): exception", "bad");
+        setErr(msg, "bad");
+        log("✖ START FAILED:", { message: msg, name: e?.name, stack: e?.stack ? String(e.stack).slice(0, 280) : undefined });
+        console.error("START FAILED:", e);
+      } finally {
         startBtn.disabled = false;
-        startBtn.textContent = "START";
-        // keep UI minimal: only communicate via alert
-        alert(String(err && err.message ? err.message : err));
       }
+    }
+
+    function stop() {
+      setStage("stop()", "warn");
+      running = false;
+      window.removeEventListener('devicemotion', onMotion);
+
+      if (audioCtx && gainNode) {
+        const now = audioCtx.currentTime;
+        gainNode.gain.cancelScheduledValues(now);
+        gainNode.gain.setTargetAtTime(0, now, 0.05);
+      }
+
+      disconnectRelay();
+      startBtn.textContent = 'Start';
+      setRun("idle", "dim");
+      setStage("—", "dim");
+      log("stop(): idle");
+    }
+
+    startBtn.addEventListener('click', () => {
+      log("start(): click", { secure: !!window.isSecureContext, href: window.location.href });
+      if (!running) start();
+      else stop();
     });
+  })();
   </script>
 </body>
 </html>
