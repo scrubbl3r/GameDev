@@ -27,6 +27,11 @@
       /* shake lamp */
       --lamp: rgba(255, 212, 0, 1.0);
       --lampGlow: rgba(255, 212, 0, 0.50);
+
+      /* ✅ background RGB for orb glow */
+      --bgR: 0;
+      --bgG: 0;
+      --bgB: 0;
     }
 
     html,body{
@@ -114,12 +119,6 @@
       text-shadow:
         0 0 calc(10px + 40px * var(--charge)) rgba(255,212,0, calc(0.14 + 0.42 * var(--charge))),
         0 0 calc(2px + 18px * var(--charge)) rgba(255,212,0, calc(0.10 + 0.28 * var(--charge)));
-    }
-
-    .bigSub{
-      margin-top:-2px;
-      font-size:12px;
-      opacity:0.85;
     }
 
     .bars{margin-top:10px;}
@@ -214,7 +213,7 @@
     #newRoom{
       opacity: 0.26;
       font-weight: 800;
-      margin-left: auto; /* pushes DEV to far-right in the row */
+      margin-left: auto;
     }
     #newRoom:hover{
       opacity: 0.46;
@@ -268,32 +267,13 @@
       overflow:hidden;
       box-shadow: inset 0 0 0 1px rgba(0,0,0,.25);
     }
-
-    /* ✅ vertical world */
-    .world{
-      position:absolute;
-      left:0; top:0;
-      width:100%;
-      height:2000px;          /* JS also uses WORLD_H=2000 */
-      will-change: transform;
-    }
-
-    /* star canvas sits behind everything */
-    #stars{
-      position:absolute;
-      left:0; top:0;
-      width:100%;
-      height:100%;
-      pointer-events:none;
-      opacity:0.95;
-    }
-
     .groundLine{
       position:absolute;
       left:16px;
       right:16px;
       height:2px;
       background: var(--g);
+      bottom: 15px;
       opacity: 0.95;
       box-shadow: 0 0 18px rgba(50,255,117,.12);
     }
@@ -304,13 +284,22 @@
       height:95px;
       border-radius:999px;
       border:2px solid var(--g);
-      background: rgba(50,255,117,.06);
       left:50%;
-      transform: translate(-50%, 0px); /* JS will set translateY */
-      box-shadow:
-        0 0 20px rgba(50,255,117,.12),
-        inset 0 0 0 1px rgba(0,0,0,.30);
+      transform: translate(-50%, 0px);
       will-change: transform;
+
+      /* ✅ fill + glow follows background color */
+      background:
+        radial-gradient(circle at 50% 45%,
+          rgba(var(--bgR), var(--bgG), var(--bgB), 0.28) 0%,
+          rgba(var(--bgR), var(--bgG), var(--bgB), 0.10) 45%,
+          rgba(0,0,0,0.00) 72%);
+
+      box-shadow:
+        0 0 24px rgba(var(--bgR), var(--bgG), var(--bgB), 0.22),
+        0 0 70px rgba(var(--bgR), var(--bgG), var(--bgB), 0.12),
+        inset 0 0 0 1px rgba(0,0,0,.30),
+        inset 0 0 18px rgba(var(--bgR), var(--bgG), var(--bgB), 0.12);
     }
 
     .physControls{
@@ -501,8 +490,6 @@
         <div id="bigCharge" class="big"><span id="pct">0</span>%</div>
 
         <div class="bars">
-          <!-- ✅ Order: Lift, Groove, Smooth, Speed, Orbit, Energy, Shake -->
-
           <div class="barLabel"><div>Lift</div><span id="vLift">0</span></div>
           <div class="bar"><div id="bLift" class="fill"></div></div>
 
@@ -541,20 +528,18 @@
         <div class="physHeader">Game Physics</div>
 
         <div id="physStage" class="physStage" aria-label="Physics test stage">
-          <!-- ✅ 2000px vertical world with starfield -->
-          <div id="world" class="world" aria-label="World">
-            <canvas id="stars" aria-label="Starfield"></canvas>
-            <div id="ground" class="groundLine" aria-label="Ground"></div>
-            <div id="orb" class="orb" aria-label="Orb"></div>
-          </div>
+          <div class="groundLine" aria-label="Ground"></div>
+          <div id="orb" class="orb" aria-label="Orb"></div>
         </div>
 
         <div class="physControls">
           <div class="sliderRow">
             <span>Gravity</span>
-            <strong><span id="gVal">1.00</span>x</strong>
+            <!-- ✅ display percent now -->
+            <strong><span id="gVal">25</span>%</strong>
           </div>
-          <input id="gSlider" type="range" min="0" max="3" value=".40" step="0.01" />
+          <!-- ✅ slider is now 0..100 with default 25 -->
+          <input id="gSlider" type="range" min="0" max="100" value="25" step="1" />
         </div>
       </div>
     </div>
@@ -581,7 +566,7 @@
     </div>
   </div>
 
-  <!-- ✅ Telemetry modal (extended with Orbit debug fields) -->
+  <!-- ✅ Telemetry modal -->
   <div id="teleModal" class="modal" aria-hidden="true">
     <div class="backdrop" id="teleBackdrop"></div>
     <div class="modalCard teleCard" role="dialog" aria-label="Speed telemetry">
@@ -640,9 +625,6 @@
       // physics
       orb: $("orb"),
       physStage: $("physStage"),
-      world: $("world"),
-      stars: $("stars"),
-      ground: $("ground"),
       gSlider: $("gSlider"),
       gVal: $("gVal"),
 
@@ -726,6 +708,11 @@
       const b = Math.round(BG0.b + (BG1.b - BG0.b) * t);
       document.body.style.backgroundColor = `rgb(${r},${g},${b})`;
       document.documentElement.style.setProperty("--charge", String(t));
+
+      // ✅ drive orb glow from background color
+      document.documentElement.style.setProperty("--bgR", String(r));
+      document.documentElement.style.setProperty("--bgG", String(g));
+      document.documentElement.style.setProperty("--bgB", String(b));
     }
     setBgFromEnergy(0);
 
@@ -890,7 +877,7 @@
     }
 
     // =========================================================================
-    // TELEMETRY MODAL (record/stop/close) — extended debug keys
+    // TELEMETRY MODAL (record/stop/close)
     // =========================================================================
     let teleRecording = false;
     let teleT0 = 0;
@@ -1014,10 +1001,8 @@
     let currentRoomChannel = normalizeRoom(readUrlRoomOrNull() || "orb:test");
 
     // =========================================================================
-    // PHYSICS + WORLD + STARFIELD
+    // PHYSICS
     // =========================================================================
-    const WORLD_H = 2000;
-
     const PHYS = {
       groundFromBottomPx: 15,
       groundLinePx: 2,
@@ -1026,14 +1011,16 @@
       gBase: 2200,
       thrustMax: 2200,
 
-      linearDrag: 2.8,
+      /* ✅ lower falling friction by splitting drag */
+      downDrag: 0.9,  // falling friction (lower = faster fall)
+      upDrag:   2.8,  // rising friction
+
       bounce: 0.35,
       maxUpSpeed: 2200,
       maxDownSpeed: 2800,
     };
 
     let physState = {
-      // ✅ world-space y (center), 0=top of world, WORLD_H=bottom
       y: 0,
       v: 0,
       lastTs: null,
@@ -1041,26 +1028,18 @@
 
       lift01: 0,
       energy01: 0,
-
-      camY: 0
     };
 
     function clamp(v, lo, hi){ return Math.max(lo, Math.min(hi, v)); }
 
     function readStageMetrics(){
       const rect = els.physStage.getBoundingClientRect();
-      return { stageW: rect.width, stageH: rect.height };
-    }
+      const stageH = rect.height;
 
-    function worldGroundY(){
-      // ground line is PHYS.groundFromBottomPx up from world bottom
-      const groundLineTop = WORLD_H - PHYS.groundFromBottomPx - PHYS.groundLinePx;
-      const yGroundCenter = groundLineTop - PHYS.orbRadiusPx;
-      return { groundLineTop, yGroundCenter };
-    }
-
-    function worldCeilY(){
-      return PHYS.orbRadiusPx;
+      const groundY = stageH - PHYS.groundFromBottomPx - PHYS.groundLinePx;
+      const yGroundCenter = groundY - PHYS.orbRadiusPx;
+      const yCeilCenter = PHYS.orbRadiusPx;
+      return { stageH, yGroundCenter, yCeilCenter };
     }
 
     function applyOrbTransform(){
@@ -1068,100 +1047,24 @@
       els.orb.style.transform = `translate(-50%, ${top.toFixed(2)}px)`;
     }
 
-    function applyCamera(){
-      const { stageH } = readStageMetrics();
-
-      // keep the orb around ~65% down the window (feels like "climbing")
-      const targetScreenY = stageH * 0.65;
-
-      // camera transform maps world->stage: screenY = worldY + camY
-      let camY = targetScreenY - physState.y;
-
-      // clamp camera so you can't scroll past world bounds
-      const camMin = stageH - WORLD_H; // most negative (show bottom)
-      const camMax = 0;                // show top
-      camY = clamp(camY, camMin, camMax);
-
-      physState.camY = camY;
-      els.world.style.transform = `translateY(${camY.toFixed(2)}px)`;
-    }
-
     function resetOrbToGround(){
-      const { groundLineTop, yGroundCenter } = worldGroundY();
-
-      // set world height explicitly (in case CSS gets edited)
-      els.world.style.height = WORLD_H + "px";
-
-      // place ground line inside the world
-      els.ground.style.top = groundLineTop + "px";
-
+      const { yGroundCenter } = readStageMetrics();
       physState.y = yGroundCenter;
       physState.v = 0;
       applyOrbTransform();
-      applyCamera();
     }
 
-    function setGravityMul(m){
-      physState.gravityMul = clamp(Number(m) || 0, 0, 3);
-      els.gVal.textContent = physState.gravityMul.toFixed(2);
+    /* ✅ gravity slider is now percent (0..100), default 25 */
+    function setGravityMul(pct){
+      const p = clamp(Number(pct) || 0, 0, 100);
+      physState.gravityMul = (p / 100) * 3;   // 0..3 multiplier
+      els.gVal.textContent = p.toFixed(0);
     }
     setGravityMul(els.gSlider.value);
     els.gSlider.addEventListener("input", (e) => setGravityMul(e.target.value));
 
-    // ---- Starfield ----
-    let stars = [];
-    function buildStars(count = 520){
-      const { stageW } = readStageMetrics();
-      stars = new Array(count).fill(0).map(() => ({
-        x: Math.random() * Math.max(1, stageW),
-        y: Math.random() * WORLD_H,
-        r: 0.6 + Math.random() * 1.6,
-        a: 0.18 + Math.random() * 0.85
-      }));
-    }
-
-    function drawStars(){
-      const c = els.stars;
-      if (!c) return;
-
-      const { stageW } = readStageMetrics();
-      const dpr = Math.max(1, window.devicePixelRatio || 1);
-
-      // size backing store
-      c.width  = Math.max(1, Math.floor(stageW * dpr));
-      c.height = Math.max(1, Math.floor(WORLD_H * dpr));
-      c.style.height = WORLD_H + "px";
-
-      const ctx = c.getContext("2d");
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      ctx.clearRect(0, 0, stageW, WORLD_H);
-
-      // subtle star haze
-      ctx.globalAlpha = 0.10;
-      ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue("--g") || "#32ff75";
-      for (let i=0;i<18;i++){
-        const yy = (i/17) * WORLD_H;
-        ctx.fillRect(0, yy, stageW, 1);
-      }
-
-      // stars
-      for (const s of stars){
-        ctx.globalAlpha = s.a;
-        ctx.beginPath();
-        ctx.arc(s.x, s.y, s.r, 0, Math.PI*2);
-        ctx.fill();
-      }
-      ctx.globalAlpha = 1;
-    }
-
-    function rebuildWorldVisuals(){
-      buildStars(520);
-      drawStars();
-      resetOrbToGround();
-    }
-
-    requestAnimationFrame(rebuildWorldVisuals);
-    window.addEventListener("resize", rebuildWorldVisuals);
+    requestAnimationFrame(resetOrbToGround);
+    window.addEventListener("resize", resetOrbToGround);
 
     function liftToThrustAccel(l01){
       return PHYS.thrustMax * clamp01(l01);
@@ -1174,14 +1077,16 @@
 
       dt = clamp(dt, 0, 0.05);
 
-      const { yGroundCenter } = worldGroundY();
-      const yCeilCenter = worldCeilY();
+      const { yGroundCenter, yCeilCenter } = readStageMetrics();
 
       const g = PHYS.gBase * physState.gravityMul;
       const thrust = liftToThrustAccel(physState.lift01);
 
       let a = g - thrust;
-      a += (-PHYS.linearDrag * physState.v);
+
+      /* ✅ directional drag: lower friction on fall */
+      const drag = (physState.v > 0) ? PHYS.downDrag : PHYS.upDrag;
+      a += (-drag * physState.v);
 
       physState.v += a * dt;
       physState.v = clamp(physState.v, -PHYS.maxUpSpeed, PHYS.maxDownSpeed);
@@ -1199,8 +1104,6 @@
       }
 
       applyOrbTransform();
-      applyCamera();
-
       requestAnimationFrame(physicsStep);
     }
     requestAnimationFrame(physicsStep);
@@ -1294,22 +1197,12 @@
         return (n > 1.5) ? (n / 100) : n;
       }
 
-      function pick01Bounded(newKey, oldKey){
-        if (d[newKey] != null) {
-          const n = Number(d[newKey]);
-          return isFinite(n) ? n : 0;
-        }
-        const n = Number(d[oldKey]);
-        if (!isFinite(n)) return 0;
-        return (n > 1.5) ? (n / 100) : n;
-      }
-
       const energy = pick01NewOrOld("energy01", "energy");
-      const groove = pick01Bounded("groove01", "groove");
-      const orbit  = pick01Bounded("orbit01",  "orbit");
-      const smooth = pick01Bounded("smooth01", "smooth");
-      const speed  = pick01Bounded("speed01",  "speed");
-      const shake  = pick01Bounded("shake01",  "shake");
+      const groove = pick01NewOrOld("groove01", "groove");
+      const orbit  = pick01NewOrOld("orbit01",  "orbit");
+      const smooth = pick01NewOrOld("smooth01", "smooth");
+      const speed  = pick01NewOrOld("speed01",  "speed");
+      const shake  = pick01NewOrOld("shake01",  "shake");
       const locked = !!d.locked;
 
       const lift = computeLift01(groove, smooth, speed);
@@ -1434,10 +1327,6 @@
       currentRoomChannel = "orb:test";
       await connect({ auto:false });
       openPairModal();
-    });
-
-    document.addEventListener("visibilitychange", () => {
-      // no-op (watchdog handles idle)
     });
 
     (async function init(){
