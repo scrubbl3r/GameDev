@@ -269,18 +269,20 @@
     const ORBIT_BALANCE_POW = 1.80;  // was 1.00
 
     // Coupling sensitivity: bigger => orbit responds more to true multi-axis coupling
-    const ORBIT_COUPLE_GAIN = 1.6;  // was 2.20  (lower = stricter)
+    const ORBIT_COUPLE_GAIN = 1.9;  // was 2.20  (lower = stricter)
     const ORBIT_COUPLE_POW  = 1.6;  // was 1.00  (higher = stricter)
 
     // ✅ Axis-rank punishment (these were defined but NOT previously applied)
-    const ORBIT_AX2_MIN = 0.18;   // raise => punish single-axis harder
-    const ORBIT_AX3_MIN = 0.22;   // raise => punish dual-axis / planar harder
+    const ORBIT_AX2_MIN = 0.16;   // raise => punish single-axis harder
+    const ORBIT_AX3_MIN = 0.08;   // raise => punish dual-axis / planar harder
 
-    const ORBIT_AX2_POW = 1.8;    // higher => harsher single-axis punishment
-    const ORBIT_AX3_POW = 2.0;    // higher => harsher dual-axis punishment
+    const ORBIT_AX2_POW = 1.6;    // higher => harsher single-axis punishment
+    const ORBIT_AX3_POW = 2.2;    // higher => harsher dual-axis punishment
 
     // Extra strictness after gates (NEW)
     const ORBIT_GATE_POW = 1.0;   // higher => overall stricter (1.0..3.5)
+
+    const ORBIT_GATE_FLOOR = 0.06; // lets meter "breathe" (0.03..0.10)
 
     // UI shaping for published orbit01 (meter feel)
     const ORBIT_UI_EXP = 0.55;
@@ -510,57 +512,59 @@
     }
 
     function orbitBonusFromOmegaCov(cov) {
-      const eps = 1e-12;
-      const tr = cov.trace;
-      if (tr < 1e-9) return ORBIT_FLOOR;
+        const eps = 1e-12;
+        const tr = cov.trace;
+        if (tr < 1e-9) return ORBIT_FLOOR;
 
-      // principal-axis energy
-      const [l1,l2,l3] = eigenvaluesSym3(cov.xx,cov.xy,cov.xz,cov.yy,cov.yz,cov.zz);
-      const s = (l1 + l2 + l3) + eps;
+        // principal-axis energy
+        const [l1,l2,l3] = eigenvaluesSym3(cov.xx,cov.xy,cov.xz,cov.yy,cov.yz,cov.zz);
+        const s = (l1 + l2 + l3) + eps;
 
-      // ---------------------------------------------------------
-      // ✅ AXIS-RANK GATE (the strictness you want)
-      // - r2 kills single-axis motion
-      // - r3 kills planar/dual-axis motion
-      // ---------------------------------------------------------
-      const r2 = clamp01(l2 / (l1 + eps));    // 2nd axis presence
-      const r3 = clamp01(l3 / (l2 + eps));    // 3rd axis presence (conditional)
+        // ---------------------------------------------------------
+        // ✅ AXIS-RANK GATE (realistic phone version)
+        // Use ratios vs l1 (dominant), not vs l2.
+        // ---------------------------------------------------------
+        const r2 = clamp01(l2 / (l1 + eps));   // 2nd axis presence
+        const r3 = clamp01(l3 / (l1 + eps));   // 3rd axis presence (tri-axialness)
 
-      const g2 = Math.pow(
-        clamp01((r2 - ORBIT_AX2_MIN) / (1 - ORBIT_AX2_MIN)),
-        ORBIT_AX2_POW
-      );
+        const g2 = Math.pow(
+            clamp01((r2 - ORBIT_AX2_MIN) / (1 - ORBIT_AX2_MIN)),
+            ORBIT_AX2_POW
+        );
 
-      const g3 = Math.pow(
-        clamp01((r3 - ORBIT_AX3_MIN) / (1 - ORBIT_AX3_MIN)),
-        ORBIT_AX3_POW
-      );
+        const g3 = Math.pow(
+            clamp01((r3 - ORBIT_AX3_MIN) / (1 - ORBIT_AX3_MIN)),
+            ORBIT_AX3_POW
+        );
 
-      let gate = clamp01(g2 * g3);
-      gate = Math.pow(gate, ORBIT_GATE_POW);
+        // gate floor prevents "stuck at 0" while still punishing planar hard
+        let gate = clamp01(g2 * g3);
+        gate = ORBIT_GATE_FLOOR + (1 - ORBIT_GATE_FLOOR) * gate;
+        gate = Math.pow(gate, ORBIT_GATE_POW);
 
-      // ---------------------------------------------------------
-      // Balance (entropy of eigen spectrum): 1 when tri-axial balanced
-      // ---------------------------------------------------------
-      const p1 = Math.max(eps, l1 / s);
-      const p2 = Math.max(eps, l2 / s);
-      const p3 = Math.max(eps, l3 / s);
-      const H  = -(p1*Math.log(p1) + p2*Math.log(p2) + p3*Math.log(p3));
-      const Hn = clamp01(H / Math.log(3));
-      const balance = Math.pow(Hn, ORBIT_BALANCE_POW);
+        // ---------------------------------------------------------
+        // Balance (entropy of eigen spectrum): 1 when tri-axial balanced
+        // ---------------------------------------------------------
+        const p1 = Math.max(eps, l1 / s);
+        const p2 = Math.max(eps, l2 / s);
+        const p3 = Math.max(eps, l3 / s);
+        const H  = -(p1*Math.log(p1) + p2*Math.log(p2) + p3*Math.log(p3));
+        const Hn = clamp01(H / Math.log(3));
+        const balance = Math.pow(Hn, ORBIT_BALANCE_POW);
 
-      // ---------------------------------------------------------
-      // Coupling: simultaneous multi-axis (Lissajous-like) boost
-      // ---------------------------------------------------------
-      const coupleRaw = (Math.abs(cov.xy) + Math.abs(cov.xz) + Math.abs(cov.yz)) / (tr + eps);
-      const couple = Math.pow(clamp01(coupleRaw * ORBIT_COUPLE_GAIN), ORBIT_COUPLE_POW);
+        // ---------------------------------------------------------
+        // Coupling: simultaneous multi-axis (Lissajous-like) boost
+        // ---------------------------------------------------------
+        const coupleRaw = (Math.abs(cov.xy) + Math.abs(cov.xz) + Math.abs(cov.yz)) / (tr + eps);
+        const couple = Math.pow(clamp01(coupleRaw * ORBIT_COUPLE_GAIN), ORBIT_COUPLE_POW);
 
-      // core score, then gate it hard
-      const core = clamp01(balance * couple);
-      const shaped = clamp01(core * gate);
+        // core score, then gate it
+        const core = clamp01(balance * couple);
+        const shaped = clamp01(core * gate);
 
-      return ORBIT_FLOOR + (1 - ORBIT_FLOOR) * shaped;
+        return ORBIT_FLOOR + (1 - ORBIT_FLOOR) * shaped;
     }
+
 
     function computeAvg(arr) {
       if (!arr.length) return 0;
