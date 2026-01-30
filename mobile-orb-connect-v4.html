@@ -266,21 +266,21 @@
     const ORBIT_FLOOR = 0.25;
 
     // 1 = linear; >1 makes “perfect tri-axial” more special; <1 makes it easier
-    const ORBIT_BALANCE_POW = 1.60;  // was 1.00
+    const ORBIT_BALANCE_POW = 1.80;  // was 1.00
 
     // Coupling sensitivity: bigger => orbit responds more to true multi-axis coupling
-    const ORBIT_COUPLE_GAIN = 1.0;  // was 2.20  (lower = stricter)
-    const ORBIT_COUPLE_POW  = 2.0;  // was 1.00  (higher = stricter)
+    const ORBIT_COUPLE_GAIN = 1.6;  // was 2.20  (lower = stricter)
+    const ORBIT_COUPLE_POW  = 1.6;  // was 1.00  (higher = stricter)
 
     // ✅ Axis-rank punishment (these were defined but NOT previously applied)
-    const ORBIT_AX2_MIN = 0.36;   // raise => punish single-axis harder
-    const ORBIT_AX3_MIN = 0.48;   // raise => punish dual-axis / planar harder
+    const ORBIT_AX2_MIN = 0.18;   // raise => punish single-axis harder
+    const ORBIT_AX3_MIN = 0.22;   // raise => punish dual-axis / planar harder
 
-    const ORBIT_AX2_POW = 3.6;    // higher => harsher single-axis punishment
-    const ORBIT_AX3_POW = 5.2;    // higher => harsher dual-axis punishment
+    const ORBIT_AX2_POW = 1.8;    // higher => harsher single-axis punishment
+    const ORBIT_AX3_POW = 2.0;    // higher => harsher dual-axis punishment
 
     // Extra strictness after gates (NEW)
-    const ORBIT_GATE_POW = 2.0;   // higher => overall stricter (1.0..3.5)
+    const ORBIT_GATE_POW = 1.0;   // higher => overall stricter (1.0..3.5)
 
     // UI shaping for published orbit01 (meter feel)
     const ORBIT_UI_EXP = 0.55;
