@@ -1,0 +1,980 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Defender-ish Sound Generator (Procedural, No Samples)</title>
+  <style>
+    :root{
+      --bg:#07090b;
+      --panel:#0d1216;
+      --ink:#d7f7e3;
+      --muted:#89a39a;
+      --accent:#39ff88;
+      --border:rgba(57,255,136,.18);
+      --shadow:rgba(0,0,0,.45);
+      --warn:#ffb84d;
+    }
+    html,body{height:100%;}
+    body{
+      margin:0;
+      background:radial-gradient(1200px 700px at 40% 0%, #0b1216 0%, var(--bg) 55%);
+      color:var(--ink);
+      font:14px system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
+      letter-spacing:.2px;
+    }
+    .wrap{max-width:1040px;margin:24px auto;padding:0 14px;}
+    .title{
+      display:flex;align-items:flex-end;justify-content:space-between;gap:12px;flex-wrap:wrap;
+      margin:6px 0 14px 0;
+    }
+    h1{font-size:18px;margin:0;font-weight:650;}
+    .sub{color:var(--muted);font-size:12px;margin-top:4px;}
+    .badge{
+      border:1px solid var(--border);
+      background:rgba(0,0,0,.25);
+      padding:8px 10px;border-radius:12px;
+      box-shadow:0 10px 24px var(--shadow);
+      color:var(--muted);
+      max-width:520px;
+    }
+    .grid{
+      display:grid;
+      grid-template-columns: 1.05fr .95fr;
+      gap:12px;
+    }
+    @media (max-width: 900px){ .grid{grid-template-columns:1fr;} }
+    .card{
+      background:linear-gradient(180deg, rgba(255,255,255,.03), rgba(255,255,255,.015));
+      border:1px solid var(--border);
+      border-radius:16px;
+      box-shadow:0 18px 42px var(--shadow);
+      overflow:hidden;
+    }
+    .card h2{
+      margin:0;padding:12px 14px;
+      font-size:13px;font-weight:650;
+      border-bottom:1px solid rgba(255,255,255,.06);
+      color:#eafdf4;
+    }
+    .card .body{padding:12px 14px;}
+    .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:8px 0;}
+    button{
+      appearance:none;border:1px solid var(--border);
+      background:rgba(0,0,0,.35);
+      color:var(--ink);
+      padding:10px 12px;border-radius:12px;
+      cursor:pointer;
+      transition:transform .04s ease, background .12s ease, border-color .12s ease;
+      box-shadow:0 10px 24px var(--shadow);
+    }
+    button:hover{background:rgba(57,255,136,.10);border-color:rgba(57,255,136,.35);}
+    button:active{transform:translateY(1px);}
+    button.primary{
+      background:rgba(57,255,136,.14);
+      border-color:rgba(57,255,136,.35);
+    }
+    button.danger{
+      background:rgba(255,184,77,.12);
+      border-color:rgba(255,184,77,.35);
+      color:#fff2dc;
+    }
+    .pill{
+      display:inline-flex;align-items:center;gap:8px;
+      border:1px solid rgba(255,255,255,.10);
+      background:rgba(0,0,0,.25);
+      padding:8px 10px;border-radius:999px;
+      color:var(--muted);
+    }
+    label{color:var(--muted);font-size:12px;}
+    input[type="range"]{width:220px;}
+    input[type="number"], input[type="text"], select{
+      background:rgba(0,0,0,.35);
+      border:1px solid rgba(255,255,255,.10);
+      color:var(--ink);
+      border-radius:10px;
+      padding:8px 10px;
+      outline:none;
+    }
+    select{cursor:pointer;}
+    .kvs{
+      display:grid;grid-template-columns: 130px 1fr;
+      gap:8px 10px;align-items:center;
+      margin-top:8px;
+    }
+    .mono{font:12px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono","Courier New", monospace;}
+    .hint{color:var(--muted);font-size:12px;line-height:1.35;}
+    .warn{color:var(--warn);}
+    .small{font-size:12px;color:var(--muted);}
+    .divider{height:1px;background:rgba(255,255,255,.06);margin:12px 0;}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="title">
+      <div>
+        <h1>Defender-ish Sound Generator <span class="small">(procedural Web Audio, no samples)</span></h1>
+        <div class="sub">Arcade-style sweeps, noise bursts, resonant filters, short envelopes — with weighted randomize + mutation.</div>
+      </div>
+      <div class="badge">
+        <div class="mono">Note</div>
+        <div class="hint">
+          This is an original synthesizer inspired by early-80s arcade sound *characteristics*.
+          It does <span class="warn">not</span> include the Defender ROM or Williams proprietary audio code.
+        </div>
+      </div>
+    </div>
+
+    <div class="grid">
+      <div class="card">
+        <h2>Play SFX</h2>
+        <div class="body">
+          <div class="row">
+            <button class="primary" id="btnStart">Start Audio</button>
+            <span class="pill"><span>Master</span><input id="master" type="range" min="0" max="1" step="0.001" value="0.35"><span class="mono" id="masterVal">0.35</span></span>
+            <span class="pill"><span>Lo-Fi</span><input id="crush" type="range" min="0" max="1" step="0.001" value="0.35"><span class="mono" id="crushVal">0.35</span></span>
+          </div>
+
+          <div class="row">
+            <button id="laser">Laser</button>
+            <button id="zap">Zap</button>
+            <button id="thrust">Thrust</button>
+            <button id="explosion">Explosion</button>
+            <button id="pickup">Pickup</button>
+            <button id="alarm">Alarm</button>
+            <button class="danger" id="panic">Stop All</button>
+          </div>
+
+          <div class="divider"></div>
+
+          <div class="row">
+            <label for="mode">Randomize Mode</label>
+            <select id="mode">
+              <option value="faithful">Faithful (tight ranges)</option>
+              <option value="spicy" selected>Spicy (arcade-sweet spot)</option>
+              <option value="chaos">Chaos (wild)</option>
+            </select>
+
+            <label for="mutAmt">Mutation</label>
+            <input id="mutAmt" type="range" min="0" max="1" step="0.001" value="0.55">
+            <span class="mono" id="mutAmtVal">0.55</span>
+
+            <label for="seed">Seed</label>
+            <input id="seed" type="text" value="DEFENDER" class="mono" style="width:180px;">
+            <button id="randAll" class="primary">Randomize All</button>
+          </div>
+
+          <div class="hint">
+            Randomize adjusts each effect’s “control levers” (pitch sweeps, noise mix, filter resonance, envelope times)
+            with weighted distributions (more “good” outcomes than “broken” ones).
+          </div>
+
+          <div class="divider"></div>
+          <div class="mono small" id="status">Audio not started.</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Current Patch (per effect)</h2>
+        <div class="body">
+          <div class="hint">These are the live parameters used by the synth. Randomize edits these in place.</div>
+          <div class="divider"></div>
+          <div class="kvs mono" id="patchView"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script>
+(() => {
+  // ----------------------------
+  // Utilities
+  // ----------------------------
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  const lerp  = (a, b, t) => a + (b - a) * t;
+
+  function hash32(str){
+    // Simple deterministic hash for seeding RNG
+    let h = 2166136261 >>> 0;
+    for (let i=0;i<str.length;i++){
+      h ^= str.charCodeAt(i);
+      h = Math.imul(h, 16777619);
+    }
+    return h >>> 0;
+  }
+
+  function mulberry32(seed){
+    let t = seed >>> 0;
+    return function(){
+      t += 0x6D2B79F5;
+      let r = Math.imul(t ^ (t >>> 15), 1 | t);
+      r ^= r + Math.imul(r ^ (r >>> 7), 61 | r);
+      return ((r ^ (r >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  function weightedPick(rng, items){
+    // items: [{w, v}]
+    const sum = items.reduce((a,x)=>a+x.w,0);
+    let r = rng() * sum;
+    for (const it of items){
+      r -= it.w;
+      if (r <= 0) return it.v;
+    }
+    return items[items.length-1].v;
+  }
+
+  function triRand(rng){
+    // triangular distribution centered ~0.5
+    return (rng() + rng()) * 0.5;
+  }
+
+  function skewRand(rng, skew){
+    // skew > 1 biases toward 0, skew < 1 toward 1
+    const r = rng();
+    return Math.pow(r, skew);
+  }
+
+  // ----------------------------
+  // Audio Graph
+  // ----------------------------
+  let ctx = null;
+  let masterGain, compressor, postGain, globalStop = [];
+
+  function ensureAudio(){
+    if (ctx) return ctx;
+    ctx = new (window.AudioContext || window.webkitAudioContext)();
+
+    // Master chain: masterGain -> compressor -> postGain -> destination
+    masterGain = ctx.createGain();
+    compressor = ctx.createDynamicsCompressor();
+    postGain = ctx.createGain();
+
+    masterGain.gain.value = 0.35;
+    compressor.threshold.value = -18;
+    compressor.knee.value = 24;
+    compressor.ratio.value = 8;
+    compressor.attack.value = 0.003;
+    compressor.release.value = 0.12;
+    postGain.gain.value = 0.95;
+
+    masterGain.connect(compressor);
+    compressor.connect(postGain);
+    postGain.connect(ctx.destination);
+
+    return ctx;
+  }
+
+  function now(){ return ctx.currentTime; }
+
+  function makeBitcrusher(ctx, amount){
+    // Soft "lo-fi" by sample&hold + gentle quantization
+    // amount: 0..1
+    const inGain = ctx.createGain();
+    const outGain = ctx.createGain();
+
+    const proc = ctx.createScriptProcessor(1024, 1, 1);
+    let ph = 0;
+    let last = 0;
+
+    proc.onaudioprocess = (e) => {
+      const input = e.inputBuffer.getChannelData(0);
+      const output = e.outputBuffer.getChannelData(0);
+
+      // Reduce sample rate: 1..20 steps
+      const step = Math.floor(lerp(1, 20, amount));
+      // Reduce bit depth: 16..5
+      const bits = Math.floor(lerp(16, 5, amount));
+      const levels = (1 << bits) - 1;
+
+      for (let i=0;i<input.length;i++){
+        ph++;
+        if (ph >= step){
+          ph = 0;
+          // Quantize
+          const q = Math.round((input[i] * 0.5 + 0.5) * levels) / levels;
+          last = (q - 0.5) * 2.0;
+        }
+        output[i] = last;
+      }
+    };
+
+    inGain.connect(proc);
+    proc.connect(outGain);
+
+    return { input: inGain, output: outGain, node: proc };
+  }
+
+  // Shared lo-fi stage (optional)
+  let crusher = null;
+  function connectToMaster(node){
+    const crushAmt = parseFloat($("#crush").value);
+    if (!crusher) crusher = makeBitcrusher(ctx, crushAmt);
+    // Update amount by recreating only if needed: keep simple by swapping handler state
+    // (good enough for a toy; no memory churn)
+    crusher.node._amount = crushAmt;
+
+    // hack: read current slider inside callback
+    const original = crusher.node.onaudioprocess;
+    crusher.node.onaudioprocess = (e) => {
+      // overwrite with live amount
+      const input = e.inputBuffer.getChannelData(0);
+      const output = e.outputBuffer.getChannelData(0);
+      const amount = parseFloat($("#crush").value);
+      let ph = crusher.node._ph || 0;
+      let last = crusher.node._last || 0;
+
+      const step = Math.floor(lerp(1, 20, amount));
+      const bits = Math.floor(lerp(16, 5, amount));
+      const levels = (1 << bits) - 1;
+
+      for (let i=0;i<input.length;i++){
+        ph++;
+        if (ph >= step){
+          ph = 0;
+          const q = Math.round((input[i] * 0.5 + 0.5) * levels) / levels;
+          last = (q - 0.5) * 2.0;
+        }
+        output[i] = last;
+      }
+      crusher.node._ph = ph;
+      crusher.node._last = last;
+    };
+
+    node.connect(crusher.input);
+    crusher.output.connect(masterGain);
+  }
+
+  function scheduleStop(node, tStop){
+    globalStop.push(() => {
+      try { node.disconnect(); } catch(e){}
+    });
+    if (tStop != null){
+      setTimeout(() => { try { node.disconnect(); } catch(e){} }, Math.max(0, (tStop - now()) * 1000));
+    }
+  }
+
+  function stopAll(){
+    globalStop.forEach(fn => { try { fn(); } catch(e){} });
+    globalStop.length = 0;
+  }
+
+  // ----------------------------
+  // Noise (LFSR-ish) buffer
+  // ----------------------------
+  let noiseBuf = null;
+  function getNoiseBuffer(){
+    if (noiseBuf) return noiseBuf;
+    const dur = 2.0;
+    const len = Math.floor(ctx.sampleRate * dur);
+    const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+    const d = buf.getChannelData(0);
+
+    // 16-bit LFSR
+    let lfsr = 0xACE1;
+    for (let i=0;i<len;i++){
+      // taps: 16,14,13,11
+      const bit = ((lfsr >> 0) ^ (lfsr >> 2) ^ (lfsr >> 3) ^ (lfsr >> 5)) & 1;
+      lfsr = (lfsr >> 1) | (bit << 15);
+      d[i] = ((lfsr & 1) ? 1 : -1) * 0.9;
+    }
+    noiseBuf = buf;
+    return noiseBuf;
+  }
+
+  function noiseSource(){
+    const src = ctx.createBufferSource();
+    src.buffer = getNoiseBuffer();
+    src.loop = true;
+    return src;
+  }
+
+  function expEnv(param, t0, a, d, peak, sustain, rel){
+    // A: attack, D: decay, rel: release
+    // peak: value at end of attack; sustain: value during sustain (after decay)
+    const tA = t0 + a;
+    const tD = tA + d;
+    param.cancelScheduledValues(t0);
+    param.setValueAtTime(0.0001, t0);
+    param.exponentialRampToValueAtTime(Math.max(0.0001, peak), tA);
+    param.exponentialRampToValueAtTime(Math.max(0.0001, sustain), tD);
+    // release scheduled by caller
+    if (rel != null){
+      const tR = tD + rel;
+      param.exponentialRampToValueAtTime(0.0001, tR);
+      return tR;
+    }
+    return tD;
+  }
+
+  // ----------------------------
+  // Patch data (these are the "levers")
+  // ----------------------------
+  const patch = {
+    laser: {
+      baseHz: 880,
+      sweepHz: 520,
+      sweepTime: 0.055,
+      bite: 0.55,      // wave-shape mix
+      click: 0.12,     // transient
+      noise: 0.08,
+      hp: 260,
+      dur: 0.10
+    },
+    zap: {
+      baseHz: 220,
+      sweepHz: 1400,
+      sweepTime: 0.09,
+      fmAmt: 180,
+      fmHz: 32,
+      noise: 0.18,
+      bp: 1200,
+      q: 8,
+      dur: 0.16
+    },
+    thrust: {
+      noise: 0.75,
+      lp: 520,
+      q: 0.8,
+      flutterHz: 16,
+      flutterAmt: 0.18,
+      dur: 0.28
+    },
+    explosion: {
+      noise: 1.0,
+      lp0: 3800,
+      lp1: 240,
+      sweepTime: 0.32,
+      boomHz: 62,
+      boomAmt: 0.65,
+      crackle: 0.25,
+      dur: 0.65
+    },
+    pickup: {
+      baseHz: 660,
+      upHz: 1320,
+      glide: 0.12,
+      vibHz: 10,
+      vibAmt: 0.02,
+      twang: 0.35,
+      dur: 0.22
+    },
+    alarm: {
+      aHz: 520,
+      bHz: 860,
+      rate: 9.0,
+      edge: 0.6,
+      dur: 0.55
+    }
+  };
+
+  // ----------------------------
+  // Sound builders (procedural)
+  // ----------------------------
+  function playLaser(){
+    const p = patch.laser;
+    const t0 = now();
+
+    const out = ctx.createGain();
+    out.gain.value = 1.0;
+
+    const g = ctx.createGain();
+    g.gain.value = 0.0001;
+
+    // Tone oscillator (arcade-ish: square/triangle blend)
+    const osc = ctx.createOscillator();
+    osc.type = "square";
+    osc.frequency.setValueAtTime(p.baseHz + p.sweepHz, t0);
+    osc.frequency.exponentialRampToValueAtTime(Math.max(30, p.baseHz), t0 + p.sweepTime);
+
+    // Bite: waveshaper to sharpen edges
+    const shaper = ctx.createWaveShaper();
+    shaper.curve = makeDriveCurve(lerp(50, 400, p.bite));
+    shaper.oversample = "2x";
+
+    // Click transient (very short noise burst)
+    const n = noiseSource();
+    const nG = ctx.createGain();
+    nG.gain.value = 0.0001;
+
+    const hp = ctx.createBiquadFilter();
+    hp.type = "highpass";
+    hp.frequency.value = p.hp;
+
+    // Mix
+    const mixTone = ctx.createGain(); mixTone.gain.value = 1.0 - p.noise;
+    const mixNoise = ctx.createGain(); mixNoise.gain.value = p.noise;
+
+    // Envelope
+    const tEnd = expEnv(g.gain, t0, 0.002, 0.040, 0.65, 0.18, p.dur);
+
+    // Click envelope
+    expEnv(nG.gain, t0, 0.001, 0.010, p.click, 0.0001, 0.03);
+
+    osc.connect(shaper);
+    shaper.connect(mixTone);
+    n.connect(hp);
+    hp.connect(nG);
+    nG.connect(mixNoise);
+
+    mixTone.connect(g);
+    mixNoise.connect(g);
+
+    g.connect(out);
+    connectToMaster(out);
+
+    osc.start(t0); osc.stop(tEnd + 0.02);
+    n.start(t0); n.stop(t0 + 0.08);
+
+    scheduleStop(out, tEnd + 0.1);
+  }
+
+  function playZap(){
+    const p = patch.zap;
+    const t0 = now();
+
+    const out = ctx.createGain();
+    const g = ctx.createGain();
+    g.gain.value = 0.0001;
+
+    // Carrier
+    const osc = ctx.createOscillator();
+    osc.type = "sawtooth";
+    osc.frequency.setValueAtTime(p.baseHz, t0);
+    osc.frequency.exponentialRampToValueAtTime(Math.max(40, p.sweepHz), t0 + p.sweepTime);
+
+    // FM mod
+    const mod = ctx.createOscillator();
+    mod.type = "sine";
+    mod.frequency.value = p.fmHz;
+    const modG = ctx.createGain();
+    modG.gain.value = p.fmAmt;
+    mod.connect(modG);
+    modG.connect(osc.frequency);
+
+    // Noise + bandpass "electric"
+    const n = noiseSource();
+    const bp = ctx.createBiquadFilter();
+    bp.type = "bandpass";
+    bp.frequency.value = p.bp;
+    bp.Q.value = p.q;
+
+    const mixTone = ctx.createGain(); mixTone.gain.value = 0.80;
+    const mixNoise = ctx.createGain(); mixNoise.gain.value = p.noise;
+
+    const tEnd = expEnv(g.gain, t0, 0.004, 0.06, 0.75, 0.12, p.dur);
+
+    osc.connect(mixTone);
+    n.connect(bp);
+    bp.connect(mixNoise);
+
+    mixTone.connect(g);
+    mixNoise.connect(g);
+
+    g.connect(out);
+    connectToMaster(out);
+
+    osc.start(t0); osc.stop(tEnd + 0.02);
+    mod.start(t0); mod.stop(tEnd + 0.02);
+    n.start(t0); n.stop(tEnd + 0.02);
+
+    scheduleStop(out, tEnd + 0.1);
+  }
+
+  function playThrust(){
+    const p = patch.thrust;
+    const t0 = now();
+    const out = ctx.createGain();
+    const g = ctx.createGain();
+    g.gain.value = 0.0001;
+
+    const n = noiseSource();
+
+    const lp = ctx.createBiquadFilter();
+    lp.type = "lowpass";
+    lp.frequency.setValueAtTime(p.lp, t0);
+    lp.Q.value = p.q;
+
+    // Flutter (amplitude tremolo)
+    const lfo = ctx.createOscillator();
+    lfo.type = "sine";
+    lfo.frequency.value = p.flutterHz;
+    const lfoG = ctx.createGain();
+    lfoG.gain.value = p.flutterAmt;
+    lfo.connect(lfoG);
+    lfoG.connect(g.gain);
+
+    // Envelope: quick ramp up then decay
+    expEnv(g.gain, t0, 0.01, 0.10, 0.55, 0.24, p.dur);
+
+    const mix = ctx.createGain();
+    mix.gain.value = p.noise;
+
+    n.connect(lp);
+    lp.connect(mix);
+    mix.connect(g);
+    g.connect(out);
+
+    connectToMaster(out);
+
+    n.start(t0); n.stop(t0 + p.dur + 0.12);
+    lfo.start(t0); lfo.stop(t0 + p.dur + 0.12);
+
+    scheduleStop(out, t0 + p.dur + 0.3);
+  }
+
+  function playExplosion(){
+    const p = patch.explosion;
+    const t0 = now();
+    const out = ctx.createGain();
+    const g = ctx.createGain();
+    g.gain.value = 0.0001;
+
+    // Noise bed
+    const n = noiseSource();
+    const lp = ctx.createBiquadFilter();
+    lp.type = "lowpass";
+    lp.frequency.setValueAtTime(p.lp0, t0);
+    lp.frequency.exponentialRampToValueAtTime(Math.max(60, p.lp1), t0 + p.sweepTime);
+    lp.Q.value = 0.7;
+
+    // Boom oscillator (sub)
+    const boom = ctx.createOscillator();
+    boom.type = "sine";
+    boom.frequency.setValueAtTime(p.boomHz * 1.2, t0);
+    boom.frequency.exponentialRampToValueAtTime(Math.max(20, p.boomHz), t0 + 0.18);
+
+    const boomG = ctx.createGain();
+    boomG.gain.value = 0.0001;
+
+    // Crackle: highpassed noise spikes
+    const crack = noiseSource();
+    const hp = ctx.createBiquadFilter();
+    hp.type = "highpass";
+    hp.frequency.value = 1400;
+    const crackG = ctx.createGain();
+    crackG.gain.value = 0.0001;
+
+    // Envelopes
+    const tEnd = expEnv(g.gain, t0, 0.004, 0.12, 0.85, 0.20, p.dur);
+    expEnv(boomG.gain, t0, 0.002, 0.10, p.boomAmt, 0.0001, 0.34);
+    expEnv(crackG.gain, t0, 0.001, 0.06, p.crackle, 0.0001, 0.22);
+
+    const mixN = ctx.createGain(); mixN.gain.value = p.noise;
+    const mixB = ctx.createGain(); mixB.gain.value = 0.65;
+
+    n.connect(lp); lp.connect(mixN);
+    boom.connect(boomG); boomG.connect(mixB);
+
+    crack.connect(hp); hp.connect(crackG);
+
+    mixN.connect(g);
+    mixB.connect(g);
+    crackG.connect(g);
+
+    g.connect(out);
+    connectToMaster(out);
+
+    n.start(t0); n.stop(tEnd + 0.03);
+    crack.start(t0); crack.stop(tEnd + 0.03);
+    boom.start(t0); boom.stop(tEnd + 0.03);
+
+    scheduleStop(out, tEnd + 0.12);
+  }
+
+  function playPickup(){
+    const p = patch.pickup;
+    const t0 = now();
+    const out = ctx.createGain();
+    const g = ctx.createGain();
+    g.gain.value = 0.0001;
+
+    const osc = ctx.createOscillator();
+    osc.type = "triangle";
+    osc.frequency.setValueAtTime(p.baseHz, t0);
+    osc.frequency.exponentialRampToValueAtTime(Math.max(40, p.upHz), t0 + p.glide);
+
+    // Light vibrato
+    const vib = ctx.createOscillator();
+    vib.type = "sine";
+    vib.frequency.value = p.vibHz;
+    const vibG = ctx.createGain();
+    vibG.gain.value = p.vibAmt * p.baseHz;
+    vib.connect(vibG);
+    vibG.connect(osc.frequency);
+
+    // Twang: short waveshaper edge
+    const sh = ctx.createWaveShaper();
+    sh.curve = makeDriveCurve(lerp(30, 260, p.twang));
+    sh.oversample = "2x";
+
+    const tEnd = expEnv(g.gain, t0, 0.004, 0.06, 0.55, 0.15, p.dur);
+
+    osc.connect(sh);
+    sh.connect(g);
+    g.connect(out);
+    connectToMaster(out);
+
+    osc.start(t0); osc.stop(tEnd + 0.02);
+    vib.start(t0); vib.stop(tEnd + 0.02);
+
+    scheduleStop(out, tEnd + 0.1);
+  }
+
+  function playAlarm(){
+    const p = patch.alarm;
+    const t0 = now();
+    const out = ctx.createGain();
+    const g = ctx.createGain();
+    g.gain.value = 0.0001;
+
+    const osc = ctx.createOscillator();
+    osc.type = "square";
+    osc.frequency.setValueAtTime(p.aHz, t0);
+
+    // Step between two freqs at "rate" (like a simple arcade alarm)
+    const step = ctx.createOscillator();
+    step.type = "square";
+    step.frequency.value = p.rate;
+
+    const stepG = ctx.createGain();
+    stepG.gain.value = (p.bHz - p.aHz) * 0.5;
+    step.connect(stepG);
+    stepG.connect(osc.frequency);
+
+    // Edge waveshaper
+    const sh = ctx.createWaveShaper();
+    sh.curve = makeDriveCurve(lerp(20, 220, p.edge));
+    sh.oversample = "2x";
+
+    const tEnd = expEnv(g.gain, t0, 0.01, 0.06, 0.35, 0.25, p.dur);
+
+    osc.connect(sh);
+    sh.connect(g);
+    g.connect(out);
+    connectToMaster(out);
+
+    osc.start(t0); osc.stop(tEnd + 0.02);
+    step.start(t0); step.stop(tEnd + 0.02);
+
+    scheduleStop(out, tEnd + 0.1);
+  }
+
+  function makeDriveCurve(amount){
+    // amount ~ 1..600
+    const n = 1024;
+    const curve = new Float32Array(n);
+    const k = amount;
+    for (let i=0;i<n;i++){
+      const x = (i * 2 / (n - 1)) - 1;
+      curve[i] = (1 + k) * x / (1 + k * Math.abs(x));
+    }
+    return curve;
+  }
+
+  // ----------------------------
+  // Randomizer (weighted ranges)
+  // ----------------------------
+  function modeRanges(mode){
+    // returns multiplier for how wide the random ranges are
+    if (mode === "faithful") return { wide: 0.35, skew: 1.4 };
+    if (mode === "chaos")   return { wide: 1.35, skew: 0.9 };
+    return { wide: 0.75, skew: 1.15 }; // spicy
+  }
+
+  function mutateValue(rng, current, min, max, mutAmt, skew=1.0){
+    // Mutate around current; mutAmt controls step size; clamp to min/max.
+    // Use triangular + occasional jumps.
+    const r = triRand(rng);
+    const jump = rng() < 0.08 ? (rng()*2 - 1) : 0;
+    const span = (max - min);
+    const step = (r - 0.5) * 2.0 * span * 0.18 * mutAmt;
+    const j = jump * span * 0.22 * mutAmt;
+    let v = current + step + j;
+
+    // mild skew toward "safe" center by pulling toward mid when skew > 1
+    const mid = (min + max) * 0.5;
+    const pull = (skew - 1.0) * 0.12 * mutAmt;
+    v = lerp(v, mid, clamp(pull, 0, 0.35));
+
+    return clamp(v, min, max);
+  }
+
+  function randomizeAll(){
+    const rng = mulberry32(hash32($("#seed").value + "|" + Date.now()));
+    const mode = $("#mode").value;
+    const { wide, skew } = modeRanges(mode);
+    const mutAmt = parseFloat($("#mutAmt").value);
+
+    // For each parameter: define min/max and mutate in place.
+    // "wide" expands ranges in chaos, tightens in faithful.
+    // (ranges chosen to keep it arcade-y without constant ear murder)
+    const R = (min, max) => {
+      const mid = (min + max) * 0.5;
+      const half = (max - min) * 0.5 * wide;
+      return [mid - half, mid + half];
+    };
+
+    // LASER
+    {
+      const p = patch.laser;
+      let [a,b] = R(520, 1400); p.baseHz   = mutateValue(rng, p.baseHz, a, b, mutAmt, skew);
+      [a,b] = R(180, 1200);     p.sweepHz  = mutateValue(rng, p.sweepHz, a, b, mutAmt, skew);
+      [a,b] = R(0.030, 0.095);  p.sweepTime= mutateValue(rng, p.sweepTime, a, b, mutAmt, skew);
+      [a,b] = R(0.18, 0.92);    p.bite     = mutateValue(rng, p.bite, a, b, mutAmt, skew);
+      [a,b] = R(0.03, 0.22);    p.click    = mutateValue(rng, p.click, a, b, mutAmt, skew);
+      [a,b] = R(0.00, 0.26);    p.noise    = mutateValue(rng, p.noise, a, b, mutAmt, skew);
+      [a,b] = R(120, 900);      p.hp       = mutateValue(rng, p.hp, a, b, mutAmt, skew);
+      [a,b] = R(0.06, 0.16);    p.dur      = mutateValue(rng, p.dur, a, b, mutAmt, skew);
+    }
+
+    // ZAP
+    {
+      const p = patch.zap;
+      let [a,b] = R(120, 420);   p.baseHz    = mutateValue(rng, p.baseHz, a, b, mutAmt, skew);
+      [a,b] = R(800, 2200);      p.sweepHz   = mutateValue(rng, p.sweepHz, a, b, mutAmt, skew);
+      [a,b] = R(0.05, 0.14);     p.sweepTime = mutateValue(rng, p.sweepTime, a, b, mutAmt, skew);
+      [a,b] = R(40, 520);        p.fmAmt     = mutateValue(rng, p.fmAmt, a, b, mutAmt, skew);
+      [a,b] = R(12, 70);         p.fmHz      = mutateValue(rng, p.fmHz, a, b, mutAmt, skew);
+      [a,b] = R(0.06, 0.38);     p.noise     = mutateValue(rng, p.noise, a, b, mutAmt, skew);
+      [a,b] = R(700, 2200);      p.bp        = mutateValue(rng, p.bp, a, b, mutAmt, skew);
+      [a,b] = R(2, 18);          p.q         = mutateValue(rng, p.q, a, b, mutAmt, skew);
+      [a,b] = R(0.10, 0.26);     p.dur       = mutateValue(rng, p.dur, a, b, mutAmt, skew);
+    }
+
+    // THRUST
+    {
+      const p = patch.thrust;
+      let [a,b] = R(0.40, 1.0);  p.noise      = mutateValue(rng, p.noise, a, b, mutAmt, skew);
+      [a,b] = R(240, 980);       p.lp         = mutateValue(rng, p.lp, a, b, mutAmt, skew);
+      [a,b] = R(0.4, 2.4);       p.q          = mutateValue(rng, p.q, a, b, mutAmt, skew);
+      [a,b] = R(6, 28);          p.flutterHz  = mutateValue(rng, p.flutterHz, a, b, mutAmt, skew);
+      [a,b] = R(0.06, 0.32);     p.flutterAmt = mutateValue(rng, p.flutterAmt, a, b, mutAmt, skew);
+      [a,b] = R(0.18, 0.45);     p.dur        = mutateValue(rng, p.dur, a, b, mutAmt, skew);
+    }
+
+    // EXPLOSION
+    {
+      const p = patch.explosion;
+      let [a,b] = R(0.65, 1.0);  p.noise     = mutateValue(rng, p.noise, a, b, mutAmt, skew);
+      [a,b] = R(2200, 5200);     p.lp0       = mutateValue(rng, p.lp0, a, b, mutAmt, skew);
+      [a,b] = R(140, 420);       p.lp1       = mutateValue(rng, p.lp1, a, b, mutAmt, skew);
+      [a,b] = R(0.20, 0.50);     p.sweepTime = mutateValue(rng, p.sweepTime, a, b, mutAmt, skew);
+      [a,b] = R(38, 110);        p.boomHz    = mutateValue(rng, p.boomHz, a, b, mutAmt, skew);
+      [a,b] = R(0.25, 0.95);     p.boomAmt   = mutateValue(rng, p.boomAmt, a, b, mutAmt, skew);
+      [a,b] = R(0.10, 0.55);     p.crackle   = mutateValue(rng, p.crackle, a, b, mutAmt, skew);
+      [a,b] = R(0.45, 0.95);     p.dur       = mutateValue(rng, p.dur, a, b, mutAmt, skew);
+    }
+
+    // PICKUP
+    {
+      const p = patch.pickup;
+      let [a,b] = R(420, 980);    p.baseHz = mutateValue(rng, p.baseHz, a, b, mutAmt, skew);
+      [a,b] = R(980, 2200);       p.upHz   = mutateValue(rng, p.upHz, a, b, mutAmt, skew);
+      [a,b] = R(0.06, 0.18);      p.glide  = mutateValue(rng, p.glide, a, b, mutAmt, skew);
+      [a,b] = R(6, 14);           p.vibHz  = mutateValue(rng, p.vibHz, a, b, mutAmt, skew);
+      [a,b] = R(0.005, 0.045);    p.vibAmt = mutateValue(rng, p.vibAmt, a, b, mutAmt, skew);
+      [a,b] = R(0.08, 0.70);      p.twang  = mutateValue(rng, p.twang, a, b, mutAmt, skew);
+      [a,b] = R(0.14, 0.30);      p.dur    = mutateValue(rng, p.dur, a, b, mutAmt, skew);
+    }
+
+    // ALARM
+    {
+      const p = patch.alarm;
+      let [a,b] = R(320, 760);     p.aHz  = mutateValue(rng, p.aHz, a, b, mutAmt, skew);
+      [a,b] = R(680, 1200);        p.bHz  = mutateValue(rng, p.bHz, a, b, mutAmt, skew);
+      [a,b] = R(4.0, 15.0);        p.rate = mutateValue(rng, p.rate, a, b, mutAmt, skew);
+      [a,b] = R(0.2, 0.95);        p.edge = mutateValue(rng, p.edge, a, b, mutAmt, skew);
+      [a,b] = R(0.35, 0.85);       p.dur  = mutateValue(rng, p.dur, a, b, mutAmt, skew);
+    }
+
+    renderPatch();
+  }
+
+  // ----------------------------
+  // UI
+  // ----------------------------
+  const $ = (q) => document.querySelector(q);
+  const patchView = $("#patchView");
+  const status = $("#status");
+
+  function fmt(v){
+    if (typeof v !== "number") return String(v);
+    if (Math.abs(v) >= 100) return v.toFixed(1);
+    if (Math.abs(v) >= 10) return v.toFixed(2);
+    return v.toFixed(3);
+  }
+
+  function renderPatch(){
+    const lines = [];
+    for (const [name, obj] of Object.entries(patch)){
+      lines.push(`<div style="grid-column:1 / -1;color:#eafdf4;margin:6px 0 2px 0;">${name.toUpperCase()}</div>`);
+      for (const [k,v] of Object.entries(obj)){
+        lines.push(`<div>${k}</div><div>${fmt(v)}</div>`);
+      }
+      lines.push(`<div style="grid-column:1 / -1;height:1px;background:rgba(255,255,255,.06);margin:8px 0;"></div>`);
+    }
+    patchView.innerHTML = lines.join("");
+  }
+
+  function hook(){
+    $("#btnStart").addEventListener("click", async () => {
+      ensureAudio();
+      if (ctx.state !== "running") await ctx.resume();
+      status.textContent = "Audio running. Click an SFX button.";
+    });
+
+    $("#panic").addEventListener("click", () => {
+      if (!ctx) return;
+      stopAll();
+      status.textContent = "Stopped all voices.";
+    });
+
+    $("#master").addEventListener("input", (e) => {
+      $("#masterVal").textContent = (+e.target.value).toFixed(2);
+      if (masterGain) masterGain.gain.value = +e.target.value;
+    });
+
+    $("#crush").addEventListener("input", (e) => {
+      $("#crushVal").textContent = (+e.target.value).toFixed(2);
+    });
+
+    $("#mutAmt").addEventListener("input", (e) => {
+      $("#mutAmtVal").textContent = (+e.target.value).toFixed(2);
+    });
+
+    $("#laser").addEventListener("click", () => { ifReady(playLaser); });
+    $("#zap").addEventListener("click", () => { ifReady(playZap); });
+    $("#thrust").addEventListener("click", () => { ifReady(playThrust); });
+    $("#explosion").addEventListener("click", () => { ifReady(playExplosion); });
+    $("#pickup").addEventListener("click", () => { ifReady(playPickup); });
+    $("#alarm").addEventListener("click", () => { ifReady(playAlarm); });
+
+    $("#randAll").addEventListener("click", () => {
+      randomizeAll();
+      status.textContent = `Randomized patches (${ $("#mode").value }).`;
+    });
+
+    // Keyboard: 1..6 trigger, R randomize
+    window.addEventListener("keydown", (e) => {
+      if (e.repeat) return;
+      if (e.key === "r" || e.key === "R"){ $("#randAll").click(); return; }
+      const map = { "1":"laser","2":"zap","3":"thrust","4":"explosion","5":"pickup","6":"alarm" };
+      if (map[e.key]) { $("#"+map[e.key]).click(); }
+    });
+  }
+
+  function ifReady(fn){
+    if (!ctx){
+      status.textContent = "Click Start Audio first (browser gesture requirement).";
+      return;
+    }
+    fn();
+  }
+
+  renderPatch();
+  hook();
+})();
+</script>
+</body>
+</html>
