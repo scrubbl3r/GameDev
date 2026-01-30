@@ -557,7 +557,7 @@
     </div>
   </div>
 
-  <!-- ✅ Speed telemetry modal -->
+  <!-- ✅ Telemetry modal (extended with Orbit debug fields) -->
   <div id="teleModal" class="modal" aria-hidden="true">
     <div class="backdrop" id="teleBackdrop"></div>
     <div class="modalCard teleCard" role="dialog" aria-label="Speed telemetry">
@@ -572,7 +572,7 @@
       <div class="teleHint">
         Click <b>Record</b> to clear + capture a clean sample while you lock into a rhythm.
         Click again (Stop) to end. Then copy/paste the output into chat.
-        <span class="dim">(TSV: ms, dms, speed01, energy01, groove01, orbit01, smooth01, shake01, locked, hz)</span>
+        <span class="dim">(TSV: ms, dms, speed01, energy01, groove01, orbit01, smooth01, shake01, locked, hz, o_r2, o_r3, o_gate, o_balance, o_couple)</span>
       </div>
 
       <div id="teleOut" class="teleOut">(not recording)</div>
@@ -863,7 +863,7 @@
     }
 
     // =========================================================================
-    // SPEED TELEMETRY MODAL (record/stop/close)
+    // TELEMETRY MODAL (record/stop/close) — extended debug keys
     // =========================================================================
     let teleRecording = false;
     let teleT0 = 0;
@@ -891,8 +891,9 @@
       teleLast = teleT0;
       teleLines = 0;
 
+      // ✅ extended header
       els.teleOut.textContent =
-        "ms\tdms\tspeed01\tenergy01\tgroove01\torbit01\tsmooth01\tshake01\tlocked\thz\n";
+        "ms\tdms\tspeed01\tenergy01\tgroove01\torbit01\tsmooth01\tshake01\tlocked\thz\to_r2\to_r3\to_gate\to_balance\to_couple\n";
       els.teleRecBtn.textContent = "Stop";
       els.teleRecBtn.classList.add("recOn");
     }
@@ -923,6 +924,12 @@
       return (n > 1.5) ? (n / 100) : n;
     }
 
+    // ✅ numeric (non 0..1) helper for debug scalars
+    function telePickNum(d, key){
+      const n = Number(d && d[key]);
+      return isFinite(n) ? n : 0;
+    }
+
     function teleMaybeLog(d){
       if (!teleRecording) return;
 
@@ -941,10 +948,18 @@
       const locked = !!d.locked;
       const hz = (d.hz != null && isFinite(Number(d.hz))) ? Number(d.hz) : 0;
 
+      // ✅ orbit debug (optional; will be 0 if not present)
+      const o_r2      = telePickNum(d, "o_r2");
+      const o_r3      = telePickNum(d, "o_r3");
+      const o_gate    = telePickNum(d, "o_gate");
+      const o_balance = telePickNum(d, "o_balance");
+      const o_couple  = telePickNum(d, "o_couple");
+
       const line =
         `${ms.toFixed(1)}\t${dms.toFixed(1)}\t` +
         `${speed.toFixed(4)}\t${energy.toFixed(4)}\t${groove.toFixed(4)}\t${orbit.toFixed(4)}\t${smooth.toFixed(4)}\t${shake.toFixed(4)}\t` +
-        `${locked ? 1 : 0}\t${hz.toFixed(3)}\n`;
+        `${locked ? 1 : 0}\t${hz.toFixed(3)}\t` +
+        `${o_r2.toFixed(4)}\t${o_r3.toFixed(4)}\t${o_gate.toFixed(4)}\t${o_balance.toFixed(4)}\t${o_couple.toFixed(4)}\n`;
 
       els.teleOut.textContent += line;
       teleLines++;
