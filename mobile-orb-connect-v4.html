@@ -215,12 +215,16 @@
 
       const out = {
         ...payload,
+
+        // ✅ keep existing “debug-ish” fields
         t: roundN(payload.t, 1),
         dt: roundN(payload.dt, 4),
         wRaw: roundN(payload.wRaw, 2),
         wCap: roundN(payload.wCap, 2),
         wFilt: roundN(payload.wFilt, 2),
         cap: roundN(payload.cap, 2),
+
+        // ✅ core meters
         energy01: sig.energy01,
         groove01: sig.groove01,
         orbit01:  sig.orbit01,
@@ -230,6 +234,13 @@
         locked:   sig.locked,
         shakeHit: sig.shakeHit,
         hz:       sig.hz,
+
+        // ✅ ORBIT DEBUG (numbers are already present in payload; normalize precision here)
+        o_r2:      roundN(payload.o_r2, 4),
+        o_r3:      roundN(payload.o_r3, 4),
+        o_gate:    roundN(payload.o_gate, 4),
+        o_balance: roundN(payload.o_balance, 4),
+        o_couple:  roundN(payload.o_couple, 4),
       };
 
       ablyChannel.publish("orb", out, () => {});
@@ -259,27 +270,20 @@
 
     // =========================================================================
     // ✅ ORBIT v2 — Lissajous / tri-axial bonus (REFactor)
-    // - Rewards balanced tri-axial motion + simultaneous multi-axis coupling
-    // - Penalizes “one axis at a time” alternation
-    // - orbitBonus in [ORBIT_FLOOR..1], orbitUI in [0..1] for meter/publication
     // =========================================================================
     const ORBIT_FLOOR = 0.25;
 
-    // 1 = linear; >1 makes “perfect tri-axial” more special; <1 makes it easier
     const ORBIT_BALANCE_POW = 1.80;  // was 1.00
 
-    // Coupling sensitivity: bigger => orbit responds more to true multi-axis coupling
     const ORBIT_COUPLE_GAIN = 1.9;  // was 2.20  (lower = stricter)
     const ORBIT_COUPLE_POW  = 1.6;  // was 1.00  (higher = stricter)
 
-    // ✅ Axis-rank punishment (these were defined but NOT previously applied)
     const ORBIT_AX2_MIN = 0.16;   // raise => punish single-axis harder
     const ORBIT_AX3_MIN = 0.08;   // raise => punish dual-axis / planar harder
 
     const ORBIT_AX2_POW = 1.6;    // higher => harsher single-axis punishment
     const ORBIT_AX3_POW = 1.3;    // higher => harsher dual-axis punishment
 
-    // Extra strictness after gates (NEW)
     const ORBIT_GATE_POW = 1.0;   // higher => overall stricter (1.0..3.5)
 
     const ORBIT_GATE_FLOOR = 0.06; // lets meter "breathe" (0.03..0.10)
@@ -511,60 +515,68 @@
       return {xx,xy,xz,yy,yz,zz, trace:(xx+yy+zz)};
     }
 
-    function orbitBonusFromOmegaCov(cov) {
-        const eps = 1e-12;
-        const tr = cov.trace;
-        if (tr < 1e-9) return ORBIT_FLOOR;
+    // ✅ Orbit scorer that ALSO returns debug scalars for telemetry
+    function orbitFromOmegaCov(cov) {
+      const eps = 1e-12;
+      const tr = cov.trace;
+      if (tr < 1e-9) {
+        return {
+          orbitBonus: ORBIT_FLOOR,
+          orbitUI: 0,
+          r2: 0, r3: 0,
+          gate: 0,
+          balance: 0,
+          couple: 0
+        };
+      }
 
-        // principal-axis energy
-        const [l1,l2,l3] = eigenvaluesSym3(cov.xx,cov.xy,cov.xz,cov.yy,cov.yz,cov.zz);
-        const s = (l1 + l2 + l3) + eps;
+      // principal-axis energy
+      const [l1,l2,l3] = eigenvaluesSym3(cov.xx,cov.xy,cov.xz,cov.yy,cov.yz,cov.zz);
+      const s = (l1 + l2 + l3) + eps;
 
-        // ---------------------------------------------------------
-        // ✅ AXIS-RANK GATE (realistic phone version)
-        // Use ratios vs l1 (dominant), not vs l2.
-        // ---------------------------------------------------------
-        const r2 = clamp01(l2 / (l1 + eps));   // 2nd axis presence
-        const r3 = clamp01(l3 / (l1 + eps));   // 3rd axis presence (tri-axialness)
+      // axis rank ratios vs dominant (good phone heuristic)
+      const r2 = clamp01(l2 / (l1 + eps));   // 2nd axis presence
+      const r3 = clamp01(l3 / (l1 + eps));   // 3rd axis presence (tri-axialness)
 
-        const g2 = Math.pow(
-            clamp01((r2 - ORBIT_AX2_MIN) / (1 - ORBIT_AX2_MIN)),
-            ORBIT_AX2_POW
-        );
+      const g2 = Math.pow(
+        clamp01((r2 - ORBIT_AX2_MIN) / (1 - ORBIT_AX2_MIN)),
+        ORBIT_AX2_POW
+      );
 
-        const g3 = Math.pow(
-            clamp01((r3 - ORBIT_AX3_MIN) / (1 - ORBIT_AX3_MIN)),
-            ORBIT_AX3_POW
-        );
+      const g3 = Math.pow(
+        clamp01((r3 - ORBIT_AX3_MIN) / (1 - ORBIT_AX3_MIN)),
+        ORBIT_AX3_POW
+      );
 
-        // gate floor prevents "stuck at 0" while still punishing planar hard
-        let gate = clamp01(g2 * g3);
-        gate = ORBIT_GATE_FLOOR + (1 - ORBIT_GATE_FLOOR) * gate;
-        gate = Math.pow(gate, ORBIT_GATE_POW);
+      // gate floor prevents "stuck at 0" while still punishing planar hard
+      let gate = clamp01(g2 * g3);
+      gate = ORBIT_GATE_FLOOR + (1 - ORBIT_GATE_FLOOR) * gate;
+      gate = Math.pow(gate, ORBIT_GATE_POW);
 
-        // ---------------------------------------------------------
-        // Balance (entropy of eigen spectrum): 1 when tri-axial balanced
-        // ---------------------------------------------------------
-        const p1 = Math.max(eps, l1 / s);
-        const p2 = Math.max(eps, l2 / s);
-        const p3 = Math.max(eps, l3 / s);
-        const H  = -(p1*Math.log(p1) + p2*Math.log(p2) + p3*Math.log(p3));
-        const Hn = clamp01(H / Math.log(3));
-        const balance = Math.pow(Hn, ORBIT_BALANCE_POW);
+      // Balance (entropy of eigen spectrum): 1 when tri-axial balanced
+      const p1 = Math.max(eps, l1 / s);
+      const p2 = Math.max(eps, l2 / s);
+      const p3 = Math.max(eps, l3 / s);
+      const H  = -(p1*Math.log(p1) + p2*Math.log(p2) + p3*Math.log(p3));
+      const Hn = clamp01(H / Math.log(3));
+      const balance = Math.pow(Hn, ORBIT_BALANCE_POW);
 
-        // ---------------------------------------------------------
-        // Coupling: simultaneous multi-axis (Lissajous-like) boost
-        // ---------------------------------------------------------
-        const coupleRaw = (Math.abs(cov.xy) + Math.abs(cov.xz) + Math.abs(cov.yz)) / (tr + eps);
-        const couple = Math.pow(clamp01(coupleRaw * ORBIT_COUPLE_GAIN), ORBIT_COUPLE_POW);
+      // Coupling: simultaneous multi-axis boost (Lissajous-like)
+      const coupleRaw = (Math.abs(cov.xy) + Math.abs(cov.xz) + Math.abs(cov.yz)) / (tr + eps);
+      const couple = Math.pow(clamp01(coupleRaw * ORBIT_COUPLE_GAIN), ORBIT_COUPLE_POW);
 
-        // core score, then gate it
-        const core = clamp01(balance * couple);
-        const shaped = clamp01(core * gate);
+      // core, then gate it
+      const core = clamp01(balance * couple);
+      const shaped = clamp01(core * gate);
 
-        return ORBIT_FLOOR + (1 - ORBIT_FLOOR) * shaped;
+      const orbitBonus = ORBIT_FLOOR + (1 - ORBIT_FLOOR) * shaped;
+
+      // UI mapping: normalize out the floor then shape
+      const orbitShown = (orbitBonus - ORBIT_FLOOR) / (1 - ORBIT_FLOOR);
+      const orbitUI = Math.pow(clamp01(orbitShown), ORBIT_UI_EXP);
+
+      return { orbitBonus, orbitUI, r2, r3, gate, balance, couple };
     }
-
 
     function computeAvg(arr) {
       if (!arr.length) return 0;
@@ -815,7 +827,10 @@
           shake01: sh.shake01,
           shakeHit: sh.shakeHit,
           locked: false,
-          hz: 0
+          hz: 0,
+
+          // ✅ ORBIT DEBUG keys always present
+          o_r2: 0, o_r3: 0, o_gate: 0, o_balance: 0, o_couple: 0
         }, dt);
 
         setBgFromEnergy(clamp01(energyUI));
@@ -896,7 +911,10 @@
           shake01: sh.shake01,
           shakeHit: sh.shakeHit,
           locked: false,
-          hz: 0
+          hz: 0,
+
+          // ✅ ORBIT DEBUG keys always present
+          o_r2: 0, o_r3: 0, o_gate: 0, o_balance: 0, o_couple: 0
         }, dt);
 
         setBgFromEnergy(clamp01(energyUI));
@@ -912,11 +930,12 @@
       const avgJerk = median(jerkWindow);
       const smoothScore = smoothnessFromJerk(avgJerk);
 
-      // ✅ ORBIT v2 compute
+      // ✅ ORBIT v2 compute (+ debug)
       const omegaCov = covOmega3(omegaVec);
-      const orbitBonus = orbitBonusFromOmegaCov(omegaCov);               // [ORBIT_FLOOR..1]
-      const orbitShown = (orbitBonus - ORBIT_FLOOR) / (1 - ORBIT_FLOOR); // [0..1]
-      const orbitUI = Math.pow(clamp01(orbitShown), ORBIT_UI_EXP);       // meter feel
+      const o = orbitFromOmegaCov(omegaCov);
+
+      const orbitBonus = o.orbitBonus; // [ORBIT_FLOOR..1] (energy uses this)
+      const orbitUI    = o.orbitUI;    // [0..1]          (published orbit01)
 
       meterHoldLeft = METER_HOLD_SEC;
       lastGrooveUI = lockStrength;
@@ -988,7 +1007,14 @@
         shake01: sh.shake01,
         shakeHit: sh.shakeHit,
         locked: lockedNow,
-        hz: grooveHz
+        hz: grooveHz,
+
+        // ✅ ORBIT DEBUG: what your receiver telemetry expects
+        o_r2: o.r2,
+        o_r3: o.r3,
+        o_gate: o.gate,
+        o_balance: o.balance,
+        o_couple: o.couple
       }, dt);
 
       setBgFromEnergy(clamp01(energyUI));
