@@ -27,6 +27,11 @@
       /* shake lamp */
       --lamp: rgba(255, 212, 0, 1.0);
       --lampGlow: rgba(255, 212, 0, 0.50);
+
+      /* background RGB (set by JS) */
+      --bg-r: 0;
+      --bg-g: 0;
+      --bg-b: 0;
     }
 
     html,body{
@@ -69,7 +74,7 @@
       overflow:hidden;
     }
 
-    /* ✅ both windows 800px tall */
+    /* both windows 800px tall */
     .cardTall{
       height:800px;
       display:flex;
@@ -114,12 +119,6 @@
       text-shadow:
         0 0 calc(10px + 40px * var(--charge)) rgba(255,212,0, calc(0.14 + 0.42 * var(--charge))),
         0 0 calc(2px + 18px * var(--charge)) rgba(255,212,0, calc(0.10 + 0.28 * var(--charge)));
-    }
-
-    .bigSub{
-      margin-top:-2px;
-      font-size:12px;
-      opacity:0.85;
     }
 
     .bars{margin-top:10px;}
@@ -190,15 +189,9 @@
       text-shadow: none;
     }
 
-    /* ✅ Telemetry button: same size, dimmer */
-    #teleBtn{
-      opacity: 0.68;
-      font-weight: 800;
-    }
-    #teleBtn:hover{
-      opacity: 0.86;
-      border-color: rgba(50,255,117,.30);
-    }
+    /* Telemetry button: same size, dimmer */
+    #teleBtn{ opacity: 0.68; font-weight: 800; }
+    #teleBtn:hover{ opacity: 0.86; border-color: rgba(50,255,117,.30); }
 
     #pairBtn{
       font-weight: 1000;
@@ -210,16 +203,9 @@
       box-shadow: 0 0 18px rgba(50,255,117,.14);
     }
 
-    /* ✅ DEV: super dim + right-justified */
-    #newRoom{
-      opacity: 0.26;
-      font-weight: 800;
-      margin-left: auto; /* pushes DEV to far-right in the row */
-    }
-    #newRoom:hover{
-      opacity: 0.46;
-      border-color: rgba(50,255,117,.24);
-    }
+    /* DEV: super dim + right-justified */
+    #newRoom{ opacity: 0.26; font-weight: 800; margin-left: auto; }
+    #newRoom:hover{ opacity: 0.46; border-color: rgba(50,255,117,.24); }
 
     .groupGap{ height:10px; }
 
@@ -251,9 +237,7 @@
         0 0 28px rgba(255,212,0,0.26);
     }
 
-    /* ============================================================
-       RIGHT WINDOW: PHYSICS TEST STAGE
-       ============================================================ */
+    /* RIGHT WINDOW: PHYSICS TEST STAGE */
     .physHeader{
       font-weight: 900;
       margin-bottom: 10px;
@@ -268,32 +252,13 @@
       overflow:hidden;
       box-shadow: inset 0 0 0 1px rgba(0,0,0,.25);
     }
-
-    /* ✅ vertical world */
-    .world{
-      position:absolute;
-      left:0; top:0;
-      width:100%;
-      height:2000px;          /* JS also uses WORLD_H=2000 */
-      will-change: transform;
-    }
-
-    /* star canvas sits behind everything */
-    #stars{
-      position:absolute;
-      left:0; top:0;
-      width:100%;
-      height:100%;
-      pointer-events:none;
-      opacity:0.95;
-    }
-
     .groundLine{
       position:absolute;
       left:16px;
       right:16px;
       height:2px;
       background: var(--g);
+      bottom: 15px;
       opacity: 0.95;
       box-shadow: 0 0 18px rgba(50,255,117,.12);
     }
@@ -304,13 +269,23 @@
       height:95px;
       border-radius:999px;
       border:2px solid var(--g);
-      background: rgba(50,255,117,.06);
       left:50%;
-      transform: translate(-50%, 0px); /* JS will set translateY */
-      box-shadow:
-        0 0 20px rgba(50,255,117,.12),
-        inset 0 0 0 1px rgba(0,0,0,.30);
+      transform: translate(-50%, 0px);
       will-change: transform;
+
+      /* ✅ fill glow follows background color (set via --bg-r/g/b) */
+      background:
+        radial-gradient(circle at 35% 30%,
+          rgba(var(--bg-r), var(--bg-g), var(--bg-b), 0.35) 0%,
+          rgba(var(--bg-r), var(--bg-g), var(--bg-b), 0.12) 45%,
+          rgba(0,0,0,0.02) 72%,
+          rgba(0,0,0,0.00) 100%);
+
+      box-shadow:
+        0 0 18px rgba(50,255,117,.10),
+        0 0 34px rgba(var(--bg-r), var(--bg-g), var(--bg-b), 0.18),
+        0 0 60px rgba(var(--bg-r), var(--bg-g), var(--bg-b), calc(0.08 + 0.26 * var(--charge))),
+        inset 0 0 0 1px rgba(0,0,0,.30);
     }
 
     .physControls{
@@ -333,9 +308,7 @@
       accent-color: var(--g);
     }
 
-    /* ============================================================
-       PAIR MODAL (QR popup)
-       ============================================================ */
+    /* PAIR MODAL (QR popup) */
     .modal{
       position:fixed;
       inset:0;
@@ -418,12 +391,8 @@
       font-weight: 900;
     }
 
-    /* ============================================================
-       ✅ SPEED TELEMETRY MODAL
-       ============================================================ */
-    .teleCard{
-      width: min(760px, 94vw);
-    }
+    /* SPEED TELEMETRY MODAL */
+    .teleCard{ width: min(760px, 94vw); }
     .teleTop{
       display:flex;
       align-items:center;
@@ -431,11 +400,7 @@
       gap:10px;
       margin-bottom:10px;
     }
-    .teleBtns{
-      display:flex;
-      gap:10px;
-      align-items:center;
-    }
+    .teleBtns{ display:flex; gap:10px; align-items:center; }
     .teleHint{
       font-size: 11px;
       opacity: .78;
@@ -497,12 +462,10 @@
           <span id="last" class="lastText">(none yet)</span>
         </div>
 
-        <!-- ✅ BIG HEADLINE = LIFT -->
+        <!-- BIG HEADLINE = LIFT -->
         <div id="bigCharge" class="big"><span id="pct">0</span>%</div>
 
         <div class="bars">
-          <!-- ✅ Order: Lift, Groove, Smooth, Speed, Orbit, Energy, Shake -->
-
           <div class="barLabel"><div>Lift</div><span id="vLift">0</span></div>
           <div class="bar"><div id="bLift" class="fill"></div></div>
 
@@ -512,10 +475,7 @@
           <div class="barLabel"><div>Smooth</div><span id="vSmooth">0</span></div>
           <div class="bar"><div id="bSmooth" class="fill"></div></div>
 
-          <div class="barLabel">
-            <div>Speed</div>
-            <span id="vSpeed">0</span>
-          </div>
+          <div class="barLabel"><div>Speed</div><span id="vSpeed">0</span></div>
           <div class="bar"><div id="bSpeed" class="fill"></div></div>
 
           <div class="barLabel"><div>Orbit</div><span id="vOrbit">0</span></div>
@@ -541,20 +501,26 @@
         <div class="physHeader">Game Physics</div>
 
         <div id="physStage" class="physStage" aria-label="Physics test stage">
-          <!-- ✅ 2000px vertical world with starfield -->
-          <div id="world" class="world" aria-label="World">
-            <canvas id="stars" aria-label="Starfield"></canvas>
-            <div id="ground" class="groundLine" aria-label="Ground"></div>
-            <div id="orb" class="orb" aria-label="Orb"></div>
-          </div>
+          <div class="groundLine" aria-label="Ground"></div>
+          <div id="orb" class="orb" aria-label="Orb"></div>
         </div>
 
         <div class="physControls">
+          <!-- ✅ OLD GRAVITY: 0..3x (default 0.40) -->
           <div class="sliderRow">
             <span>Gravity</span>
-            <strong><span id="gVal">1.00</span>x</strong>
+            <strong><span id="gVal">0.40</span>x</strong>
           </div>
-          <input id="gSlider" type="range" min="0" max="3" value=".40" step="0.01" />
+          <input id="gSlider" type="range" min="0" max="3" value="0.40" step="0.01" />
+
+          <div style="height:10px"></div>
+
+          <!-- ✅ falling friction knob (downward drag) -->
+          <div class="sliderRow">
+            <span>Fall Drag</span>
+            <strong><span id="dVal">1.80</span></strong>
+          </div>
+          <input id="dSlider" type="range" min="0" max="6" value="1.80" step="0.01" />
         </div>
       </div>
     </div>
@@ -581,7 +547,7 @@
     </div>
   </div>
 
-  <!-- ✅ Telemetry modal (extended with Orbit debug fields) -->
+  <!-- Telemetry modal -->
   <div id="teleModal" class="modal" aria-hidden="true">
     <div class="backdrop" id="teleBackdrop"></div>
     <div class="modalCard teleCard" role="dialog" aria-label="Speed telemetry">
@@ -640,11 +606,10 @@
       // physics
       orb: $("orb"),
       physStage: $("physStage"),
-      world: $("world"),
-      stars: $("stars"),
-      ground: $("ground"),
       gSlider: $("gSlider"),
       gVal: $("gVal"),
+      dSlider: $("dSlider"),
+      dVal: $("dVal"),
 
       // modal
       pairModal: $("pairModal"),
@@ -724,8 +689,14 @@
       const r = Math.round(BG0.r + (BG1.r - BG0.r) * t);
       const g = Math.round(BG0.g + (BG1.g - BG0.g) * t);
       const b = Math.round(BG0.b + (BG1.b - BG0.b) * t);
+
       document.body.style.backgroundColor = `rgb(${r},${g},${b})`;
       document.documentElement.style.setProperty("--charge", String(t));
+
+      // ✅ feed orb fill glow
+      document.documentElement.style.setProperty("--bg-r", String(r));
+      document.documentElement.style.setProperty("--bg-g", String(g));
+      document.documentElement.style.setProperty("--bg-b", String(b));
     }
     setBgFromEnergy(0);
 
@@ -739,9 +710,7 @@
     const AUDIO_MIN_DB = -42;
     const AUDIO_MAX_DB = -6;
     const AUDIO_EXP    = 1.15;
-
     const MASTER_GAIN  = 2.2;
-
     const TONE_BASE_HZ    = 180;
     const TONE_MAX_ADD_HZ = 220;
 
@@ -949,7 +918,6 @@
       if (!isFinite(n)) return 0;
       return (n > 1.5) ? (n / 100) : n;
     }
-
     function telePickNum(d, key){
       const n = Number(d && d[key]);
       return isFinite(n) ? n : 0;
@@ -1010,57 +978,51 @@
         return null;
       }
     }
-
     let currentRoomChannel = normalizeRoom(readUrlRoomOrNull() || "orb:test");
 
     // =========================================================================
-    // PHYSICS + WORLD + STARFIELD
+    // PHYSICS
     // =========================================================================
-    const WORLD_H = 2000;
-
     const PHYS = {
       groundFromBottomPx: 15,
       groundLinePx: 2,
       orbRadiusPx: 50,
 
+      // ✅ base scale (same family as before)
       gBase: 2200,
-      thrustMax: 2200,
 
-      linearDrag: 2.8,
+      // ✅ more headroom so lift feels good again
+      thrustMax: 3000,
+
+      // ✅ separate drag up/down so we can tune falling friction directly
+      upDrag:   2.6,
+      downDrag: 1.8,
+
       bounce: 0.35,
       maxUpSpeed: 2200,
       maxDownSpeed: 2800,
     };
 
     let physState = {
-      // ✅ world-space y (center), 0=top of world, WORLD_H=bottom
       y: 0,
       v: 0,
       lastTs: null,
-      gravityMul: 1.0,
+      gravityMul: 0.40,
 
       lift01: 0,
       energy01: 0,
-
-      camY: 0
     };
 
     function clamp(v, lo, hi){ return Math.max(lo, Math.min(hi, v)); }
 
     function readStageMetrics(){
       const rect = els.physStage.getBoundingClientRect();
-      return { stageW: rect.width, stageH: rect.height };
-    }
+      const stageH = rect.height;
 
-    function worldGroundY(){
-      // ground line is PHYS.groundFromBottomPx up from world bottom
-      const groundLineTop = WORLD_H - PHYS.groundFromBottomPx - PHYS.groundLinePx;
-      const yGroundCenter = groundLineTop - PHYS.orbRadiusPx;
-      return { groundLineTop, yGroundCenter };
-    }
-
-    function worldCeilY(){
-      return PHYS.orbRadiusPx;
+      const groundY = stageH - PHYS.groundFromBottomPx - PHYS.groundLinePx;
+      const yGroundCenter = groundY - PHYS.orbRadiusPx;
+      const yCeilCenter = PHYS.orbRadiusPx;
+      return { stageH, yGroundCenter, yCeilCenter };
     }
 
     function applyOrbTransform(){
@@ -1068,39 +1030,14 @@
       els.orb.style.transform = `translate(-50%, ${top.toFixed(2)}px)`;
     }
 
-    function applyCamera(){
-      const { stageH } = readStageMetrics();
-
-      // keep the orb around ~65% down the window (feels like "climbing")
-      const targetScreenY = stageH * 0.65;
-
-      // camera transform maps world->stage: screenY = worldY + camY
-      let camY = targetScreenY - physState.y;
-
-      // clamp camera so you can't scroll past world bounds
-      const camMin = stageH - WORLD_H; // most negative (show bottom)
-      const camMax = 0;                // show top
-      camY = clamp(camY, camMin, camMax);
-
-      physState.camY = camY;
-      els.world.style.transform = `translateY(${camY.toFixed(2)}px)`;
-    }
-
     function resetOrbToGround(){
-      const { groundLineTop, yGroundCenter } = worldGroundY();
-
-      // set world height explicitly (in case CSS gets edited)
-      els.world.style.height = WORLD_H + "px";
-
-      // place ground line inside the world
-      els.ground.style.top = groundLineTop + "px";
-
+      const { yGroundCenter } = readStageMetrics();
       physState.y = yGroundCenter;
       physState.v = 0;
       applyOrbTransform();
-      applyCamera();
     }
 
+    // ✅ OLD GRAVITY: slider already expresses 0..3 multiplier
     function setGravityMul(m){
       physState.gravityMul = clamp(Number(m) || 0, 0, 3);
       els.gVal.textContent = physState.gravityMul.toFixed(2);
@@ -1108,60 +1045,16 @@
     setGravityMul(els.gSlider.value);
     els.gSlider.addEventListener("input", (e) => setGravityMul(e.target.value));
 
-    // ---- Starfield ----
-    let stars = [];
-    function buildStars(count = 520){
-      const { stageW } = readStageMetrics();
-      stars = new Array(count).fill(0).map(() => ({
-        x: Math.random() * Math.max(1, stageW),
-        y: Math.random() * WORLD_H,
-        r: 0.6 + Math.random() * 1.6,
-        a: 0.18 + Math.random() * 0.85
-      }));
+    // ✅ fall drag knob: sets PHYS.downDrag directly
+    function setDownDrag(v){
+      PHYS.downDrag = clamp(Number(v) || 0, 0, 10);
+      els.dVal.textContent = PHYS.downDrag.toFixed(2);
     }
+    setDownDrag(els.dSlider.value);
+    els.dSlider.addEventListener("input", (e) => setDownDrag(e.target.value));
 
-    function drawStars(){
-      const c = els.stars;
-      if (!c) return;
-
-      const { stageW } = readStageMetrics();
-      const dpr = Math.max(1, window.devicePixelRatio || 1);
-
-      // size backing store
-      c.width  = Math.max(1, Math.floor(stageW * dpr));
-      c.height = Math.max(1, Math.floor(WORLD_H * dpr));
-      c.style.height = WORLD_H + "px";
-
-      const ctx = c.getContext("2d");
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      ctx.clearRect(0, 0, stageW, WORLD_H);
-
-      // subtle star haze
-      ctx.globalAlpha = 0.10;
-      ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue("--g") || "#32ff75";
-      for (let i=0;i<18;i++){
-        const yy = (i/17) * WORLD_H;
-        ctx.fillRect(0, yy, stageW, 1);
-      }
-
-      // stars
-      for (const s of stars){
-        ctx.globalAlpha = s.a;
-        ctx.beginPath();
-        ctx.arc(s.x, s.y, s.r, 0, Math.PI*2);
-        ctx.fill();
-      }
-      ctx.globalAlpha = 1;
-    }
-
-    function rebuildWorldVisuals(){
-      buildStars(520);
-      drawStars();
-      resetOrbToGround();
-    }
-
-    requestAnimationFrame(rebuildWorldVisuals);
-    window.addEventListener("resize", rebuildWorldVisuals);
+    requestAnimationFrame(resetOrbToGround);
+    window.addEventListener("resize", resetOrbToGround);
 
     function liftToThrustAccel(l01){
       return PHYS.thrustMax * clamp01(l01);
@@ -1174,14 +1067,17 @@
 
       dt = clamp(dt, 0, 0.05);
 
-      const { yGroundCenter } = worldGroundY();
-      const yCeilCenter = worldCeilY();
+      const { yGroundCenter, yCeilCenter } = readStageMetrics();
 
       const g = PHYS.gBase * physState.gravityMul;
       const thrust = liftToThrustAccel(physState.lift01);
 
+      // positive is down
       let a = g - thrust;
-      a += (-PHYS.linearDrag * physState.v);
+
+      // ✅ drag differs on fall vs rise
+      const drag = (physState.v >= 0) ? PHYS.downDrag : PHYS.upDrag;
+      a += (-drag * physState.v);
 
       physState.v += a * dt;
       physState.v = clamp(physState.v, -PHYS.maxUpSpeed, PHYS.maxDownSpeed);
@@ -1199,8 +1095,6 @@
       }
 
       applyOrbTransform();
-      applyCamera();
-
       requestAnimationFrame(physicsStep);
     }
     requestAnimationFrame(physicsStep);
@@ -1294,22 +1188,12 @@
         return (n > 1.5) ? (n / 100) : n;
       }
 
-      function pick01Bounded(newKey, oldKey){
-        if (d[newKey] != null) {
-          const n = Number(d[newKey]);
-          return isFinite(n) ? n : 0;
-        }
-        const n = Number(d[oldKey]);
-        if (!isFinite(n)) return 0;
-        return (n > 1.5) ? (n / 100) : n;
-      }
-
       const energy = pick01NewOrOld("energy01", "energy");
-      const groove = pick01Bounded("groove01", "groove");
-      const orbit  = pick01Bounded("orbit01",  "orbit");
-      const smooth = pick01Bounded("smooth01", "smooth");
-      const speed  = pick01Bounded("speed01",  "speed");
-      const shake  = pick01Bounded("shake01",  "shake");
+      const groove = pick01NewOrOld("groove01", "groove");
+      const orbit  = pick01NewOrOld("orbit01",  "orbit");
+      const smooth = pick01NewOrOld("smooth01", "smooth");
+      const speed  = pick01NewOrOld("speed01",  "speed");
+      const shake  = pick01NewOrOld("shake01",  "shake");
       const locked = !!d.locked;
 
       const lift = computeLift01(groove, smooth, speed);
@@ -1319,8 +1203,7 @@
 
       setBgFromEnergy(energy);
 
-      const liftText = toPct01(lift);
-      els.pct.textContent = isFinite(liftText) ? liftText : 0;
+      els.pct.textContent = toPct01(lift);
 
       const eText = toPctRaw(energy);
 
@@ -1336,7 +1219,6 @@
       els.vSmooth.textContent = `${sP}%`;
       els.vSpeed.textContent  = `${sp}%`;
       els.vOrbit.textContent  = `${oP}%`;
-
       els.vEnergy.textContent = `${isFinite(eText) ? eText : 0}%`;
       els.vShake.textContent  = `${sh}%`;
 
@@ -1429,15 +1311,11 @@
       connecting = false;
     }
 
-    // ✅ DEV button forces room=test always + launches QR
+    // DEV button forces room=test always + launches QR
     els.newRoom.addEventListener("click", async () => {
       currentRoomChannel = "orb:test";
       await connect({ auto:false });
       openPairModal();
-    });
-
-    document.addEventListener("visibilitychange", () => {
-      // no-op (watchdog handles idle)
     });
 
     (async function init(){

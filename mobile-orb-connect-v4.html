@@ -3,718 +3,410 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Orb Relay — Receiver Test</title>
+  <title>Groove Orbit</title>
   <style>
-    :root{
-      --g:#32ff75;
-      --g2:rgba(50,255,117,.60);
-      --g3:rgba(50,255,117,.20);
-      --bg:#000;
-      --panel: rgba(0,0,0,.55);
-      --border: rgba(50,255,117,.18);
-      --bad:#ff5a5a;
+    :root { --green:#7dd35f; }
 
-      /* overcharge */
-      --over:#ffd400;
-
-      /* charge-driven (0..1) */
-      --charge: 0;
-
-      /* message stream color (bright indigo, readable) */
-      --stream: rgba(140, 130, 255, 0.95);
-      --streamGlow: rgba(140, 130, 255, 0.32);
-
-      /* shake lamp */
-      --lamp: rgba(255, 212, 0, 1.0);
-      --lampGlow: rgba(255, 212, 0, 0.50);
-
-      /* background RGB (set by JS) */
-      --bg-r: 0;
-      --bg-g: 0;
-      --bg-b: 0;
+    html, body {
+        height: 100%;
+        margin: 0;
+        background: #000;
+        color: var(--green);
+        font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+        transition: background-color 80ms linear; /* keep phone glow mapping */
+        touch-action: manipulation;
     }
 
-    html,body{
-      height:100%;
-      margin:0;
-      background: var(--bg);
-      color:var(--g);
-      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-      transition: background-color 80ms linear;
-      overflow-x:hidden;
+    .app{
+        height: calc(var(--vh, 1vh) * 100);
+        display: grid;
+        place-items: center;
     }
 
-    body::before{
-      content:"";
-      position:fixed;
-      inset:0;
-      pointer-events:none;
-      background:
-        radial-gradient(1200px 700px at 50% 35%, rgba(0,0,0,.0) 0%, rgba(0,0,0,.45) 55%, rgba(0,0,0,.75) 100%);
-      opacity:0.95;
-      mix-blend-mode:multiply;
-      z-index:0;
+    /* Single centered round Start button */
+    #startBtn {
+      width: min(180px, 46vw);
+      height: min(180px, 46vw);
+      border-radius: 999px;
+      border: 2px solid var(--green);
+      background: rgba(0,0,0,0.15);
+      color: var(--green);
+      font-size: 22px;
+      font-weight: 800;
+      letter-spacing: 0.02em;
+      box-shadow: 0 0 22px rgba(125,211,95,0.18);
+      -webkit-tap-highlight-color: transparent;
     }
-
-    .wrap{max-width:980px;margin:24px auto;padding:0 16px; position:relative; z-index:1;}
-
-    .grid{
-      display:grid;
-      grid-template-columns: 1.2fr 1fr;
-      gap:18px;
-      align-items:start;
-    }
-
-    .card{
-      background:var(--panel);
-      border:1px solid var(--border);
-      border-radius:16px;
-      padding:14px 14px 16px;
-      box-shadow: 0 18px 80px rgba(0,0,0,.55);
-      overflow:hidden;
-    }
-
-    /* both windows 800px tall */
-    .cardTall{
-      height:800px;
-      display:flex;
-      flex-direction:column;
-    }
-
-    .row{display:flex; gap:10px; align-items:center; flex-wrap:wrap;}
-
-    button{
-      padding:10px 14px;
-      border-radius:12px;
-      border:1px solid var(--border);
-      background:rgba(0,0,0,.45);
-      color:var(--g);
-      cursor:pointer;
-      font-weight:800;
-      white-space:nowrap;
-    }
-    button:hover{border-color:rgba(50,255,117,.35)}
-    button:disabled{ opacity:.55; cursor:default; }
-
-    .stat{margin-top:10px; font-size:13px; line-height:1.5;}
-    .dim{opacity:.78}
-    .bad{color:var(--bad); font-weight:900;}
-    .ok{color:#7dffab; font-weight:900;}
-
-    .over{ color: var(--over) !important; }
-    .fill.over{ background: var(--over) !important; }
-
-    .big{
-      font-size:58px;
-      font-weight:1000;
-      margin:12px 0 8px;
-      letter-spacing:-0.04em;
-      line-height:0.92;
-      text-align:left;
-      text-shadow:
-        0 0 calc(10px + 40px * var(--charge)) rgba(50,255,117, calc(0.12 + 0.38 * var(--charge))),
-        0 0 calc(2px + 18px * var(--charge)) rgba(50,255,117, calc(0.10 + 0.25 * var(--charge)));
-    }
-    .big.over{
-      text-shadow:
-        0 0 calc(10px + 40px * var(--charge)) rgba(255,212,0, calc(0.14 + 0.42 * var(--charge))),
-        0 0 calc(2px + 18px * var(--charge)) rgba(255,212,0, calc(0.10 + 0.28 * var(--charge)));
-    }
-
-    .bars{margin-top:10px;}
-    .barLabel{
-      display:flex;
-      align-items:baseline;
-      justify-content:space-between;
-      gap:10px;
-      font-size:12px;
-      opacity:.92;
-    }
-
-    .bar{
-      height:14px;
-      border-radius:999px;
-      border:1px solid rgba(50,255,117,.35);
-      background:rgba(50,255,117,.08);
-      overflow:hidden;
-      margin:8px 0 10px;
-    }
-    .fill{
-      height:100%;
-      width:0%;
-      background: rgba(50,255,117,.85);
-      transition: width 80ms linear;
-    }
-
-    .logLine{
-      margin-top:10px;
-      padding:8px 10px;
-      border-radius:12px;
-      border:1px solid rgba(50,255,117,.22);
-      background:rgba(0,0,0,.30);
-      color: rgba(50,255,117,.92);
-      font-size:11px;
-      line-height:1;
-      display:flex;
-      align-items:center;
-      gap:8px;
-      white-space:nowrap;
-      overflow:hidden;
-      box-shadow: inset 0 0 0 1px rgba(0,0,0,.25);
-    }
-    .logLine .muted{
-      opacity:.78;
-      flex:0 0 auto;
-    }
-    .lastText{
-      flex:1 1 auto;
-      overflow:hidden;
-      text-overflow:ellipsis;
-      color: var(--stream);
-      text-shadow: 0 0 10px var(--streamGlow);
-      opacity: 1;
-    }
-
-    .mono{white-space:pre-wrap; word-break:break-word; font-size:12px; opacity:.9; margin-top:10px; color: rgba(50,255,117,.90);}
-
-    #audioBtn{
-      border-color: rgba(255,90,90,.55);
-      color: rgba(255,90,90,.95);
-      text-shadow: 0 0 10px rgba(255,90,90,.18);
-    }
-    #audioBtn:hover{ border-color: rgba(255,90,90,.78); }
-    #audioBtn.on{
-      border-color: rgba(50,255,117,.35);
-      color: var(--g);
-      text-shadow: none;
-    }
-
-    /* Telemetry button: same size, dimmer */
-    #teleBtn{ opacity: 0.68; font-weight: 800; }
-    #teleBtn:hover{ opacity: 0.86; border-color: rgba(50,255,117,.30); }
-
-    #pairBtn{
-      font-weight: 1000;
-      border-color: var(--g);
-      color: var(--g);
-    }
-    #pairBtn:hover{
-      border-color: var(--g);
-      box-shadow: 0 0 18px rgba(50,255,117,.14);
-    }
-
-    /* DEV: super dim + right-justified */
-    #newRoom{ opacity: 0.26; font-weight: 800; margin-left: auto; }
-    #newRoom:hover{ opacity: 0.46; border-color: rgba(50,255,117,.24); }
-
-    .groupGap{ height:10px; }
-
-    .meterRow{
-      display:flex;
-      align-items:center;
-      gap:10px;
-    }
-    .barShort{
-      flex:1 1 auto;
-      max-width: 430px;
-      margin:8px 0 10px;
-    }
-
-    .lamp{
-      width:16px;
-      height:16px;
-      border-radius:999px;
-      border:1px solid rgba(50,255,117,.35);
-      background: rgba(0,0,0,.30);
-      box-shadow: inset 0 0 0 1px rgba(0,0,0,.25);
-      flex:0 0 auto;
-    }
-    .lamp.on{
-      border-color: rgba(255,212,0,0.85);
-      background: var(--lamp);
-      box-shadow:
-        0 0 12px var(--lampGlow),
-        0 0 28px rgba(255,212,0,0.26);
-    }
-
-    /* RIGHT WINDOW: PHYSICS TEST STAGE */
-    .physHeader{
-      font-weight: 900;
-      margin-bottom: 10px;
-      letter-spacing: .3px;
-    }
-    .physStage{
-      position:relative;
-      flex:1 1 auto;
-      border:1px solid rgba(50,255,117,.22);
-      border-radius:14px;
-      background: rgba(0,0,0,.22);
-      overflow:hidden;
-      box-shadow: inset 0 0 0 1px rgba(0,0,0,.25);
-    }
-    .groundLine{
-      position:absolute;
-      left:16px;
-      right:16px;
-      height:2px;
-      background: var(--g);
-      bottom: 15px;
-      opacity: 0.95;
-      box-shadow: 0 0 18px rgba(50,255,117,.12);
-    }
-
-    .orb{
-      position:absolute;
-      width:95px;
-      height:95px;
-      border-radius:999px;
-      border:2px solid var(--g);
-      left:50%;
-      transform: translate(-50%, 0px);
-      will-change: transform;
-
-      /* ✅ fill glow follows background color (set via --bg-r/g/b) */
-      background:
-        radial-gradient(circle at 35% 30%,
-          rgba(var(--bg-r), var(--bg-g), var(--bg-b), 0.35) 0%,
-          rgba(var(--bg-r), var(--bg-g), var(--bg-b), 0.12) 45%,
-          rgba(0,0,0,0.02) 72%,
-          rgba(0,0,0,0.00) 100%);
-
-      box-shadow:
-        0 0 18px rgba(50,255,117,.10),
-        0 0 34px rgba(var(--bg-r), var(--bg-g), var(--bg-b), 0.18),
-        0 0 60px rgba(var(--bg-r), var(--bg-g), var(--bg-b), calc(0.08 + 0.26 * var(--charge))),
-        inset 0 0 0 1px rgba(0,0,0,.30);
-    }
-
-    .physControls{
-      margin-top:12px;
-      padding-top:12px;
-      border-top:1px solid rgba(50,255,117,.14);
-    }
-    .sliderRow{
-      display:flex;
-      align-items:center;
-      justify-content:space-between;
-      gap:12px;
-      font-size:12px;
-      opacity:.92;
-    }
-    .sliderRow strong{ font-weight: 1000; opacity:1; }
-    input[type="range"]{
-      width:100%;
-      margin-top:8px;
-      accent-color: var(--g);
-    }
-
-    /* PAIR MODAL (QR popup) */
-    .modal{
-      position:fixed;
-      inset:0;
-      display:none;
-      align-items:center;
-      justify-content:center;
-      z-index:999;
-    }
-    .modal.on{ display:flex; }
-    .backdrop{
-      position:absolute; inset:0;
-      background: rgba(0,0,0,.72);
-      backdrop-filter: blur(6px);
-    }
-    .modalCard{
-      position:relative;
-      width: min(420px, 92vw);
-      border-radius:16px;
-      border:1px solid rgba(50,255,117,.22);
-      background: rgba(0,0,0,.72);
-      box-shadow: 0 22px 90px rgba(0,0,0,.65);
-      padding:14px 14px 14px;
-      z-index:1;
-    }
-    .modalTop{
-      display:flex;
-      align-items:center;
-      justify-content:space-between;
-      gap:10px;
-      margin-bottom:10px;
-    }
-    .modalTitle{
-      font-weight: 1000;
-      letter-spacing:.3px;
-    }
-    .xBtn{
-      padding:8px 10px;
-      border-radius:12px;
-      border:1px solid rgba(50,255,117,.22);
-      background: rgba(0,0,0,.35);
-      color: var(--g);
-      cursor:pointer;
-      font-weight: 1000;
-      line-height:1;
-    }
-    .qrBox{
-      width: 280px; height: 280px;
-      border-radius: 14px;
-      border: 1px solid rgba(50,255,117,.18);
-      background: #fff;
-      display:grid; place-items:center;
-      overflow:hidden;
-      margin: 0 auto;
-    }
-    .urlRow{
-      margin-top:10px;
-      display:flex;
-      gap:10px;
-      align-items:center;
-    }
-    .urlRow code{
-      flex:1 1 auto;
-      padding:8px 10px;
-      border-radius:12px;
-      border:1px solid rgba(50,255,117,.18);
-      background: rgba(0,0,0,.35);
-      color: rgba(50,255,117,.92);
-      font-size: 11px;
-      white-space: nowrap;
-      overflow:hidden;
-      text-overflow: ellipsis;
-    }
-    .copyBtn{
-      padding:10px 12px;
-      border-radius:12px;
-      border:1px solid rgba(50,255,117,.22);
-      background: rgba(0,0,0,.35);
-      color: var(--g);
-      cursor:pointer;
-      font-weight: 900;
-    }
-
-    /* SPEED TELEMETRY MODAL */
-    .teleCard{ width: min(760px, 94vw); }
-    .teleTop{
-      display:flex;
-      align-items:center;
-      justify-content:space-between;
-      gap:10px;
-      margin-bottom:10px;
-    }
-    .teleBtns{ display:flex; gap:10px; align-items:center; }
-    .teleHint{
-      font-size: 11px;
-      opacity: .78;
-      margin: 2px 0 10px;
-      line-height: 1.35;
-    }
-    .teleOut{
-      border: 1px solid rgba(50,255,117,.18);
-      border-radius: 12px;
-      background: rgba(0,0,0,.30);
-      padding: 10px;
-      height: min(520px, 62vh);
-      overflow: auto;
-      white-space: pre;
-      word-break: break-word;
-      font-size: 11px;
-      line-height: 1.35;
-      color: rgba(50,255,117,.92);
-      box-shadow: inset 0 0 0 1px rgba(0,0,0,.25);
-    }
-    .recOn{
-      border-color: rgba(255,212,0,.35) !important;
-      color: rgba(255,212,0,.95) !important;
-      text-shadow: 0 0 10px rgba(255,212,0,.18);
-    }
-
-    @media (max-width: 900px){
-      .grid{grid-template-columns:1fr;}
-      .big{font-size:52px;}
-      .qrBox{width: 240px; height:240px;}
-    }
+    #startBtn:active { transform: scale(0.98); }
+    #startBtn:disabled { opacity: 0.55; }
   </style>
-
-  <!-- Ably + QR -->
-  <script src="https://cdn.ably.com/lib/ably.min-1.js"></script>
-  <script src="./qrcode.min.js"></script>
 </head>
-
 <body>
-  <div class="wrap">
-    <div class="grid">
-      <!-- LEFT: meters window -->
-      <div class="card cardTall">
-        <div class="physHeader">Orb Relay/Receiver</div>
+  <main class="app">
+    <button id="startBtn">Start</button>
+  </main>
 
-        <div class="row">
-          <button id="pairBtn">Pair Phone</button>
-          <button id="audioBtn">Audio: Off</button>
-          <button id="teleBtn">Telemetry</button>
-          <button id="newRoom">DEV</button>
-        </div>
+  <!-- Ably JS -->
+  <script src="https://cdn.ably.com/lib/ably.min-1.js"></script>
 
-        <div class="stat">
-          <div>Status: <span id="status" class="dim">Auto-connecting…</span></div>
-        </div>
+  <!-- center button on screen hack -->
+  <script>
+    (function setVhUnit(){
+        const root = document.documentElement;
 
-        <div class="logLine" aria-label="Last message">
-          <span class="muted">Last message:</span>
-          <span id="last" class="lastText">(none yet)</span>
-        </div>
+        const set = () => {
+        const vv = window.visualViewport;
+        const h = (vv && vv.height) ? vv.height : window.innerHeight;
+        root.style.setProperty('--vh', (h * 0.01) + 'px');
+        };
 
-        <!-- BIG HEADLINE = LIFT -->
-        <div id="bigCharge" class="big"><span id="pct">0</span>%</div>
+        set();
 
-        <div class="bars">
-          <div class="barLabel"><div>Lift</div><span id="vLift">0</span></div>
-          <div class="bar"><div id="bLift" class="fill"></div></div>
-
-          <div class="barLabel"><div>Groove</div><span id="vGroove">0</span></div>
-          <div class="bar"><div id="bGroove" class="fill"></div></div>
-
-          <div class="barLabel"><div>Smooth</div><span id="vSmooth">0</span></div>
-          <div class="bar"><div id="bSmooth" class="fill"></div></div>
-
-          <div class="barLabel"><div>Speed</div><span id="vSpeed">0</span></div>
-          <div class="bar"><div id="bSpeed" class="fill"></div></div>
-
-          <div class="barLabel"><div>Orbit</div><span id="vOrbit">0</span></div>
-          <div class="bar"><div id="bOrbit" class="fill"></div></div>
-
-          <div class="barLabel"><div>Energy</div><span id="vEnergy">0</span></div>
-          <div class="bar"><div id="bEnergy" class="fill"></div></div>
-
-          <div class="groupGap"></div>
-
-          <div class="barLabel"><div>Shake</div><span id="vShake">0</span></div>
-          <div class="meterRow">
-            <div class="bar barShort"><div id="bShake" class="fill"></div></div>
-            <div id="shakeLamp" class="lamp" aria-label="Shake trigger lamp"></div>
-          </div>
-        </div>
-
-        <div id="fatal" class="mono bad" style="display:none;"></div>
-      </div>
-
-      <!-- RIGHT: physics window -->
-      <div class="card cardTall">
-        <div class="physHeader">Game Physics</div>
-
-        <div id="physStage" class="physStage" aria-label="Physics test stage">
-          <div class="groundLine" aria-label="Ground"></div>
-          <div id="orb" class="orb" aria-label="Orb"></div>
-        </div>
-
-        <div class="physControls">
-          <!-- ✅ OLD GRAVITY: 0..3x (default 0.40) -->
-          <div class="sliderRow">
-            <span>Gravity</span>
-            <strong><span id="gVal">0.40</span>x</strong>
-          </div>
-          <input id="gSlider" type="range" min="0" max="3" value="0.40" step="0.01" />
-
-          <div style="height:10px"></div>
-
-          <!-- ✅ falling friction knob (downward drag) -->
-          <div class="sliderRow">
-            <span>Fall Drag</span>
-            <strong><span id="dVal">1.80</span></strong>
-          </div>
-          <input id="dSlider" type="range" min="0" max="6" value="1.80" step="0.01" />
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Pair modal -->
-  <div id="pairModal" class="modal" aria-hidden="true">
-    <div class="backdrop" id="pairBackdrop"></div>
-    <div class="modalCard" role="dialog" aria-label="Pair phone">
-      <div class="modalTop">
-        <div class="modalTitle">Pair phone to this room</div>
-        <button class="xBtn" id="pairClose" aria-label="Close">✕</button>
-      </div>
-      <div id="qr" class="qrBox"></div>
-
-      <div class="urlRow">
-        <code id="urlText">(url)</code>
-        <button class="copyBtn" id="copyUrl">Copy</button>
-      </div>
-
-      <div class="mono dim" style="margin-top:10px;">
-        Tip: the popup auto-closes on first message from the phone.
-      </div>
-    </div>
-  </div>
-
-  <!-- Telemetry modal -->
-  <div id="teleModal" class="modal" aria-hidden="true">
-    <div class="backdrop" id="teleBackdrop"></div>
-    <div class="modalCard teleCard" role="dialog" aria-label="Speed telemetry">
-      <div class="teleTop">
-        <div class="modalTitle">Speed Telemetry</div>
-        <div class="teleBtns">
-          <button id="teleRecBtn">Record</button>
-          <button class="xBtn" id="teleClose" aria-label="Close">✕</button>
-        </div>
-      </div>
-
-      <div class="teleHint">
-        Click <b>Record</b> to clear + capture a clean sample while you lock into a rhythm.
-        Click again (Stop) to end. Then copy/paste the output into chat.
-        <span class="dim">(TSV: ms, dms, speed01, energy01, groove01, orbit01, smooth01, shake01, locked, hz, o_r2, o_r3, o_gate, o_balance, o_couple)</span>
-      </div>
-
-      <div id="teleOut" class="teleOut">(not recording)</div>
-    </div>
-  </div>
+        // iOS Chrome: visualViewport changes when bars show/hide & during scroll
+        window.addEventListener('resize', set, { passive: true });
+        window.addEventListener('orientationchange', set, { passive: true });
+        if (window.visualViewport) {
+        window.visualViewport.addEventListener('resize', set, { passive: true });
+        window.visualViewport.addEventListener('scroll', set, { passive: true });
+        }
+    })();
+  </script>
 
   <script>
-    const $ = (id) => document.getElementById(id);
-
-    const els = {
-      pairBtn: $("pairBtn"),
-      newRoom: $("newRoom"),
-      audioBtn: $("audioBtn"),
-      teleBtn: $("teleBtn"),
-
-      status: $("status"),
-      last: $("last"),
-
-      bigCharge: $("bigCharge"),
-      pct: $("pct"),
-
-      vLift:  $("vLift"),
-      vGroove: $("vGroove"),
-      vSmooth: $("vSmooth"),
-      vSpeed:  $("vSpeed"),
-      vOrbit:  $("vOrbit"),
-      vEnergy: $("vEnergy"),
-      vShake:  $("vShake"),
-
-      bLift:  $("bLift"),
-      bGroove: $("bGroove"),
-      bSmooth: $("bSmooth"),
-      bSpeed:  $("bSpeed"),
-      bOrbit:  $("bOrbit"),
-      bEnergy: $("bEnergy"),
-      bShake:  $("bShake"),
-
-      shakeLamp: $("shakeLamp"),
-      fatal: $("fatal"),
-
-      // physics
-      orb: $("orb"),
-      physStage: $("physStage"),
-      gSlider: $("gSlider"),
-      gVal: $("gVal"),
-      dSlider: $("dSlider"),
-      dVal: $("dVal"),
-
-      // modal
-      pairModal: $("pairModal"),
-      pairBackdrop: $("pairBackdrop"),
-      pairClose: $("pairClose"),
-      qr: $("qr"),
-      urlText: $("urlText"),
-      copyUrl: $("copyUrl"),
-
-      // telemetry
-      teleModal: $("teleModal"),
-      teleBackdrop: $("teleBackdrop"),
-      teleClose: $("teleClose"),
-      teleRecBtn: $("teleRecBtn"),
-      teleOut: $("teleOut"),
-    };
-
-    const WORKER_BASE = "https://orb-token.mrgarthwilliams.workers.dev";
-
-    function clamp01(x){ x = Number(x); return Math.max(0, Math.min(1, isFinite(x) ? x : 0)); }
-    const toPct01  = (x01) => Math.round(clamp01(x01) * 100);
-    const toPctRaw = (x)   => Math.round(Math.max(0, Number(x) || 0) * 100);
-
-    function setBar(el, v01){
-      const p = clamp01(v01) * 100;
-      el.style.width = p.toFixed(1) + "%";
-    }
-
-    function computeLift01(groove01, smooth01, speed01){
-      const g = clamp01(groove01);
-      const s = clamp01(smooth01);
-      const p = clamp01(speed01);
-      return clamp01(Math.pow(Math.max(0, g*s*p), 1/3));
-    }
-
-    function randCode(n=6){
-      const A="ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-      let s="";
-      for(let i=0;i<n;i++) s += A[(Math.random()*A.length)|0];
-      return s;
-    }
-
-    function normalizeRoom(input){
-      let r = String(input || "").trim();
-      if (!r) r = "orb:test";
-      if (r.indexOf(":") === -1) r = "orb:" + r;
-      return r;
-    }
-
-    function stripOrbPrefix(room){
-      return String(room || "").startsWith("orb:") ? String(room).slice(4) : String(room || "");
-    }
-
-    function phoneUrlFor(roomChannel){
-      const base = "https://scrubbl3r.github.io/GameDev/mobile-orb-connect-v4.html";
-      const roomCode = stripOrbPrefix(roomChannel);
-      return base + "?room=" + encodeURIComponent(roomCode);
-    }
-
-    function fatal(msg){
-      els.fatal.style.display = "block";
-      els.fatal.textContent = msg;
-    }
-
-    function setStatus(html, cls){
-      els.status.className = cls || "dim";
-      els.status.innerHTML = html;
-    }
+  (() => {
+    // =========================================================================
+    // UI (single button only)
+    // =========================================================================
+    const startBtn = document.getElementById('startBtn');
 
     // =========================================================================
-    // BACKGROUND (energy-driven “charge” glow stays tied to energy)
+    // Keep phone glow mapping (background color), driven by energy
     // =========================================================================
     const BG0 = { r: 0,   g: 0,  b: 0  };
     const BG1 = { r: 255, g: 42, b: 0  };
     function setBgFromEnergy(e01) {
-      const t = clamp01(e01);
+      const t = Math.max(0, Math.min(1, e01));
       const r = Math.round(BG0.r + (BG1.r - BG0.r) * t);
       const g = Math.round(BG0.g + (BG1.g - BG0.g) * t);
       const b = Math.round(BG0.b + (BG1.b - BG0.b) * t);
-
       document.body.style.backgroundColor = `rgb(${r},${g},${b})`;
-      document.documentElement.style.setProperty("--charge", String(t));
-
-      // ✅ feed orb fill glow
-      document.documentElement.style.setProperty("--bg-r", String(r));
-      document.documentElement.style.setProperty("--bg-g", String(g));
-      document.documentElement.style.setProperty("--bg-b", String(b));
     }
     setBgFromEnergy(0);
 
     // =========================================================================
-    // AUDIO (optional)
+    // RELAY (Ably via Cloudflare Worker token) — logic preserved
     // =========================================================================
-    let audioEnabled = false;
-    let audioCtx = null, osc = null, gainNode = null;
+    const WORKER_BASE = "https://orb-token.mrgarthwilliams.workers.dev";
+    const TOKEN_URL = WORKER_BASE + "/token";
 
+    function parseRoom() {
+      const u = new URL(window.location.href);
+      const raw = (u.searchParams.get("room") || "test").trim();
+      const roomCode = raw.startsWith("orb:") ? raw.slice(4) : raw;
+      const channelName = "orb:" + roomCode;
+      return { raw, roomCode, channelName };
+    }
+
+    let ably = null;
+    let ablyChannel = null;
+
+    const roomInfo = parseRoom();
+    const room = roomInfo.channelName;
+    const roomCode = roomInfo.roomCode;
+
+    async function connectRelay() {
+      try { if (ablyChannel) ablyChannel.detach(); } catch(e) {}
+      try { if (ably) ably.close(); } catch(e) {}
+      ably = null; ablyChannel = null;
+
+      const authUrl =
+        TOKEN_URL +
+        "?room=" + encodeURIComponent(roomCode) +
+        "&clientId=" + encodeURIComponent("phone-" + Math.random().toString(16).slice(2,6));
+
+      try {
+        const r = await fetch(authUrl, { method: "GET", cache: "no-store" });
+        const j = await r.json();
+        if (!r.ok || !j.token) return false;
+      } catch (e) {
+        return false;
+      }
+
+      ably = new Ably.Realtime({ authUrl, autoConnect: true });
+      ablyChannel = ably.channels.get(room);
+      ablyChannel.attach(() => {});
+      return true;
+    }
+
+    function disconnectRelay() {
+      try { if (ablyChannel) ablyChannel.detach(); } catch(e) {}
+      try { if (ably) ably.close(); } catch(e) {}
+      ably = null; ablyChannel = null;
+    }
+
+    // =========================================================================
+    // ✅ NETWORK THROTTLE (unchanged)
+    // =========================================================================
+    const SEND_HZ = 12;
+    const SEND_MIN_MS = 1000 / SEND_HZ;
+
+    const EPS = {
+      energy01: 0.006,
+      groove01: 0.008,
+      orbit01:  0.008,
+      smooth01: 0.008,
+      speed01:  0.008,
+      shake01:  0.015,
+      hz:       0.030,
+    };
+
+    let nextSendAtMs = 0;
+    let lastSig = null;
+
+    function roundN(x, n=4){
+      const v = Number(x);
+      if (!isFinite(v)) return 0;
+      const p = Math.pow(10, n);
+      return Math.round(v * p) / p;
+    }
+
+    function buildSigFromPayload(p){
+      return {
+        energy01: roundN(p.energy01, 4),
+        groove01: roundN(p.groove01, 4),
+        orbit01:  roundN(p.orbit01, 4),
+        smooth01: roundN(p.smooth01, 4),
+        speed01:  roundN(p.speed01, 4),
+        shake01:  roundN(p.shake01, 4),
+        locked:   !!p.locked,
+        shakeHit: !!p.shakeHit,
+        hz:       roundN(p.hz, 3),
+      };
+    }
+
+    function sigChanged(sig){
+      if (!lastSig) return true;
+
+      if (sig.shakeHit && !lastSig.shakeHit) return true;
+      if (sig.locked !== lastSig.locked) return true;
+
+      if (Math.abs(sig.energy01 - lastSig.energy01) > EPS.energy01) return true;
+      if (Math.abs(sig.groove01 - lastSig.groove01) > EPS.groove01) return true;
+      if (Math.abs(sig.orbit01  - lastSig.orbit01 ) > EPS.orbit01 ) return true;
+      if (Math.abs(sig.smooth01 - lastSig.smooth01) > EPS.smooth01) return true;
+      if (Math.abs(sig.speed01  - lastSig.speed01 ) > EPS.speed01 ) return true;
+      if (Math.abs(sig.shake01  - lastSig.shake01 ) > EPS.shake01 ) return true;
+      if (Math.abs(sig.hz       - lastSig.hz      ) > EPS.hz      ) return true;
+
+      return false;
+    }
+
+    function publishOrb(payload, dt, force=false) {
+      if (!ablyChannel) return;
+
+      const now = performance.now();
+      if (!force && now < nextSendAtMs) return;
+
+      const sig = buildSigFromPayload(payload);
+      if (!force && !sigChanged(sig)) return;
+
+      lastSig = sig;
+      nextSendAtMs = now + SEND_MIN_MS;
+
+      const out = {
+        ...payload,
+
+        // ✅ keep existing “debug-ish” fields
+        t: roundN(payload.t, 1),
+        dt: roundN(payload.dt, 4),
+        wRaw: roundN(payload.wRaw, 2),
+        wCap: roundN(payload.wCap, 2),
+        wFilt: roundN(payload.wFilt, 2),
+        cap: roundN(payload.cap, 2),
+
+        // ✅ core meters
+        energy01: sig.energy01,
+        groove01: sig.groove01,
+        orbit01:  sig.orbit01,
+        smooth01: sig.smooth01,
+        speed01:  sig.speed01,
+        shake01:  sig.shake01,
+        locked:   sig.locked,
+        shakeHit: sig.shakeHit,
+        hz:       sig.hz,
+
+        // ✅ ORBIT DEBUG (numbers are already present in payload; normalize precision here)
+        o_r2:      roundN(payload.o_r2, 4),
+        o_r3:      roundN(payload.o_r3, 4),
+        o_gate:    roundN(payload.o_gate, 4),
+        o_balance: roundN(payload.o_balance, 4),
+        o_couple:  roundN(payload.o_couple, 4),
+      };
+
+      ablyChannel.publish("orb", out, () => {});
+    }
+
+    // =========================================================================
+    // DIAL PACK v4 — base detection (PRESERVED)
+    // =========================================================================
+    const OMEGA_LPF = 0.22; // was .22
+
+    const HUNT_WINDOW_SEC   = .80; // was 1.35
+    const STABLE_WINDOW_SEC = 1.60; // was 3.10
+
+    const MIN_WINDOW_SAMPLES = 28;  // was 55
+    const MAX_WINDOW_SAMPLES = 260;
+
+    const MIN_OMEGA = 0.02;
+
+    const LOCK_ON  = 0.30;
+    const LOCK_OFF = 0.22;
+
+    const MIN_HZ = 0.55;
+    const MAX_HZ = 2.30;
+
+    const JERK_TIGHT = 220.0;
+    const JERK_LOOSE = 2600.0;
+
+    // =========================================================================
+    // ✅ ORBIT v2.1 — COUPLED LISS / “TRICKS WHILE LEVITATING”
+    // - Direction-normalized omega (so orbit is about geometry, not force)
+    // - Orbit only counts inside a stability envelope (smooth+groove+speed)
+    // - Orbit is explicitly anti-shake (shake suppresses orbit charge)
+    // =========================================================================
+    const ORBIT_FLOOR = 0.25;
+
+    const ORBIT_BALANCE_POW = 1.80;
+
+    const ORBIT_COUPLE_GAIN = 1.9;
+    const ORBIT_COUPLE_POW  = 1.6;
+
+    const ORBIT_AX2_MIN = 0.16;
+    const ORBIT_AX3_MIN = 0.08;
+
+    const ORBIT_AX2_POW = 1.6;
+    const ORBIT_AX3_POW = 1.3;
+
+    const ORBIT_GATE_POW = 1.0;
+    const ORBIT_GATE_FLOOR = 0.06;
+
+    // UI shaping for published orbit01 (meter feel)
+    const ORBIT_UI_EXP = 0.55;
+
+    // ✅ “tricks while levitating” envelope
+    const ORBIT_GROOVE_MIN   = 0.26;  // must have some groove lock
+    const ORBIT_SMOOTH_MIN   = 0.28;  // must be smooth enough (anti-jerk)
+    const ORBIT_SPEED_MIN01  = 0.10;  // must be moving (anti-jitter)
+    const ORBIT_ENV_POW      = 1.25;  // higher = stricter envelope
+
+    // ✅ anti-shake suppression (orbit is not brute force)
+    const ORBIT_ANTISHAKE_POW = 2.2;  // higher = shake kills orbit harder
+
+    const ENERGY_GAIN_LOCKED = 1.25;
+    const ENERGY_GAIN_FREE   = 0.65;
+
+    const ENERGY_DECAY       = 0.040;
+
+    const UI_SMOOTH   = 0.10;
+    const LOCK_SMOOTH = 0.14;
+
+    const GRACE_SEC = 0.75;
+
+    const RECENTER_SEC = 0.85;
+    const RECENTER_GROOVE_MAX = 0.22;
+
+    const NORM_ALPHA = 0.10;
+
+    // ============================================================================
+    // SPEED METER — tuned for “force” (rotationRate magnitude, deg/sec)
+    // ============================================================================
+    const SPEED_DEAD_DPS = 8.0;
+    const SPEED_CAP_DPS  = 360.0;
+
+    const SPEED_EMA_CUTOFF_FAST_HZ = 1.5;
+    const SPEED_EMA_CUTOFF_SLOW_HZ = .10;
+
+    const SPEED_ADAPT_START_DPS = 18.0;
+    const SPEED_ADAPT_END_DPS   = 130.0;
+
+    const SPEED_ADAPT_POW = 1.0;
+
+    const SPEED_NORM_DPS = 300.0;
+    const SPEED_MAP_POW  = 1.10;
+
+    const SPEED_ATTACK_HZ  = 5.0;
+    const SPEED_RELEASE_HZ = 8.0;
+
+    // =========================================================================
+    // SSOT MOBILE 2.0 — ENERGY MODEL
+    // =========================================================================
+    const GROOVE_EXP = 0.70;
+    const SMOOTH_EXP = 0.70;
+    const ORBIT_EXP  = 1.00;
+
+    const EARN_SCALE = 1.00;
+
+    const COAST_QUALITY_MIN  = 0.28;
+    const COAST_DECAY_MULT   = 0.65;
+
+    // =========================================================================
+    // ✅ ANTI-EXPLOIT: SMOOTH KILL SWITCH
+    // =========================================================================
+    const SMOOTH_KILL_THRESH     = 0.12;
+    const SMOOTH_KILL_DECAY_MULT = 3.25;
+    const SMOOTH_KILL_UNLOCK     = true;
+
+    // =========================================================================
+    // DISRUPTOR METER v1 — SHAKE
+    // =========================================================================
+    const SHAKE_BASELINE_HZ   = 0.65;
+    const SHAKE_DEADZONE     = 0.85;
+    const SHAKE_GAIN         = 3.20;
+    const SHAKE_DECAY        = 2.10;
+    const SHAKE_HIT_THRESH   = 0.85;
+    const SHAKE_ARM_THRESH   = 0.65;
+    const SHAKE_COOLDOWN_SEC = 0.55;
+    const SHAKE_CADENCE_SEC  = 0.28;
+    const SHAKE_SPIKE_GATE   = 2.2;
+
+    // =========================================================================
+    // AUDIO MAPPING (preserved)
+    // =========================================================================
     const AUDIO_GATE   = 0.02;
     const AUDIO_MIN_DB = -42;
     const AUDIO_MAX_DB = -6;
     const AUDIO_EXP    = 1.15;
+
     const MASTER_GAIN  = 2.2;
+
     const TONE_BASE_HZ    = 180;
     const TONE_MAX_ADD_HZ = 220;
 
+    // =========================================================================
+    // Helpers
+    // =========================================================================
+    const clamp01 = (x) => Math.max(0, Math.min(1, x));
+    const lerp = (a,b,t) => a + (b-a)*t;
+    const mag3 = (x,y,z) => Math.sqrt(x*x+y*y+z*z);
     const dbToGain = (db) => Math.pow(10, db/20);
+
+    function alphaFromCutoff(dt, cutoffHz){
+      const tau = 1 / (2 * Math.PI * cutoffHz);
+      return 1 / (1 + tau / Math.max(1e-4, dt));
+    }
+
+    const invLerp01 = (a, b, v) => {
+      if (Math.abs(b - a) < 1e-9) return 0;
+      return clamp01((v - a) / (b - a));
+    };
+
+    function median(arr) {
+      if (!arr.length) return 0;
+      const a = arr.slice().sort((x,y) => x - y);
+      const mid = (a.length - 1) / 2;
+      const lo = Math.floor(mid), hi = Math.ceil(mid);
+      return (a[lo] + a[hi]) / 2;
+    }
 
     function energyToGain(e) {
       if (e <= AUDIO_GATE) return 0;
@@ -724,6 +416,248 @@
       return dbToGain(db);
     }
 
+    function eigenvaluesSym3(m00,m01,m02,m11,m12,m22) {
+      let a00=m00, a01=m01, a02=m02, a11=m11, a12=m12, a22=m22;
+
+      const iters = 10;
+      for (let k=0;k<iters;k++) {
+        let p=0,q=1;
+        let apq = Math.abs(a01);
+        const a02abs = Math.abs(a02);
+        const a12abs = Math.abs(a12);
+        if (a02abs > apq) { apq = a02abs; p=0; q=2; }
+        if (a12abs > apq) { apq = a12abs; p=1; q=2; }
+        if (apq < 1e-12) break;
+
+        let app, aqq, apqv;
+        if (p===0 && q===1) { app=a00; aqq=a11; apqv=a01; }
+        else if (p===0 && q===2) { app=a00; aqq=a22; apqv=a02; }
+        else { app=a11; aqq=a22; apqv=a12; }
+
+        const phi = 0.5 * Math.atan2(2*apqv, (aqq - app));
+        const c = Math.cos(phi);
+        const s = Math.sin(phi);
+
+        function rot(xp, xq) { return [c*xp - s*xq, s*xp + c*xq]; }
+
+        const appNew = c*c*app - 2*s*c*apqv + s*s*aqq;
+        const aqqNew = s*s*app + 2*s*c*apqv + c*c*aqq;
+
+        if (p===0 && q===1) {
+          const [a02n, a12n] = rot(a02, a12);
+          a02=a02n; a12=a12n;
+          a00=appNew; a11=aqqNew; a01=0;
+        } else if (p===0 && q===2) {
+          const [a01n, a12n] = rot(a01, a12);
+          a01=a01n; a12=a12n;
+          a00=appNew; a22=aqqNew; a02=0;
+        } else {
+          const [a01n, a02n] = rot(a01, a02);
+          a01=a01n; a02=a02n;
+          a11=appNew; a22=aqqNew; a12=0;
+        }
+      }
+
+      let l1=a00, l2=a11, l3=a22;
+      if (l1 < l2) [l1,l2]=[l2,l1];
+      if (l2 < l3) [l2,l3]=[l3,l2];
+      if (l1 < l2) [l1,l2]=[l2,l1];
+      return [l1,l2,l3];
+    }
+
+    function autocorrPeak(signal, dt) {
+      const n = signal.length;
+      if (n < 24) return {peak: 0, lag: 0, hz: 0};
+
+      let mean=0;
+      for (let i=0;i<n;i++) mean += signal[i];
+      mean /= n;
+
+      let varr=0;
+      for (let i=0;i<n;i++) {
+        const d = signal[i]-mean;
+        varr += d*d;
+      }
+      if (varr < 1e-9) return {peak: 0, lag: 0, hz: 0};
+
+      const minLag = Math.max(2, Math.floor(1/(MAX_HZ*dt)));
+      const maxLag = Math.min(n-3, Math.floor(1/(MIN_HZ*dt)));
+
+      let best = -1;
+      let bestLag = 0;
+
+      for (let lag=minLag; lag<=maxLag; lag++) {
+        let c=0;
+        for (let i=0;i<n-lag;i++) {
+          c += (signal[i]-mean) * (signal[i+lag]-mean);
+        }
+        const r = c / varr;
+        if (r > best) { best = r; bestLag = lag; }
+      }
+
+      const hz = bestLag > 0 ? (1/(bestLag*dt)) : 0;
+      return {peak: clamp01(best), lag: bestLag, hz};
+    }
+
+    function smoothnessFromJerk(avgJerk) {
+      const t = (JERK_LOOSE - avgJerk) / (JERK_LOOSE - JERK_TIGHT);
+      return clamp01(t);
+    }
+
+    // =========================================================================
+    // ✅ ORBIT helpers
+    // =========================================================================
+    function covOmega3(vecs) {
+      const n = vecs.length;
+      if (n < 10) return {xx:0,xy:0,xz:0,yy:0,yz:0,zz:0, trace:0};
+
+      let mx=0,my=0,mz=0;
+      for (const v of vecs) { mx+=v.x; my+=v.y; mz+=v.z; }
+      mx/=n; my/=n; mz/=n;
+
+      let xx=0,xy=0,xz=0,yy=0,yz=0,zz=0;
+      for (const v of vecs) {
+        const x=v.x-mx, y=v.y-my, z=v.z-mz;
+        xx += x*x; xy += x*y; xz += x*z;
+        yy += y*y; yz += y*z; zz += z*z;
+      }
+      const inv = 1/(n-1);
+      xx*=inv; xy*=inv; xz*=inv; yy*=inv; yz*=inv; zz*=inv;
+      return {xx,xy,xz,yy,yz,zz, trace:(xx+yy+zz)};
+    }
+
+    // Base orbit from covariance (geometry) — returns the *raw* ingredients
+    function orbitFromOmegaCov(cov) {
+      const eps = 1e-12;
+      const tr = cov.trace;
+      if (tr < 1e-12) {
+        return { core01: 0, r2:0, r3:0, planeGate:0, balance:0, couple:0 };
+      }
+
+      const [l1,l2,l3] = eigenvaluesSym3(cov.xx,cov.xy,cov.xz,cov.yy,cov.yz,cov.zz);
+      const s = (l1 + l2 + l3) + eps;
+
+      const r2 = clamp01(l2 / (l1 + eps));
+      const r3 = clamp01(l3 / (l1 + eps));
+
+      const g2 = Math.pow(
+        clamp01((r2 - ORBIT_AX2_MIN) / (1 - ORBIT_AX2_MIN)),
+        ORBIT_AX2_POW
+      );
+
+      const g3 = Math.pow(
+        clamp01((r3 - ORBIT_AX3_MIN) / (1 - ORBIT_AX3_MIN)),
+        ORBIT_AX3_POW
+      );
+
+      // plane/tri-axis gate (pure geometry)
+      let planeGate = clamp01(g2 * g3);
+      planeGate = ORBIT_GATE_FLOOR + (1 - ORBIT_GATE_FLOOR) * planeGate;
+      planeGate = Math.pow(planeGate, ORBIT_GATE_POW);
+
+      // Balance (entropy)
+      const p1 = Math.max(eps, l1 / s);
+      const p2 = Math.max(eps, l2 / s);
+      const p3 = Math.max(eps, l3 / s);
+      const H  = -(p1*Math.log(p1) + p2*Math.log(p2) + p3*Math.log(p3));
+      const Hn = clamp01(H / Math.log(3));
+      const balance = Math.pow(Hn, ORBIT_BALANCE_POW);
+
+      // Coupling (off-diagonal energy)
+      const coupleRaw = (Math.abs(cov.xy) + Math.abs(cov.xz) + Math.abs(cov.yz)) / (tr + eps);
+      const couple = Math.pow(clamp01(coupleRaw * ORBIT_COUPLE_GAIN), ORBIT_COUPLE_POW);
+
+      // Core “lissajousness”
+      const core01 = clamp01(balance * couple);
+
+      return { core01, r2, r3, planeGate, balance, couple };
+    }
+
+    // ✅ stability envelope gate (tricks while levitating)
+    function orbitEnvelopeGate({ groove01, smooth01, speed01, shake01 }) {
+      // must be moving, smooth, and groovy enough
+      const g = Math.pow(clamp01((groove01 - ORBIT_GROOVE_MIN) / (1 - ORBIT_GROOVE_MIN)), ORBIT_ENV_POW);
+      const s = Math.pow(clamp01((smooth01 - ORBIT_SMOOTH_MIN) / (1 - ORBIT_SMOOTH_MIN)), ORBIT_ENV_POW);
+      const v = Math.pow(clamp01((speed01  - ORBIT_SPEED_MIN01) / (1 - ORBIT_SPEED_MIN01)), ORBIT_ENV_POW);
+
+      // anti-shake: orbit is NOT brute force
+      const anti = Math.pow(1 - clamp01(shake01), ORBIT_ANTISHAKE_POW);
+
+      return clamp01(g * s * v * anti);
+    }
+
+    function computeAvg(arr) {
+      if (!arr.length) return 0;
+      let s=0;
+      for (const x of arr) s+=x;
+      return s/arr.length;
+    }
+
+    function trimToWindow(dtMean, targetSec, omegaMag, omegaNorm, omegaVec, jerkBuf, dtBuf) {
+      let targetN = dtMean > 1e-4 ? Math.round(targetSec / dtMean) : MAX_WINDOW_SAMPLES;
+      targetN = Math.max(MIN_WINDOW_SAMPLES, Math.min(MAX_WINDOW_SAMPLES, targetN));
+
+      while (omegaMag.length  > targetN) omegaMag.shift();
+      while (omegaNorm.length > targetN) omegaNorm.shift();
+      while (omegaVec.length  > targetN) omegaVec.shift();
+      while (jerkBuf.length   > targetN) jerkBuf.shift();
+      while (dtBuf.length     > targetN) dtBuf.shift();
+
+      return targetN;
+    }
+
+    // =========================================================================
+    // ✅ Meter continuity (logic preserved; no UI)
+    // =========================================================================
+    const METER_HOLD_SEC = 0.55;
+    const METER_FADE_HZ  = 3.0;
+
+    // =========================================================================
+    // State
+    // =========================================================================
+    let running = false;
+    let lastT = null;
+
+    let ox=0, oy=0, oz=0;
+
+    const omegaMag  = [];
+    const omegaNorm = [];
+    const omegaVec  = [];   // ✅ stores DIRECTION-NORMALIZED omega (unit vectors)
+    const jerkBuf   = [];
+    const dtBuf     = [];
+
+    let emaMean = 0;
+    let emaVar  = 1;
+
+    let lock = false;
+    let lockStrength = 0;
+    let grooveHz = 0;
+
+    let graceLeft = 0;
+    let recenterBadTime = 0;
+
+    let energy = 0;
+    let energyUI = 0;
+
+    // ✅ SPEED v0 state (deg/s)
+    let mSpeedEMA = 0;
+    let speedOut  = 0;
+
+    // continuity memory for meters (NOT speed)
+    let meterHoldLeft = 0;
+    let lastGrooveUI = 0;
+    let lastOrbitUI  = 0;
+    let lastSmoothUI = 0;
+
+    // SHAKE state
+    let shake01 = 0;
+    let accelBaseMag = 9.81;
+    let shakeCooldownLeft = 0;
+    let lastSpikeTime = -1e9;
+    let hadRecentSpike = false;
+
+    let audioCtx = null, osc = null, gainNode = null;
+
     function ensureAudio() {
       if (audioCtx) return;
       audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -731,7 +665,7 @@
       gainNode.gain.value = 0;
 
       osc = audioCtx.createOscillator();
-      osc.type = "sine";
+      osc.type = 'sine';
       osc.frequency.value = TONE_BASE_HZ;
 
       osc.connect(gainNode);
@@ -739,37 +673,16 @@
       osc.start();
     }
 
-    async function enableAudio() {
-      ensureAudio();
-      try { await audioCtx.resume(); } catch(_) {}
-      audioEnabled = true;
-      els.audioBtn.textContent = "Audio: On";
-      els.audioBtn.classList.add("on");
-      els.audioBtn.classList.remove("dim");
-    }
-
-    function disableAudio() {
-      audioEnabled = false;
-      els.audioBtn.textContent = "Audio: Off";
-      els.audioBtn.classList.remove("on");
-      if (audioCtx && gainNode) {
-        const now = audioCtx.currentTime;
-        gainNode.gain.cancelScheduledValues(now);
-        gainNode.gain.setTargetAtTime(0, now, 0.06);
-      }
-    }
-
     function setAudio(eUI, groove, locked) {
-      if (!audioEnabled || !audioCtx || !gainNode || !osc) return;
-      const e01 = clamp01(eUI);
+      if (!audioCtx || !gainNode || !osc) return;
 
-      const gBase = energyToGain(e01);
+      const gBase = energyToGain(clamp01(eUI));
       const gGroove = locked ? (0.30 + 0.70*groove) : (0.08 + 0.22*groove);
       const g = MASTER_GAIN * gBase * gGroove;
 
       const f = TONE_BASE_HZ
               + TONE_MAX_ADD_HZ * (locked ? groove : 0.30*groove)
-              + 60 * e01;
+              + 60 * clamp01(eUI);
 
       const now = audioCtx.currentTime;
       gainNode.gain.cancelScheduledValues(now);
@@ -779,548 +692,472 @@
       osc.frequency.setTargetAtTime(f, now, 0.06);
     }
 
-    disableAudio();
-    els.audioBtn.addEventListener("click", async () => {
-      if (!audioEnabled) await enableAudio();
-      else disableAudio();
-    });
-
-    // =========================================================================
-    // SHAKE LAMP (500ms strobe)
-    // =========================================================================
-    let lampTO = null;
-    function flashShakeLamp(ms = 500){
-      els.shakeLamp.classList.add("on");
-      if (lampTO) clearTimeout(lampTO);
-      lampTO = setTimeout(() => {
-        els.shakeLamp.classList.remove("on");
-        lampTO = null;
-      }, ms);
+    function flushHistorySoft() {
+      const keep = Math.min(18, omegaMag.length);
+      omegaMag.splice(0, Math.max(0, omegaMag.length - keep));
+      omegaNorm.splice(0, Math.max(0, omegaNorm.length - keep));
+      omegaVec.splice(0, Math.max(0, omegaVec.length - keep));
+      jerkBuf.splice(0, Math.max(0, jerkBuf.length - keep));
+      dtBuf.splice(0, Math.max(0, dtBuf.length - keep));
     }
 
-    // =========================================================================
-    // PAIR MODAL (QR popup)
-    // =========================================================================
-    function openPairModal(){
-      els.pairModal.classList.add("on");
-      els.pairModal.setAttribute("aria-hidden","false");
-      renderQR(currentRoomChannel);
+    function meterHoldOrFade(dt) {
+      if (dt > 0) meterHoldLeft = Math.max(0, meterHoldLeft - dt);
+
+      const dtFade = Math.max(1e-3, dt || computeAvg(dtBuf.slice(-50)) || 1/60);
+      const aFade = alphaFromCutoff(dtFade, METER_FADE_HZ);
+      const holding = meterHoldLeft > 0;
+
+      const grooveOut = holding ? lastGrooveUI : (1 - aFade) * lastGrooveUI;
+      const orbitOut  = holding ? lastOrbitUI  : (1 - aFade) * lastOrbitUI;
+      const smoothOut = holding ? lastSmoothUI : (1 - aFade) * lastSmoothUI;
+
+      lastGrooveUI = grooveOut;
+      lastOrbitUI  = orbitOut;
+      lastSmoothUI = smoothOut;
+
+      return { grooveOut, orbitOut, smoothOut };
     }
-    function closePairModal(){
-      els.pairModal.classList.remove("on");
-      els.pairModal.setAttribute("aria-hidden","true");
+
+    function updateSpeedV0(wRawDps, dt) {
+      const dtSafe = Math.max(1e-3, dt || 1/60);
+
+      const wRaw = Math.max(0, wRawDps || 0);
+      const cap  = SPEED_CAP_DPS;
+      const wCap = Math.min(wRaw, cap);
+
+      const wDz = Math.max(0, wCap - SPEED_DEAD_DPS);
+
+      const denom = Math.max(1e-6, (SPEED_ADAPT_END_DPS - SPEED_ADAPT_START_DPS));
+      let tAdapt = (wDz - SPEED_ADAPT_START_DPS) / denom;
+      tAdapt = clamp01(tAdapt);
+      tAdapt = Math.pow(tAdapt, SPEED_ADAPT_POW);
+
+      const cutoffHz = lerp(SPEED_EMA_CUTOFF_FAST_HZ, SPEED_EMA_CUTOFF_SLOW_HZ, tAdapt);
+      const aE = alphaFromCutoff(dtSafe, cutoffHz);
+
+      mSpeedEMA = (mSpeedEMA === 0) ? wDz : ((1 - aE) * mSpeedEMA + aE * wDz);
+      const wFilt = mSpeedEMA;
+
+      const n = clamp01(wFilt / SPEED_NORM_DPS);
+      const target = Math.pow(n, SPEED_MAP_POW);
+
+      const aAtk = alphaFromCutoff(dtSafe, SPEED_ATTACK_HZ);
+      const aRel = alphaFromCutoff(dtSafe, SPEED_RELEASE_HZ);
+      const a = (target >= speedOut) ? aAtk : aRel;
+      speedOut = (1 - a) * speedOut + a * target;
+
+      return { cap, dt: dtSafe, wRaw, wCap, wDz, wFilt, speed: speedOut, cutoffHz, tAdapt };
     }
 
-    els.pairBtn.addEventListener("click", async () => {
-      currentRoomChannel = "orb:" + randCode(6);
-      await connect({ auto:false });
-      openPairModal();
-    });
+    function updateShake(e, t, dt){
+      const acc = e.accelerationIncludingGravity || e.acceleration;
+      if (!acc) {
+        if (dt > 0) shake01 = Math.max(0, shake01 - SHAKE_DECAY * dt);
+        if (dt > 0) shakeCooldownLeft = Math.max(0, shakeCooldownLeft - dt);
+        return { shake01, shakeHit:false, spike:0, amag:0 };
+      }
 
-    els.pairBackdrop.addEventListener("click", closePairModal);
-    els.pairClose.addEventListener("click", closePairModal);
+      const ax = Number(acc.x) || 0;
+      const ay = Number(acc.y) || 0;
+      const az = Number(acc.z) || 0;
+      const amag = mag3(ax, ay, az);
 
-    async function renderQR(roomChannel){
-      els.qr.innerHTML = "";
-      const url = phoneUrlFor(roomChannel);
-      els.urlText.textContent = url;
+      const dtSafe = Math.max(1e-3, dt || 1/60);
 
-      els.copyUrl.onclick = async () => {
-        try{
-          await navigator.clipboard.writeText(url);
-          els.copyUrl.textContent = "Copied";
-          setTimeout(() => els.copyUrl.textContent = "Copy", 700);
-        }catch(_){
-          els.copyUrl.textContent = "Nope";
-          setTimeout(() => els.copyUrl.textContent = "Copy", 700);
+      const aBase = alphaFromCutoff(dtSafe, SHAKE_BASELINE_HZ);
+      accelBaseMag = (isFinite(accelBaseMag) ? accelBaseMag : amag);
+      accelBaseMag = (1 - aBase) * accelBaseMag + aBase * amag;
+
+      const rawSpike = Math.abs(amag - accelBaseMag);
+      const spike = Math.max(0, rawSpike - SHAKE_DEADZONE);
+
+      if (spike > SHAKE_SPIKE_GATE) {
+        if ((t - lastSpikeTime) <= SHAKE_CADENCE_SEC) hadRecentSpike = true;
+        lastSpikeTime = t;
+      }
+      if ((t - lastSpikeTime) > SHAKE_CADENCE_SEC) hadRecentSpike = false;
+
+      shake01 = clamp01(shake01 + spike * SHAKE_GAIN * dtSafe - SHAKE_DECAY * dtSafe);
+
+      shakeCooldownLeft = Math.max(0, shakeCooldownLeft - dtSafe);
+
+      let shakeHit = false;
+      const armed = (shake01 >= SHAKE_ARM_THRESH);
+      const cadenceOk = hadRecentSpike;
+      if (armed && cadenceOk && shakeCooldownLeft <= 0 && shake01 >= SHAKE_HIT_THRESH) {
+        shakeHit = true;
+        shakeCooldownLeft = SHAKE_COOLDOWN_SEC;
+        shake01 = Math.max(0, shake01 - 0.40);
+      }
+
+      return { shake01, shakeHit, spike, amag };
+    }
+
+    function onMotion(e) {
+      if (!running) return;
+
+      const t = performance.now() / 1000;
+      const dt = (lastT == null) ? 0 : (t - lastT);
+      lastT = t;
+
+      if (dt > 0) dtBuf.push(dt);
+
+      const sh = updateShake(e, t, dt);
+      const rr = e.rotationRate;
+
+      // if no rr, still coast + publish
+      if (!rr) {
+        const dtMean = Math.max(1e-3, computeAvg(dtBuf.slice(-50)) || 1/60);
+        const dtForFilter = (dt > 0) ? dt : dtMean;
+        const sv = updateSpeedV0(0, dtForFilter);
+
+        if (dt > 0) {
+          energy = Math.max(0, energy - ENERGY_DECAY * dt);
+          energyUI = lerp(energyUI, energy, UI_SMOOTH);
         }
-      };
 
-      if (typeof QRCode === "undefined" || !QRCode.toCanvas) {
-        els.qr.style.background = "#fff";
-        els.qr.textContent = "QR lib failed to load";
+        const held = meterHoldOrFade(dt);
+
+        publishOrb({
+          room,
+          t: performance.now(),
+          dt: sv.dt,
+          wRaw: sv.wRaw,
+          wCap: sv.wCap,
+          wFilt: sv.wFilt,
+          cap: sv.cap,
+          energy01: energyUI,
+          groove01: held.grooveOut,
+          orbit01: held.orbitOut,
+          smooth01: held.smoothOut,
+          speed01: sv.speed,
+          shake01: sh.shake01,
+          shakeHit: sh.shakeHit,
+          locked: false,
+          hz: 0,
+
+          o_r2: 0, o_r3: 0, o_gate: 0, o_balance: 0, o_couple: 0
+        }, dt);
+
+        setBgFromEnergy(clamp01(energyUI));
+        setAudio(energyUI, held.grooveOut, false);
         return;
       }
 
-      const canvas = document.createElement("canvas");
-      canvas.width = 280; canvas.height = 280;
-      els.qr.appendChild(canvas);
+      const x = rr.beta ?? 0;
+      const y = rr.gamma ?? 0;
+      const z = rr.alpha ?? 0;
 
-      try{
-        await QRCode.toCanvas(canvas, url, {
-          width: 260,
-          margin: 2,
-          color: { dark: "#000000", light: "#ffffff" }
-        });
-      }catch(e){
-        els.qr.textContent = "QR render error";
-        console.error("QR render error:", e);
-      }
-    }
+      const prevOx=ox, prevOy=oy, prevOz=oz;
 
-    // =========================================================================
-    // TELEMETRY MODAL (record/stop/close) — extended debug keys
-    // =========================================================================
-    let teleRecording = false;
-    let teleT0 = 0;
-    let teleLast = 0;
-    let teleLines = 0;
+      ox = lerp(ox, x, OMEGA_LPF);
+      oy = lerp(oy, y, OMEGA_LPF);
+      oz = lerp(oz, z, OMEGA_LPF);
 
-    function openTele(){
-      els.teleModal.classList.add("on");
-      els.teleModal.setAttribute("aria-hidden","false");
-    }
-    function stopTeleRecording(){
-      teleRecording = false;
-      els.teleRecBtn.textContent = "Record";
-      els.teleRecBtn.classList.remove("recOn");
-    }
-    function closeTele(){
-      stopTeleRecording();
-      els.teleModal.classList.remove("on");
-      els.teleModal.setAttribute("aria-hidden","true");
-    }
+      const mStability = mag3(ox,oy,oz);
+      const dtMean = Math.max(1e-3, computeAvg(dtBuf.slice(-50)));
+      const dtForFilter = (dt > 0) ? dt : dtMean;
 
-    function startTeleRecording(){
-      teleRecording = true;
-      teleT0 = performance.now();
-      teleLast = teleT0;
-      teleLines = 0;
+      const wRaw = mag3(x, y, z);
+      const sv = updateSpeedV0(wRaw, dtForFilter);
 
-      els.teleOut.textContent =
-        "ms\tdms\tspeed01\tenergy01\tgroove01\torbit01\tsmooth01\tshake01\tlocked\thz\to_r2\to_r3\to_gate\to_balance\to_couple\n";
-      els.teleRecBtn.textContent = "Stop";
-      els.teleRecBtn.classList.add("recOn");
-    }
+      if (dt > 0) graceLeft = Math.max(0, graceLeft - dt);
 
-    function toggleTeleRecord(){
-      if (!teleRecording) startTeleRecording();
-      else stopTeleRecording();
-    }
+      if (mStability > MIN_OMEGA) {
+        omegaMag.push(mStability);
 
-    els.teleBtn.addEventListener("click", openTele);
-    els.teleBackdrop.addEventListener("click", closeTele);
-    els.teleClose.addEventListener("click", closeTele);
-    els.teleRecBtn.addEventListener("click", toggleTeleRecord);
+        const d0 = mStability - emaMean;
+        emaMean = emaMean + NORM_ALPHA * d0;
 
-    window.addEventListener("keydown", (e) => {
-      if (e.key !== "Escape") return;
-      if (els.teleModal.classList.contains("on")) closeTele();
-      else if (els.pairModal.classList.contains("on")) closePairModal();
-    });
+        const d2 = (mStability - emaMean);
+        emaVar = emaVar + NORM_ALPHA * (d2*d2 - emaVar);
 
-    function telePick01(d, newKey, oldKey){
-      if (d[newKey] != null) {
-        const n = Number(d[newKey]);
-        return isFinite(n) ? n : 0;
-      }
-      const n = Number(d[oldKey]);
-      if (!isFinite(n)) return 0;
-      return (n > 1.5) ? (n / 100) : n;
-    }
-    function telePickNum(d, key){
-      const n = Number(d && d[key]);
-      return isFinite(n) ? n : 0;
-    }
+        const rms = Math.sqrt(Math.max(1e-6, emaVar));
+        omegaNorm.push((mStability - emaMean) / rms);
 
-    function teleMaybeLog(d){
-      if (!teleRecording) return;
+        // ✅ ORBIT v2.1: store DIRECTION-NORMALIZED omega (unit vector)
+        const invM = 1 / Math.max(1e-6, mStability);
+        omegaVec.push({ x: ox*invM, y: oy*invM, z: oz*invM });
 
-      const now = performance.now();
-      const ms  = Math.max(0, now - teleT0);
-      const dms = Math.max(0, now - teleLast);
-      teleLast = now;
-
-      const energy = telePick01(d, "energy01", "energy");
-      const groove = telePick01(d, "groove01", "groove");
-      const orbit  = telePick01(d, "orbit01",  "orbit");
-      const smooth = telePick01(d, "smooth01", "smooth");
-      const speed  = telePick01(d, "speed01",  "speed");
-      const shake  = telePick01(d, "shake01",  "shake");
-
-      const locked = !!d.locked;
-      const hz = (d.hz != null && isFinite(Number(d.hz))) ? Number(d.hz) : 0;
-
-      const o_r2      = telePickNum(d, "o_r2");
-      const o_r3      = telePickNum(d, "o_r3");
-      const o_gate    = telePickNum(d, "o_gate");
-      const o_balance = telePickNum(d, "o_balance");
-      const o_couple  = telePickNum(d, "o_couple");
-
-      const line =
-        `${ms.toFixed(1)}\t${dms.toFixed(1)}\t` +
-        `${speed.toFixed(4)}\t${energy.toFixed(4)}\t${groove.toFixed(4)}\t${orbit.toFixed(4)}\t${smooth.toFixed(4)}\t${shake.toFixed(4)}\t` +
-        `${locked ? 1 : 0}\t${hz.toFixed(3)}\t` +
-        `${o_r2.toFixed(4)}\t${o_r3.toFixed(4)}\t${o_gate.toFixed(4)}\t${o_balance.toFixed(4)}\t${o_couple.toFixed(4)}\n`;
-
-      els.teleOut.textContent += line;
-      teleLines++;
-
-      if (teleLines % 40 === 0) {
-        els.teleOut.scrollTop = els.teleOut.scrollHeight;
-      }
-      if (els.teleOut.textContent.length > 220000) {
-        els.teleOut.textContent += "\n(TRUNCATED: output capped)\n";
-        stopTeleRecording();
-      }
-    }
-
-    // =========================================================================
-    // ROOM STATE
-    // =========================================================================
-    function readUrlRoomOrNull(){
-      try{
-        const u = new URL(location.href);
-        const r = (u.searchParams.get("room") || "").trim();
-        if (!r) return null;
-        return normalizeRoom(r);
-      }catch(_){
-        return null;
-      }
-    }
-    let currentRoomChannel = normalizeRoom(readUrlRoomOrNull() || "orb:test");
-
-    // =========================================================================
-    // PHYSICS
-    // =========================================================================
-    const PHYS = {
-      groundFromBottomPx: 15,
-      groundLinePx: 2,
-      orbRadiusPx: 50,
-
-      // ✅ base scale (same family as before)
-      gBase: 2200,
-
-      // ✅ more headroom so lift feels good again
-      thrustMax: 3000,
-
-      // ✅ separate drag up/down so we can tune falling friction directly
-      upDrag:   2.6,
-      downDrag: 1.8,
-
-      bounce: 0.35,
-      maxUpSpeed: 2200,
-      maxDownSpeed: 2800,
-    };
-
-    let physState = {
-      y: 0,
-      v: 0,
-      lastTs: null,
-      gravityMul: 0.40,
-
-      lift01: 0,
-      energy01: 0,
-    };
-
-    function clamp(v, lo, hi){ return Math.max(lo, Math.min(hi, v)); }
-
-    function readStageMetrics(){
-      const rect = els.physStage.getBoundingClientRect();
-      const stageH = rect.height;
-
-      const groundY = stageH - PHYS.groundFromBottomPx - PHYS.groundLinePx;
-      const yGroundCenter = groundY - PHYS.orbRadiusPx;
-      const yCeilCenter = PHYS.orbRadiusPx;
-      return { stageH, yGroundCenter, yCeilCenter };
-    }
-
-    function applyOrbTransform(){
-      const top = physState.y - PHYS.orbRadiusPx;
-      els.orb.style.transform = `translate(-50%, ${top.toFixed(2)}px)`;
-    }
-
-    function resetOrbToGround(){
-      const { yGroundCenter } = readStageMetrics();
-      physState.y = yGroundCenter;
-      physState.v = 0;
-      applyOrbTransform();
-    }
-
-    // ✅ OLD GRAVITY: slider already expresses 0..3 multiplier
-    function setGravityMul(m){
-      physState.gravityMul = clamp(Number(m) || 0, 0, 3);
-      els.gVal.textContent = physState.gravityMul.toFixed(2);
-    }
-    setGravityMul(els.gSlider.value);
-    els.gSlider.addEventListener("input", (e) => setGravityMul(e.target.value));
-
-    // ✅ fall drag knob: sets PHYS.downDrag directly
-    function setDownDrag(v){
-      PHYS.downDrag = clamp(Number(v) || 0, 0, 10);
-      els.dVal.textContent = PHYS.downDrag.toFixed(2);
-    }
-    setDownDrag(els.dSlider.value);
-    els.dSlider.addEventListener("input", (e) => setDownDrag(e.target.value));
-
-    requestAnimationFrame(resetOrbToGround);
-    window.addEventListener("resize", resetOrbToGround);
-
-    function liftToThrustAccel(l01){
-      return PHYS.thrustMax * clamp01(l01);
-    }
-
-    function physicsStep(ts){
-      if (physState.lastTs == null) physState.lastTs = ts;
-      let dt = (ts - physState.lastTs) / 1000;
-      physState.lastTs = ts;
-
-      dt = clamp(dt, 0, 0.05);
-
-      const { yGroundCenter, yCeilCenter } = readStageMetrics();
-
-      const g = PHYS.gBase * physState.gravityMul;
-      const thrust = liftToThrustAccel(physState.lift01);
-
-      // positive is down
-      let a = g - thrust;
-
-      // ✅ drag differs on fall vs rise
-      const drag = (physState.v >= 0) ? PHYS.downDrag : PHYS.upDrag;
-      a += (-drag * physState.v);
-
-      physState.v += a * dt;
-      physState.v = clamp(physState.v, -PHYS.maxUpSpeed, PHYS.maxDownSpeed);
-
-      physState.y += physState.v * dt;
-
-      if (physState.y > yGroundCenter) {
-        physState.y = yGroundCenter;
-        if (physState.v > 0) physState.v = 0;
+        if (dt > 0) {
+          const dtSafe = Math.max(dt, dtMean * 0.5, 1/120);
+          jerkBuf.push(mag3(ox-prevOx, oy-prevOy, oz-prevOz) / dtSafe);
+        }
+      } else {
+        if (omegaMag.length) omegaMag.shift();
+        if (omegaNorm.length) omegaNorm.shift();
+        if (omegaVec.length) omegaVec.shift();
+        if (jerkBuf.length)  jerkBuf.shift();
       }
 
-      if (physState.y < yCeilCenter) {
-        physState.y = yCeilCenter;
-        if (physState.v < 0) physState.v = -physState.v * PHYS.bounce;
-      }
+      const inStableMode = lock || graceLeft > 0;
+      const windowSec = inStableMode ? STABLE_WINDOW_SEC : HUNT_WINDOW_SEC;
+      const nTarget = trimToWindow(dtMean, windowSec, omegaMag, omegaNorm, omegaVec, jerkBuf, dtBuf);
 
-      applyOrbTransform();
-      requestAnimationFrame(physicsStep);
-    }
-    requestAnimationFrame(physicsStep);
-
-    // =========================================================================
-    // ABLY RECEIVER (AUTO-CONNECT)
-    // =========================================================================
-    let realtime = null;
-    let channel = null;
-
-    const IDLE = {
-      idleMs: 2 * 60 * 1000,
-      warnMs: 90 * 1000,
-      hardMaxMs: 15 * 60 * 1000,
-      checkEveryMs: 1000
-    };
-
-    let idleLastMsgAt = performance.now();
-    let idleWarned = false;
-    let idleInterval = null;
-    let idleHardTO = null;
-
-    function idleMarkActivity(){
-      idleLastMsgAt = performance.now();
-      idleWarned = false;
-    }
-
-    function idleClearTimers(){
-      if (idleInterval) { clearInterval(idleInterval); idleInterval = null; }
-      if (idleHardTO) { clearTimeout(idleHardTO); idleHardTO = null; }
-    }
-
-    function idleDisconnect(reason){
-      idleClearTimers();
-
-      try { if (channel) channel.unsubscribe(); } catch(_) {}
-      try { if (channel) channel.detach(); } catch(_) {}
-      try { if (realtime) realtime.close(); } catch(_) {}
-
-      channel = null;
-      realtime = null;
-
-      setStatus(reason, "bad");
-    }
-
-    function idleStartTimers(){
-      idleClearTimers();
-      idleMarkActivity();
-
-      idleInterval = setInterval(() => {
-        const now = performance.now();
-        const dt = now - idleLastMsgAt;
-
-        if (!idleWarned && dt >= IDLE.warnMs && dt < IDLE.idleMs){
-          idleWarned = true;
-          setStatus(`Idle soon… <span class="dim">(no messages)</span>`, "dim");
+      if (omegaNorm.length < Math.min(MIN_WINDOW_SAMPLES, nTarget)) {
+        if (dt > 0) {
+          energy = Math.max(0, energy - ENERGY_DECAY * dt);
+          energyUI = lerp(energyUI, energy, UI_SMOOTH);
         }
 
-        if (dt >= IDLE.idleMs){
-          idleDisconnect("Idle timeout — refresh page");
-        }
-      }, IDLE.checkEveryMs);
+        const held = meterHoldOrFade(dt);
 
-      idleHardTO = setTimeout(() => {
-        idleDisconnect("Session cap reached — refresh page");
-      }, IDLE.hardMaxMs);
-    }
+        publishOrb({
+          room,
+          t: performance.now(),
+          dt: sv.dt,
+          wRaw: sv.wRaw,
+          wCap: sv.wCap,
+          wFilt: sv.wFilt,
+          cap: sv.cap,
+          energy01: energyUI,
+          groove01: held.grooveOut,
+          orbit01: held.orbitOut,
+          smooth01: held.smoothOut,
+          speed01: sv.speed,
+          shake01: sh.shake01,
+          shakeHit: sh.shakeHit,
+          locked: false,
+          hz: 0,
 
-    let lastData = null;
-    let rafPending = false;
+          o_r2: 0, o_r3: 0, o_gate: 0, o_balance: 0, o_couple: 0
+        }, dt);
 
-    function scheduleUIUpdate(data){
-      lastData = data;
-      if (rafPending) return;
-      rafPending = true;
-      requestAnimationFrame(() => {
-        rafPending = false;
-        if (!lastData) return;
-        applyDataToUI(lastData);
-      });
-    }
-
-    function applyDataToUI(d){
-      function pick01NewOrOld(newKey, oldKey){
-        if (d[newKey] != null) {
-          const n = Number(d[newKey]);
-          return isFinite(n) ? n : 0;
-        }
-        const n = Number(d[oldKey]);
-        if (!isFinite(n)) return 0;
-        return (n > 1.5) ? (n / 100) : n;
-      }
-
-      const energy = pick01NewOrOld("energy01", "energy");
-      const groove = pick01NewOrOld("groove01", "groove");
-      const orbit  = pick01NewOrOld("orbit01",  "orbit");
-      const smooth = pick01NewOrOld("smooth01", "smooth");
-      const speed  = pick01NewOrOld("speed01",  "speed");
-      const shake  = pick01NewOrOld("shake01",  "shake");
-      const locked = !!d.locked;
-
-      const lift = computeLift01(groove, smooth, speed);
-
-      physState.lift01 = lift;
-      physState.energy01 = Math.max(0, Number(energy) || 0);
-
-      setBgFromEnergy(energy);
-
-      els.pct.textContent = toPct01(lift);
-
-      const eText = toPctRaw(energy);
-
-      const liftP = toPct01(lift);
-      const gP = toPct01(groove);
-      const sP = toPct01(smooth);
-      const sp = toPct01(speed);
-      const oP = toPct01(orbit);
-      const sh = toPct01(shake);
-
-      els.vLift.textContent   = `${liftP}%`;
-      els.vGroove.textContent = `${gP}%${locked ? " (locked)" : ""}`;
-      els.vSmooth.textContent = `${sP}%`;
-      els.vSpeed.textContent  = `${sp}%`;
-      els.vOrbit.textContent  = `${oP}%`;
-      els.vEnergy.textContent = `${isFinite(eText) ? eText : 0}%`;
-      els.vShake.textContent  = `${sh}%`;
-
-      setBar(els.bLift,  lift);
-      setBar(els.bGroove, groove);
-      setBar(els.bSmooth, smooth);
-      setBar(els.bSpeed,  speed);
-      setBar(els.bOrbit,  orbit);
-      setBar(els.bEnergy, energy);
-      setBar(els.bShake,  shake);
-
-      const over = (energy > 1);
-      els.vEnergy.classList.toggle("over", over);
-      els.bEnergy.classList.toggle("over", over);
-
-      const shakeHit =
-        d.shakeHit === true ||
-        d.shakeEvent === true ||
-        (typeof d.shakeEvent === "string" && d.shakeEvent) ||
-        (d.verb === "shake") ||
-        (d.action === "shock") ||
-        (d.kind === "shock");
-
-      if (shakeHit) flashShakeLamp(500);
-
-      setAudio(energy, groove, locked);
-    }
-
-    let connecting = false;
-
-    async function connect(opts = {}){
-      if (connecting) return;
-      connecting = true;
-
-      const roomChannel = currentRoomChannel;
-
-      if (typeof Ably === "undefined" || !Ably.Realtime) {
-        fatal("Ably library failed to load. Check DevTools → Console/Network for blocked CDN scripts.");
-        setStatus("FAILED — Ably lib missing", "bad");
-        connecting = false;
+        setBgFromEnergy(clamp01(energyUI));
+        setAudio(energyUI, held.grooveOut, false);
         return;
       }
 
-      setStatus(
-        opts.auto
-          ? `Auto-connecting… <span class="dim">(${roomChannel})</span>`
-          : `Connecting… <span class="dim">(${roomChannel})</span>`,
-        "ok"
-      );
+      const ac = autocorrPeak(omegaNorm, dtMean);
+      lockStrength = lerp(lockStrength, ac.peak, LOCK_SMOOTH);
+      grooveHz = ac.hz;
 
-      idleClearTimers();
+      const jerkWindow = jerkBuf.slice(-Math.min(jerkBuf.length, 70));
+      const avgJerk = median(jerkWindow);
+      const smoothScore = smoothnessFromJerk(avgJerk);
 
-      try { if (channel) channel.unsubscribe(); } catch(e) {}
-      try { if (realtime) realtime.close(); } catch(e) {}
-      realtime = null; channel = null;
+      // ✅ ORBIT v2.1 compute (raw ingredients)
+      const omegaCov = covOmega3(omegaVec);
+      const oRaw = orbitFromOmegaCov(omegaCov);
 
-      const roomCode = stripOrbPrefix(roomChannel);
-      const authUrl = WORKER_BASE + "/token?room=" + encodeURIComponent(roomCode) + "&v=" + Date.now();
-
-      realtime = new Ably.Realtime({ authUrl, echoMessages:false });
-
-      realtime.connection.on("connected", () => setStatus(`Connected ✓ <span class="dim">(${roomChannel})</span>`, "ok"));
-      realtime.connection.on("failed", (st) => { console.error("Ably failed:", st); setStatus("FAILED — see console", "bad"); });
-      realtime.connection.on("disconnected", () => setStatus("Disconnected <span class=\"dim\">(refresh page)</span>", "bad"));
-
-      channel = realtime.channels.get(roomChannel);
-
-      channel.attach((err) => {
-        if (err) { console.error("Channel attach failed:", err); setStatus("Channel attach FAILED — see console", "bad"); return; }
-        setStatus(`Connected ✓ (listening…) <span class="dim">(${roomChannel})</span>`, "ok");
-        idleStartTimers();
+      // ✅ envelope gate: only “tricks” inside stable levitation, and anti-shake
+      const envGate = orbitEnvelopeGate({
+        groove01: lockStrength,
+        smooth01: smoothScore,
+        speed01:  sv.speed,
+        shake01:  sh.shake01
       });
 
-      channel.subscribe("orb", (msg) => {
-        idleMarkActivity();
+      // Combine: liss core * plane gate * envelope gate
+      const shapedCore = clamp01(oRaw.core01 * oRaw.planeGate * envGate);
 
-        const d = (msg && msg.data) ? msg.data : {};
+      // Energy uses ORBIT_FLOOR..1
+      const orbitBonus = ORBIT_FLOOR + (1 - ORBIT_FLOOR) * shapedCore;
 
-        let s = "";
-        try { s = JSON.stringify(d); } catch(_) { s = String(d); }
-        if (s.length > 240) s = s.slice(0, 240) + " …";
-        els.last.textContent = s;
+      // UI published is 0..1, shaped
+      const orbitUI = Math.pow(shapedCore, ORBIT_UI_EXP);
 
-        if (els.pairModal.classList.contains("on")) closePairModal();
+      meterHoldLeft = METER_HOLD_SEC;
+      lastGrooveUI = lockStrength;
+      lastOrbitUI  = orbitUI;
+      lastSmoothUI = smoothScore;
 
-        teleMaybeLog(d);
-        scheduleUIUpdate(d);
-      });
+      if (!lock) {
+        if (lockStrength > LOCK_ON) { lock = true; graceLeft = 0; }
+      } else {
+        if (lockStrength < LOCK_OFF) { lock = false; graceLeft = GRACE_SEC; }
+      }
 
-      connecting = false;
+      const inGrace = (!lock && graceLeft > 0);
+      if (inGrace && lockStrength > LOCK_ON) { lock = true; graceLeft = 0; }
+
+      if (dt > 0) {
+        const badGroove = lockStrength <= RECENTER_GROOVE_MAX;
+        const notLockedNow = !lock;
+        if (badGroove && notLockedNow) recenterBadTime += dt;
+        else recenterBadTime = Math.max(0, recenterBadTime - 1.5*dt);
+
+        if (recenterBadTime >= RECENTER_SEC) {
+          flushHistorySoft();
+          recenterBadTime = 0;
+        }
+      }
+
+      if (dt > 0) {
+        const grooveTerm = Math.pow(clamp01(lockStrength), GROOVE_EXP);
+        const smoothTerm = Math.pow(clamp01(smoothScore), SMOOTH_EXP);
+        const orbitTerm  = Math.pow(clamp01(orbitBonus),  ORBIT_EXP); // ✅ energy uses orbitBonus
+
+        const qualityTerm = grooveTerm * smoothTerm;
+        const earnBase = EARN_SCALE * grooveTerm * smoothTerm * orbitTerm;
+
+        const effectivelyLocked = lock || inGrace;
+        const gain = effectivelyLocked ? ENERGY_GAIN_LOCKED : ENERGY_GAIN_FREE;
+
+        const smoothKill = (smoothScore < SMOOTH_KILL_THRESH);
+        const earn = smoothKill ? 0 : (gain * earnBase);
+
+        let decay = ENERGY_DECAY;
+        if (qualityTerm >= COAST_QUALITY_MIN) decay *= COAST_DECAY_MULT;
+
+        if (smoothKill) {
+          decay *= SMOOTH_KILL_DECAY_MULT;
+          if (SMOOTH_KILL_UNLOCK) { lock = false; graceLeft = 0; }
+        }
+
+        energy = Math.max(0, energy + (earn - decay) * dt);
+        energyUI = lerp(energyUI, energy, UI_SMOOTH);
+      }
+
+      const lockedNow = !!(lock || inGrace);
+
+      publishOrb({
+        room,
+        t: performance.now(),
+        dt: sv.dt,
+        wRaw: sv.wRaw,
+        wCap: sv.wCap,
+        wFilt: sv.wFilt,
+        cap: sv.cap,
+        energy01: energyUI,
+        groove01: lockStrength,
+        orbit01: orbitUI,
+        smooth01: smoothScore,
+        speed01: sv.speed,
+        shake01: sh.shake01,
+        shakeHit: sh.shakeHit,
+        locked: lockedNow,
+        hz: grooveHz,
+
+        // ✅ ORBIT DEBUG:
+        // r2/r3/balance/couple remain “shape” diagnostics.
+        // o_gate now reflects the REAL “orbit availability” (planeGate * envelope gate).
+        o_r2: oRaw.r2,
+        o_r3: oRaw.r3,
+        o_gate: clamp01(oRaw.planeGate * envGate),
+        o_balance: oRaw.balance,
+        o_couple: oRaw.couple
+      }, dt);
+
+      setBgFromEnergy(clamp01(energyUI));
+      setAudio(energyUI, lockStrength, lockedNow);
     }
 
-    // DEV button forces room=test always + launches QR
-    els.newRoom.addEventListener("click", async () => {
-      currentRoomChannel = "orb:test";
-      await connect({ auto:false });
-      openPairModal();
-    });
+    // =========================================================================
+    // iOS permission gate (UI-less)
+    // =========================================================================
+    async function requestMotionPermissionIfNeeded() {
+      const needs = (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function')
+                 || (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function');
 
-    (async function init(){
-      connect({ auto:true });
-    })();
+      if (!needs) return true;
+
+      const reqs = [];
+
+      if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
+        reqs.push(DeviceMotionEvent.requestPermission().then(s => s === 'granted').catch(() => false));
+      }
+
+      if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+        reqs.push(DeviceOrientationEvent.requestPermission().then(s => s === 'granted').catch(() => false));
+      }
+
+      const results = await Promise.all(reqs);
+      return results.every(Boolean);
+    }
+
+    // =========================================================================
+    // Start/Stop (button label toggles only)
+    // =========================================================================
+    async function start() {
+      if (!window.isSecureContext) return;
+
+      startBtn.disabled = true;
+      try {
+        const ok = await requestMotionPermissionIfNeeded();
+        if (!ok) return;
+
+        ensureAudio();
+        try { await audioCtx.resume(); } catch(e) {}
+
+        nextSendAtMs = 0;
+        lastSig = null;
+        await connectRelay(); // ok if false; can run locally
+
+        running = true;
+        lastT = null;
+
+        ox=oy=oz=0;
+        omegaMag.length  = 0;
+        omegaNorm.length = 0;
+        omegaVec.length  = 0;
+        jerkBuf.length   = 0;
+        dtBuf.length     = 0;
+
+        emaMean = 0;
+        emaVar  = 1;
+
+        lock = false;
+        lockStrength = 0;
+        grooveHz = 0;
+
+        graceLeft = 0;
+        recenterBadTime = 0;
+
+        energy = 0;
+        energyUI = 0;
+
+        mSpeedEMA = 0;
+        speedOut  = 0;
+
+        meterHoldLeft = 0;
+        lastGrooveUI = 0;
+        lastOrbitUI  = 0;
+        lastSmoothUI = 0;
+
+        shake01 = 0;
+        accelBaseMag = 9.81;
+        shakeCooldownLeft = 0;
+        lastSpikeTime = -1e9;
+        hadRecentSpike = false;
+
+        setAudio(0,0,false);
+        setBgFromEnergy(0);
+
+        window.addEventListener('devicemotion', onMotion, { passive: true });
+        startBtn.textContent = 'Stop';
+      } finally {
+        startBtn.disabled = false;
+      }
+
+      // Attempt to lock to portrait (best-effort; may fail on iOS depending on context)
+      if (screen.orientation && screen.orientation.lock) {
+        try { await screen.orientation.lock('portrait-primary'); }
+        catch (e) { /* no-op */ }
+      }
+    }
+
+    function stop() {
+      running = false;
+      window.removeEventListener('devicemotion', onMotion);
+
+      if (audioCtx && gainNode) {
+        const now = audioCtx.currentTime;
+        gainNode.gain.cancelScheduledValues(now);
+        gainNode.gain.setTargetAtTime(0, now, 0.05);
+      }
+
+      disconnectRelay();
+      startBtn.textContent = 'Start';
+      setBgFromEnergy(0);
+    }
+
+    startBtn.addEventListener('click', () => {
+      if (!running) start();
+      else stop();
+    });
+  })();
   </script>
 </body>
 </html>
