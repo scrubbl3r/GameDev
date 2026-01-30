@@ -269,27 +269,38 @@
     const JERK_LOOSE = 2600.0;
 
     // =========================================================================
-    // ✅ ORBIT v2 — Lissajous / tri-axial bonus (REFactor)
+    // ✅ ORBIT v2.1 — COUPLED LISS / “TRICKS WHILE LEVITATING”
+    // - Direction-normalized omega (so orbit is about geometry, not force)
+    // - Orbit only counts inside a stability envelope (smooth+groove+speed)
+    // - Orbit is explicitly anti-shake (shake suppresses orbit charge)
     // =========================================================================
     const ORBIT_FLOOR = 0.25;
 
-    const ORBIT_BALANCE_POW = 1.80;  // was 1.00
+    const ORBIT_BALANCE_POW = 1.80;
 
-    const ORBIT_COUPLE_GAIN = 1.9;  // was 2.20  (lower = stricter)
-    const ORBIT_COUPLE_POW  = 1.6;  // was 1.00  (higher = stricter)
+    const ORBIT_COUPLE_GAIN = 1.9;
+    const ORBIT_COUPLE_POW  = 1.6;
 
-    const ORBIT_AX2_MIN = 0.16;   // raise => punish single-axis harder
-    const ORBIT_AX3_MIN = 0.08;   // raise => punish dual-axis / planar harder
+    const ORBIT_AX2_MIN = 0.16;
+    const ORBIT_AX3_MIN = 0.08;
 
-    const ORBIT_AX2_POW = 1.6;    // higher => harsher single-axis punishment
-    const ORBIT_AX3_POW = 1.3;    // higher => harsher dual-axis punishment
+    const ORBIT_AX2_POW = 1.6;
+    const ORBIT_AX3_POW = 1.3;
 
-    const ORBIT_GATE_POW = 1.0;   // higher => overall stricter (1.0..3.5)
-
-    const ORBIT_GATE_FLOOR = 0.06; // lets meter "breathe" (0.03..0.10)
+    const ORBIT_GATE_POW = 1.0;
+    const ORBIT_GATE_FLOOR = 0.06;
 
     // UI shaping for published orbit01 (meter feel)
     const ORBIT_UI_EXP = 0.55;
+
+    // ✅ “tricks while levitating” envelope
+    const ORBIT_GROOVE_MIN   = 0.26;  // must have some groove lock
+    const ORBIT_SMOOTH_MIN   = 0.28;  // must be smooth enough (anti-jerk)
+    const ORBIT_SPEED_MIN01  = 0.10;  // must be moving (anti-jitter)
+    const ORBIT_ENV_POW      = 1.25;  // higher = stricter envelope
+
+    // ✅ anti-shake suppression (orbit is not brute force)
+    const ORBIT_ANTISHAKE_POW = 2.2;  // higher = shake kills orbit harder
 
     const ENERGY_GAIN_LOCKED = 1.25;
     const ENERGY_GAIN_FREE   = 0.65;
@@ -494,7 +505,7 @@
     }
 
     // =========================================================================
-    // ✅ ORBIT v2 helpers (NEW)
+    // ✅ ORBIT helpers
     // =========================================================================
     function covOmega3(vecs) {
       const n = vecs.length;
@@ -515,28 +526,19 @@
       return {xx,xy,xz,yy,yz,zz, trace:(xx+yy+zz)};
     }
 
-    // ✅ Orbit scorer that ALSO returns debug scalars for telemetry
+    // Base orbit from covariance (geometry) — returns the *raw* ingredients
     function orbitFromOmegaCov(cov) {
       const eps = 1e-12;
       const tr = cov.trace;
-      if (tr < 1e-9) {
-        return {
-          orbitBonus: ORBIT_FLOOR,
-          orbitUI: 0,
-          r2: 0, r3: 0,
-          gate: 0,
-          balance: 0,
-          couple: 0
-        };
+      if (tr < 1e-12) {
+        return { core01: 0, r2:0, r3:0, planeGate:0, balance:0, couple:0 };
       }
 
-      // principal-axis energy
       const [l1,l2,l3] = eigenvaluesSym3(cov.xx,cov.xy,cov.xz,cov.yy,cov.yz,cov.zz);
       const s = (l1 + l2 + l3) + eps;
 
-      // axis rank ratios vs dominant (good phone heuristic)
-      const r2 = clamp01(l2 / (l1 + eps));   // 2nd axis presence
-      const r3 = clamp01(l3 / (l1 + eps));   // 3rd axis presence (tri-axialness)
+      const r2 = clamp01(l2 / (l1 + eps));
+      const r3 = clamp01(l3 / (l1 + eps));
 
       const g2 = Math.pow(
         clamp01((r2 - ORBIT_AX2_MIN) / (1 - ORBIT_AX2_MIN)),
@@ -548,12 +550,12 @@
         ORBIT_AX3_POW
       );
 
-      // gate floor prevents "stuck at 0" while still punishing planar hard
-      let gate = clamp01(g2 * g3);
-      gate = ORBIT_GATE_FLOOR + (1 - ORBIT_GATE_FLOOR) * gate;
-      gate = Math.pow(gate, ORBIT_GATE_POW);
+      // plane/tri-axis gate (pure geometry)
+      let planeGate = clamp01(g2 * g3);
+      planeGate = ORBIT_GATE_FLOOR + (1 - ORBIT_GATE_FLOOR) * planeGate;
+      planeGate = Math.pow(planeGate, ORBIT_GATE_POW);
 
-      // Balance (entropy of eigen spectrum): 1 when tri-axial balanced
+      // Balance (entropy)
       const p1 = Math.max(eps, l1 / s);
       const p2 = Math.max(eps, l2 / s);
       const p3 = Math.max(eps, l3 / s);
@@ -561,21 +563,27 @@
       const Hn = clamp01(H / Math.log(3));
       const balance = Math.pow(Hn, ORBIT_BALANCE_POW);
 
-      // Coupling: simultaneous multi-axis boost (Lissajous-like)
+      // Coupling (off-diagonal energy)
       const coupleRaw = (Math.abs(cov.xy) + Math.abs(cov.xz) + Math.abs(cov.yz)) / (tr + eps);
       const couple = Math.pow(clamp01(coupleRaw * ORBIT_COUPLE_GAIN), ORBIT_COUPLE_POW);
 
-      // core, then gate it
-      const core = clamp01(balance * couple);
-      const shaped = clamp01(core * gate);
+      // Core “lissajousness”
+      const core01 = clamp01(balance * couple);
 
-      const orbitBonus = ORBIT_FLOOR + (1 - ORBIT_FLOOR) * shaped;
+      return { core01, r2, r3, planeGate, balance, couple };
+    }
 
-      // UI mapping: normalize out the floor then shape
-      const orbitShown = (orbitBonus - ORBIT_FLOOR) / (1 - ORBIT_FLOOR);
-      const orbitUI = Math.pow(clamp01(orbitShown), ORBIT_UI_EXP);
+    // ✅ stability envelope gate (tricks while levitating)
+    function orbitEnvelopeGate({ groove01, smooth01, speed01, shake01 }) {
+      // must be moving, smooth, and groovy enough
+      const g = Math.pow(clamp01((groove01 - ORBIT_GROOVE_MIN) / (1 - ORBIT_GROOVE_MIN)), ORBIT_ENV_POW);
+      const s = Math.pow(clamp01((smooth01 - ORBIT_SMOOTH_MIN) / (1 - ORBIT_SMOOTH_MIN)), ORBIT_ENV_POW);
+      const v = Math.pow(clamp01((speed01  - ORBIT_SPEED_MIN01) / (1 - ORBIT_SPEED_MIN01)), ORBIT_ENV_POW);
 
-      return { orbitBonus, orbitUI, r2, r3, gate, balance, couple };
+      // anti-shake: orbit is NOT brute force
+      const anti = Math.pow(1 - clamp01(shake01), ORBIT_ANTISHAKE_POW);
+
+      return clamp01(g * s * v * anti);
     }
 
     function computeAvg(arr) {
@@ -614,7 +622,7 @@
 
     const omegaMag  = [];
     const omegaNorm = [];
-    const omegaVec  = [];   // ✅ ORBIT v2 buffer (filtered omega vectors)
+    const omegaVec  = [];   // ✅ stores DIRECTION-NORMALIZED omega (unit vectors)
     const jerkBuf   = [];
     const dtBuf     = [];
 
@@ -829,7 +837,6 @@
           locked: false,
           hz: 0,
 
-          // ✅ ORBIT DEBUG keys always present
           o_r2: 0, o_r3: 0, o_gate: 0, o_balance: 0, o_couple: 0
         }, dt);
 
@@ -869,8 +876,9 @@
         const rms = Math.sqrt(Math.max(1e-6, emaVar));
         omegaNorm.push((mStability - emaMean) / rms);
 
-        // ✅ ORBIT v2: store filtered omega vector (raw, not normalized)
-        omegaVec.push({x:ox, y:oy, z:oz});
+        // ✅ ORBIT v2.1: store DIRECTION-NORMALIZED omega (unit vector)
+        const invM = 1 / Math.max(1e-6, mStability);
+        omegaVec.push({ x: ox*invM, y: oy*invM, z: oz*invM });
 
         if (dt > 0) {
           const dtSafe = Math.max(dt, dtMean * 0.5, 1/120);
@@ -913,7 +921,6 @@
           locked: false,
           hz: 0,
 
-          // ✅ ORBIT DEBUG keys always present
           o_r2: 0, o_r3: 0, o_gate: 0, o_balance: 0, o_couple: 0
         }, dt);
 
@@ -930,16 +937,30 @@
       const avgJerk = median(jerkWindow);
       const smoothScore = smoothnessFromJerk(avgJerk);
 
-      // ✅ ORBIT v2 compute (+ debug)
+      // ✅ ORBIT v2.1 compute (raw ingredients)
       const omegaCov = covOmega3(omegaVec);
-      const o = orbitFromOmegaCov(omegaCov);
+      const oRaw = orbitFromOmegaCov(omegaCov);
 
-      const orbitBonus = o.orbitBonus; // [ORBIT_FLOOR..1] (energy uses this)
-      const orbitUI    = o.orbitUI;    // [0..1]          (published orbit01)
+      // ✅ envelope gate: only “tricks” inside stable levitation, and anti-shake
+      const envGate = orbitEnvelopeGate({
+        groove01: lockStrength,
+        smooth01: smoothScore,
+        speed01:  sv.speed,
+        shake01:  sh.shake01
+      });
+
+      // Combine: liss core * plane gate * envelope gate
+      const shapedCore = clamp01(oRaw.core01 * oRaw.planeGate * envGate);
+
+      // Energy uses ORBIT_FLOOR..1
+      const orbitBonus = ORBIT_FLOOR + (1 - ORBIT_FLOOR) * shapedCore;
+
+      // UI published is 0..1, shaped
+      const orbitUI = Math.pow(shapedCore, ORBIT_UI_EXP);
 
       meterHoldLeft = METER_HOLD_SEC;
       lastGrooveUI = lockStrength;
-      lastOrbitUI  = orbitUI;     // ✅ store UI-shaped orbit
+      lastOrbitUI  = orbitUI;
       lastSmoothUI = smoothScore;
 
       if (!lock) {
@@ -966,7 +987,7 @@
       if (dt > 0) {
         const grooveTerm = Math.pow(clamp01(lockStrength), GROOVE_EXP);
         const smoothTerm = Math.pow(clamp01(smoothScore), SMOOTH_EXP);
-        const orbitTerm  = Math.pow(clamp01(orbitBonus),  ORBIT_EXP); // ✅ energy uses orbitBonus (not UI)
+        const orbitTerm  = Math.pow(clamp01(orbitBonus),  ORBIT_EXP); // ✅ energy uses orbitBonus
 
         const qualityTerm = grooveTerm * smoothTerm;
         const earnBase = EARN_SCALE * grooveTerm * smoothTerm * orbitTerm;
@@ -1001,7 +1022,7 @@
         cap: sv.cap,
         energy01: energyUI,
         groove01: lockStrength,
-        orbit01: orbitUI,       // ✅ publish UI-shaped orbit for “meter”
+        orbit01: orbitUI,
         smooth01: smoothScore,
         speed01: sv.speed,
         shake01: sh.shake01,
@@ -1009,12 +1030,14 @@
         locked: lockedNow,
         hz: grooveHz,
 
-        // ✅ ORBIT DEBUG: what your receiver telemetry expects
-        o_r2: o.r2,
-        o_r3: o.r3,
-        o_gate: o.gate,
-        o_balance: o.balance,
-        o_couple: o.couple
+        // ✅ ORBIT DEBUG:
+        // r2/r3/balance/couple remain “shape” diagnostics.
+        // o_gate now reflects the REAL “orbit availability” (planeGate * envelope gate).
+        o_r2: oRaw.r2,
+        o_r3: oRaw.r3,
+        o_gate: clamp01(oRaw.planeGate * envGate),
+        o_balance: oRaw.balance,
+        o_couple: oRaw.couple
       }, dt);
 
       setBgFromEnergy(clamp01(energyUI));
