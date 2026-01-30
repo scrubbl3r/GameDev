@@ -291,16 +291,18 @@
     const ORBIT_GATE_FLOOR = 0.06;
 
     // UI shaping for published orbit01 (meter feel)
-    const ORBIT_UI_EXP = 0.55;
+    const ORBIT_UI_EXP   = 0.40;  // was 0.55  (lift small values)
+    const ORBIT_UI_GAIN  = 8.0;   // NEW       (4..10 typical)
+    const ORBIT_UI_FLOOR = 0.02;  // NEW       (tiny visible floor once alive)
 
-    // ✅ “tricks while levitating” envelope
-    const ORBIT_GROOVE_MIN   = 0.26;  // must have some groove lock
-    const ORBIT_SMOOTH_MIN   = 0.28;  // must be smooth enough (anti-jerk)
-    const ORBIT_SPEED_MIN01  = 0.10;  // must be moving (anti-jitter)
-    const ORBIT_ENV_POW      = 1.25;  // higher = stricter envelope
+    // ✅ “tricks while levitating” envelope (loosened slightly)
+    const ORBIT_GROOVE_MIN   = 0.22;  // was 0.26
+    const ORBIT_SMOOTH_MIN   = 0.22;  // was 0.28
+    const ORBIT_SPEED_MIN01  = 0.08;  // was 0.10
+    const ORBIT_ENV_POW      = 1.00;  // was 1.25
 
-    // ✅ anti-shake suppression (orbit is not brute force)
-    const ORBIT_ANTISHAKE_POW = 2.2;  // higher = shake kills orbit harder
+    // ✅ anti-shake suppression (orbit is not brute force) (softened slightly)
+    const ORBIT_ANTISHAKE_POW = 1.4;  // was 2.2
 
     const ENERGY_GAIN_LOCKED = 1.25;
     const ENERGY_GAIN_FREE   = 0.65;
@@ -955,8 +957,10 @@
       // Energy uses ORBIT_FLOOR..1
       const orbitBonus = ORBIT_FLOOR + (1 - ORBIT_FLOOR) * shapedCore;
 
-      // UI published is 0..1, shaped
-      const orbitUI = Math.pow(shapedCore, ORBIT_UI_EXP);
+      // UI published is 0..1, shaped + scaled for visibility
+      let orbitUI = Math.pow(shapedCore, ORBIT_UI_EXP);
+      orbitUI = clamp01(orbitUI * ORBIT_UI_GAIN);
+      if (orbitUI > 0) orbitUI = Math.max(orbitUI, ORBIT_UI_FLOOR);
 
       meterHoldLeft = METER_HOLD_SEC;
       lastGrooveUI = lockStrength;
