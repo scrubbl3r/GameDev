@@ -248,10 +248,25 @@
       flex:1 1 auto;
       border:1px solid rgba(50,255,117,.22);
       border-radius:14px;
-      background: rgba(0,0,0,.22);
+
+      /* ✅ STARFIELD BACKDROP: opaque black */
+      background: #000;
+
       overflow:hidden;
       box-shadow: inset 0 0 0 1px rgba(0,0,0,.25);
     }
+
+    /* ✅ STARFIELD CANVAS */
+    .starCanvas{
+      position:absolute;
+      inset:0;
+      width:100%;
+      height:100%;
+      background:#000; /* opaque */
+      z-index:0;
+      pointer-events:none;
+    }
+
     .groundLine{
       position:absolute;
       left:16px;
@@ -261,6 +276,7 @@
       bottom: 15px;
       opacity: 0.95;
       box-shadow: 0 0 18px rgba(50,255,117,.12);
+      z-index:2;
     }
 
     .orb{
@@ -286,6 +302,8 @@
         0 0 34px rgba(var(--bg-r), var(--bg-g), var(--bg-b), 0.18),
         0 0 60px rgba(var(--bg-r), var(--bg-g), var(--bg-b), calc(0.08 + 0.26 * var(--charge))),
         inset 0 0 0 1px rgba(0,0,0,.30);
+
+      z-index:3;
     }
 
     .physControls{
@@ -501,6 +519,9 @@
         <div class="physHeader">Game Physics</div>
 
         <div id="physStage" class="physStage" aria-label="Physics test stage">
+          <!-- ✅ STARFIELD -->
+          <canvas id="stars" class="starCanvas" aria-hidden="true"></canvas>
+
           <div class="groundLine" aria-label="Ground"></div>
           <div id="orb" class="orb" aria-label="Orb"></div>
         </div>
@@ -606,6 +627,7 @@
       // physics
       orb: $("orb"),
       physStage: $("physStage"),
+      stars: $("stars"),
       gSlider: $("gSlider"),
       gVal: $("gVal"),
       dSlider: $("dSlider"),
@@ -1011,6 +1033,10 @@
 
       lift01: 0,
       energy01: 0,
+
+      // ✅ feed starfield
+      orbit01: 0,
+      speed01: 0,
     };
 
     function clamp(v, lo, hi){ return Math.max(lo, Math.min(hi, v)); }
@@ -1054,11 +1080,121 @@
     els.dSlider.addEventListener("input", (e) => setDownDrag(e.target.value));
 
     requestAnimationFrame(resetOrbToGround);
-    window.addEventListener("resize", resetOrbToGround);
+    window.addEventListener("resize", () => {
+      resetOrbToGround();
+      starResize(true);
+    });
 
     function liftToThrustAccel(l01){
       return PHYS.thrustMax * clamp01(l01);
     }
+
+    // =========================================================================
+    // ✅ STARFIELD (scrolling, opaque black)
+    // =========================================================================
+    const STAR = {
+      layers: [
+        { count: 110, rMin: 0.6, rMax: 1.6, spd: 24, aMin: 0.25, aMax: 0.75 },
+        { count:  70, rMin: 1.0, rMax: 2.4, spd: 48, aMin: 0.30, aMax: 0.95 },
+      ],
+      driftPxPerSec: 28,     // mild horizontal drift from orbit
+      speedBoostPxPerSec: 180, // lift/speed boost
+    };
+
+    let starCtx = null;
+    let starDpr = 1;
+    let starW = 0, starH = 0;
+    let starLayers = [];
+
+    function r01(){ return Math.random(); }
+    function rIn(a,b){ return a + (b-a) * r01(); }
+
+    function starResize(regen=false){
+      const c = els.stars;
+      if (!c) return;
+
+      const rect = els.physStage.getBoundingClientRect();
+      const w = Math.max(1, Math.floor(rect.width));
+      const h = Math.max(1, Math.floor(rect.height));
+
+      const dpr = Math.max(1, Math.min(2.5, window.devicePixelRatio || 1));
+      starDpr = dpr;
+
+      // only resize when changed (or forced)
+      if (!regen && w === starW && h === starH && c.width === Math.floor(w*dpr) && c.height === Math.floor(h*dpr)) return;
+
+      starW = w; starH = h;
+
+      c.width  = Math.floor(w * dpr);
+      c.height = Math.floor(h * dpr);
+      c.style.width = w + "px";
+      c.style.height = h + "px";
+
+      starCtx = c.getContext("2d", { alpha: false });
+      if (starCtx) starCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+      // (re)seed stars
+      starLayers = STAR.layers.map(L => {
+        const arr = [];
+        for (let i=0;i<L.count;i++){
+          arr.push({
+            x: rIn(0, w),
+            y: rIn(0, h),
+            r: rIn(L.rMin, L.rMax),
+            a: rIn(L.aMin, L.aMax),
+            spd: L.spd * rIn(0.85, 1.15)
+          });
+        }
+        return { cfg: L, stars: arr };
+      });
+    }
+
+    function drawStars(dt){
+      if (!starCtx) return;
+      const ctx = starCtx;
+      const w = starW, h = starH;
+
+      // opaque black clear
+      ctx.fillStyle = "#000";
+      ctx.fillRect(0,0,w,h);
+
+      // speed ties lightly to gameplay
+      const lift = clamp01(physState.lift01);
+      const speed01 = clamp01(physState.speed01);
+      const drift = (clamp01(physState.orbit01) - 0.5) * STAR.driftPxPerSec;
+
+      const boost = STAR.speedBoostPxPerSec * (0.55*lift + 0.45*speed01);
+
+      for (const layer of starLayers){
+        const stars = layer.stars;
+
+        for (const s of stars){
+          s.y += (s.spd + boost * 0.35) * dt;
+          s.x += drift * dt * 0.35;
+
+          if (s.y > h + 4) s.y = -4;
+          if (s.x < -4) s.x = w + 4;
+          if (s.x > w + 4) s.x = -4;
+
+          // subtle green tint (still reads as “stars”)
+          const a = s.a;
+          ctx.fillStyle = `rgba(210,255,235,${a})`;
+          ctx.beginPath();
+          ctx.arc(s.x, s.y, s.r, 0, Math.PI*2);
+          ctx.fill();
+        }
+      }
+
+      // tiny vignette (keeps edges nice)
+      const vg = ctx.createRadialGradient(w*0.5, h*0.42, Math.min(w,h)*0.10, w*0.5, h*0.42, Math.max(w,h)*0.75);
+      vg.addColorStop(0, "rgba(0,0,0,0.0)");
+      vg.addColorStop(1, "rgba(0,0,0,0.55)");
+      ctx.fillStyle = vg;
+      ctx.fillRect(0,0,w,h);
+    }
+
+    // init starfield
+    starResize(true);
 
     function physicsStep(ts){
       if (physState.lastTs == null) physState.lastTs = ts;
@@ -1093,6 +1229,9 @@
         physState.y = yCeilCenter;
         if (physState.v < 0) physState.v = -physState.v * PHYS.bounce;
       }
+
+      // ✅ draw starfield first (background)
+      drawStars(dt);
 
       applyOrbTransform();
       requestAnimationFrame(physicsStep);
@@ -1200,6 +1339,8 @@
 
       physState.lift01 = lift;
       physState.energy01 = Math.max(0, Number(energy) || 0);
+      physState.orbit01 = orbit;
+      physState.speed01 = speed;
 
       setBgFromEnergy(energy);
 
@@ -1320,6 +1461,8 @@
 
     (async function init(){
       connect({ auto:true });
+      // ensure star canvas matches initial layout
+      requestAnimationFrame(() => starResize(false));
     })();
   </script>
 </body>
