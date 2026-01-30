@@ -269,7 +269,9 @@
     const JERK_LOOSE = 2600.0;
 
     // =========================================================================
-    // ✅ ORBIT — v3.1 (Option A: r3Gate to punish flat circles / reward 3D)
+    // ✅ ORBIT — v3.0 (INDEPENDENT)
+    // Orbit measures direction diversity, NOT “levitation cleanliness”.
+    // Only gating is a low-motion floor to prevent sensor jitter from filling it.
     // =========================================================================
     const ORBIT_FLOOR = 0.18;
 
@@ -293,12 +295,6 @@
     // ✅ low-motion / anti-jitter floor (based on speed01)
     const ORBIT_ACTIVITY_MIN01 = 0.06;  // below this, orbit is forced ~0
     const ORBIT_ACTIVITY_POW   = 1.15;  // curve feel
-
-    // ✅ Option A: explicit “3D-ness” gate from r3 (punish flat circles hard)
-    // Telemetry hint: flat circles were ~0.01–0.02; multi-axial was ~0.05–0.07.
-    const ORBIT_R3GATE_MIN = 0.008;   // below ~this => basically no orbit credit
-    const ORBIT_R3GATE_POW = 1.2;    // higher => harsher punishment on low r3
-    const ORBIT_R3GATE_FLOOR = 0.02;  // tiny floor so it never *fully* bricks
 
     const ENERGY_GAIN_LOCKED = 1.25;
     const ENERGY_GAIN_FREE   = 0.65;
@@ -565,13 +561,6 @@
       const v = clamp01(speed01 || 0);
       const x = (v - ORBIT_ACTIVITY_MIN01) / (1 - ORBIT_ACTIVITY_MIN01);
       return Math.pow(clamp01(x), ORBIT_ACTIVITY_POW);
-    }
-
-    // ✅ Option A: r3 “3D-ness” gate (punishes flat circles / rewards multi-axial)
-    function orbitR3Gate(r3){
-      const x = (clamp01(r3 || 0) - ORBIT_R3GATE_MIN) / (1 - ORBIT_R3GATE_MIN);
-      const g = Math.pow(clamp01(x), ORBIT_R3GATE_POW);
-      return ORBIT_R3GATE_FLOOR + (1 - ORBIT_R3GATE_FLOOR) * g;
     }
 
     function computeAvg(arr) {
@@ -920,14 +909,12 @@
       const avgJerk = median(jerkWindow);
       const smoothScore = smoothnessFromJerk(avgJerk);
 
-      // ✅ ORBIT: diversity metric + (activity gate) + (Option A r3Gate)
+      // ✅ ORBIT (independent): diversity metric + low-motion gate only
       const omegaCov = covOmega3(omegaVec);
       const oRaw = orbitFromOmegaCov(omegaCov);
 
       const actGate = orbitActivityGate(sv.speed);
-      const r3Gate  = orbitR3Gate(oRaw.r3);
-
-      const shapedCore = clamp01(oRaw.core01 * oRaw.planeGate * actGate * r3Gate);
+      const shapedCore = clamp01(oRaw.core01 * oRaw.planeGate * actGate);
 
       const orbitBonus = ORBIT_FLOOR + (1 - ORBIT_FLOOR) * shapedCore;
       const orbitUI = Math.pow(shapedCore, ORBIT_UI_EXP);
@@ -1006,8 +993,8 @@
 
         o_r2: oRaw.r2,
         o_r3: oRaw.r3,
-        // ✅ debug “orbit availability” now includes r3Gate too
-        o_gate: clamp01(oRaw.planeGate * actGate * r3Gate),
+        // ✅ now: “orbit availability” = planeGate * activity gate (NO levitation terms)
+        o_gate: clamp01(oRaw.planeGate * actGate),
         o_balance: oRaw.balance,
         o_couple: oRaw.couple
       }, dt);
@@ -1032,7 +1019,7 @@
       }
 
       if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
-        reqs.push(DeviceMotionEvent.requestPermission().then(s => s === 'granted').catch(() => false));
+        reqs.push(DeviceOrientationEvent.requestPermission().then(s => s === 'granted').catch(() => false));
       }
 
       const results = await Promise.all(reqs);
