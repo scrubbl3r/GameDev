@@ -62,11 +62,12 @@
 
         set();
 
+        // iOS Chrome: visualViewport changes when bars show/hide & during scroll
         window.addEventListener('resize', set, { passive: true });
         window.addEventListener('orientationchange', set, { passive: true });
         if (window.visualViewport) {
-          window.visualViewport.addEventListener('resize', set, { passive: true });
-          window.visualViewport.addEventListener('scroll', set, { passive: true });
+        window.visualViewport.addEventListener('resize', set, { passive: true });
+        window.visualViewport.addEventListener('scroll', set, { passive: true });
         }
     })();
   </script>
@@ -215,6 +216,7 @@
       const out = {
         ...payload,
 
+        // ✅ keep existing “debug-ish” fields
         t: roundN(payload.t, 1),
         dt: roundN(payload.dt, 4),
         wRaw: roundN(payload.wRaw, 2),
@@ -222,6 +224,7 @@
         wFilt: roundN(payload.wFilt, 2),
         cap: roundN(payload.cap, 2),
 
+        // ✅ core meters
         energy01: sig.energy01,
         groove01: sig.groove01,
         orbit01:  sig.orbit01,
@@ -232,6 +235,7 @@
         shakeHit: sig.shakeHit,
         hz:       sig.hz,
 
+        // ✅ ORBIT DEBUG (numbers are already present in payload; normalize precision here)
         o_r2:      roundN(payload.o_r2, 4),
         o_r3:      roundN(payload.o_r3, 4),
         o_gate:    roundN(payload.o_gate, 4),
@@ -245,12 +249,12 @@
     // =========================================================================
     // DIAL PACK v4 — base detection (PRESERVED)
     // =========================================================================
-    const OMEGA_LPF = 0.22;
+    const OMEGA_LPF = 0.22; // was .22
 
-    const HUNT_WINDOW_SEC   = .80;
-    const STABLE_WINDOW_SEC = 1.60;
+    const HUNT_WINDOW_SEC   = .80; // was 1.35
+    const STABLE_WINDOW_SEC = 1.60; // was 3.10
 
-    const MIN_WINDOW_SAMPLES = 28;
+    const MIN_WINDOW_SAMPLES = 28;  // was 55
     const MAX_WINDOW_SAMPLES = 260;
 
     const MIN_OMEGA = 0.02;
@@ -265,38 +269,40 @@
     const JERK_LOOSE = 2600.0;
 
     // =========================================================================
-    // ✅ ORBIT v2.2 — SCALING HOTFIX v2 (MAKE IT MOVE)
+    // ✅ ORBIT v2.1 — COUPLED LISS / “TRICKS WHILE LEVITATING”
+    // - Direction-normalized omega (so orbit is about geometry, not force)
+    // - Orbit only counts inside a stability envelope (smooth+groove+speed)
+    // - Orbit is explicitly anti-shake (shake suppresses orbit charge)
     // =========================================================================
     const ORBIT_FLOOR = 0.25;
 
-    // Make geometry less picky (more real-world phones, more usable)
-    const ORBIT_BALANCE_POW = 1.20;     // was 1.80
-    const ORBIT_COUPLE_GAIN = 3.20;     // was 1.9
-    const ORBIT_COUPLE_POW  = 1.20;     // was 1.6
+    const ORBIT_BALANCE_POW = 1.80;
 
-    const ORBIT_AX2_MIN = 0.08;         // was 0.16
-    const ORBIT_AX3_MIN = 0.04;         // was 0.08
+    const ORBIT_COUPLE_GAIN = 1.9;
+    const ORBIT_COUPLE_POW  = 1.6;
 
-    const ORBIT_AX2_POW = 1.15;         // was 1.6
-    const ORBIT_AX3_POW = 1.05;         // was 1.3
+    const ORBIT_AX2_MIN = 0.16;
+    const ORBIT_AX3_MIN = 0.08;
 
-    const ORBIT_GATE_POW = 0.85;        // was 1.0
-    const ORBIT_GATE_FLOOR = 0.12;      // was 0.06
+    const ORBIT_AX2_POW = 1.6;
+    const ORBIT_AX3_POW = 1.3;
 
-    // Published orbit meter remap (hard lift)
-    // - soft-knee makes tiny shapedCore visible
-    // - gain pushes typical liss motion into 15–60% range
-    const ORBIT_UI_KNEE_GAIN = 18.0;    // NEW (12..30 typical)
-    const ORBIT_UI_FLOOR     = 0.04;    // NEW
+    const ORBIT_GATE_POW = 1.0;
+    const ORBIT_GATE_FLOOR = 0.06;
 
-    // “tricks while levitating” envelope — loosened a lot
-    const ORBIT_GROOVE_MIN   = 0.10;    // was 0.26
-    const ORBIT_SMOOTH_MIN   = 0.14;    // was 0.28
-    const ORBIT_SPEED_MIN01  = 0.05;    // was 0.10
-    const ORBIT_ENV_POW      = 0.70;    // was 1.25
+    // UI shaping for published orbit01 (meter feel)
+    const ORBIT_UI_EXP   = 0.40;  // was 0.55  (lift small values)
+    const ORBIT_UI_GAIN  = 8.0;   // NEW       (4..10 typical)
+    const ORBIT_UI_FLOOR = 0.02;  // NEW       (tiny visible floor once alive)
 
-    // anti-shake suppression softened (still matters)
-    const ORBIT_ANTISHAKE_POW = 1.05;   // was 2.2
+    // ✅ “tricks while levitating” envelope (loosened slightly)
+    const ORBIT_GROOVE_MIN   = 0.22;  // was 0.26
+    const ORBIT_SMOOTH_MIN   = 0.22;  // was 0.28
+    const ORBIT_SPEED_MIN01  = 0.08;  // was 0.10
+    const ORBIT_ENV_POW      = 1.00;  // was 1.25
+
+    // ✅ anti-shake suppression (orbit is not brute force) (softened slightly)
+    const ORBIT_ANTISHAKE_POW = 1.4;  // was 2.2
 
     const ENERGY_GAIN_LOCKED = 1.25;
     const ENERGY_GAIN_FREE   = 0.65;
@@ -314,7 +320,7 @@
     const NORM_ALPHA = 0.10;
 
     // ============================================================================
-    // SPEED METER — unchanged
+    // SPEED METER — tuned for “force” (rotationRate magnitude, deg/sec)
     // ============================================================================
     const SPEED_DEAD_DPS = 8.0;
     const SPEED_CAP_DPS  = 360.0;
@@ -522,6 +528,7 @@
       return {xx,xy,xz,yy,yz,zz, trace:(xx+yy+zz)};
     }
 
+    // Base orbit from covariance (geometry) — returns the *raw* ingredients
     function orbitFromOmegaCov(cov) {
       const eps = 1e-12;
       const tr = cov.trace;
@@ -535,13 +542,22 @@
       const r2 = clamp01(l2 / (l1 + eps));
       const r3 = clamp01(l3 / (l1 + eps));
 
-      const g2 = Math.pow(clamp01((r2 - ORBIT_AX2_MIN) / (1 - ORBIT_AX2_MIN)), ORBIT_AX2_POW);
-      const g3 = Math.pow(clamp01((r3 - ORBIT_AX3_MIN) / (1 - ORBIT_AX3_MIN)), ORBIT_AX3_POW);
+      const g2 = Math.pow(
+        clamp01((r2 - ORBIT_AX2_MIN) / (1 - ORBIT_AX2_MIN)),
+        ORBIT_AX2_POW
+      );
 
+      const g3 = Math.pow(
+        clamp01((r3 - ORBIT_AX3_MIN) / (1 - ORBIT_AX3_MIN)),
+        ORBIT_AX3_POW
+      );
+
+      // plane/tri-axis gate (pure geometry)
       let planeGate = clamp01(g2 * g3);
       planeGate = ORBIT_GATE_FLOOR + (1 - ORBIT_GATE_FLOOR) * planeGate;
       planeGate = Math.pow(planeGate, ORBIT_GATE_POW);
 
+      // Balance (entropy)
       const p1 = Math.max(eps, l1 / s);
       const p2 = Math.max(eps, l2 / s);
       const p3 = Math.max(eps, l3 / s);
@@ -549,22 +565,26 @@
       const Hn = clamp01(H / Math.log(3));
       const balance = Math.pow(Hn, ORBIT_BALANCE_POW);
 
+      // Coupling (off-diagonal energy)
       const coupleRaw = (Math.abs(cov.xy) + Math.abs(cov.xz) + Math.abs(cov.yz)) / (tr + eps);
       const couple = Math.pow(clamp01(coupleRaw * ORBIT_COUPLE_GAIN), ORBIT_COUPLE_POW);
 
+      // Core “lissajousness”
       const core01 = clamp01(balance * couple);
+
       return { core01, r2, r3, planeGate, balance, couple };
     }
 
+    // ✅ stability envelope gate (tricks while levitating)
     function orbitEnvelopeGate({ groove01, smooth01, speed01, shake01 }) {
-      // make groove contribute but not zero you out (baseline)
-      const gRaw = clamp01((groove01 - ORBIT_GROOVE_MIN) / (1 - ORBIT_GROOVE_MIN));
-      const g = Math.pow(0.35 + 0.65 * gRaw, ORBIT_ENV_POW);
-
+      // must be moving, smooth, and groovy enough
+      const g = Math.pow(clamp01((groove01 - ORBIT_GROOVE_MIN) / (1 - ORBIT_GROOVE_MIN)), ORBIT_ENV_POW);
       const s = Math.pow(clamp01((smooth01 - ORBIT_SMOOTH_MIN) / (1 - ORBIT_SMOOTH_MIN)), ORBIT_ENV_POW);
       const v = Math.pow(clamp01((speed01  - ORBIT_SPEED_MIN01) / (1 - ORBIT_SPEED_MIN01)), ORBIT_ENV_POW);
 
+      // anti-shake: orbit is NOT brute force
       const anti = Math.pow(1 - clamp01(shake01), ORBIT_ANTISHAKE_POW);
+
       return clamp01(g * s * v * anti);
     }
 
@@ -588,6 +608,9 @@
       return targetN;
     }
 
+    // =========================================================================
+    // ✅ Meter continuity (logic preserved; no UI)
+    // =========================================================================
     const METER_HOLD_SEC = 0.55;
     const METER_FADE_HZ  = 3.0;
 
@@ -601,7 +624,7 @@
 
     const omegaMag  = [];
     const omegaNorm = [];
-    const omegaVec  = [];
+    const omegaVec  = [];   // ✅ stores DIRECTION-NORMALIZED omega (unit vectors)
     const jerkBuf   = [];
     const dtBuf     = [];
 
@@ -618,14 +641,17 @@
     let energy = 0;
     let energyUI = 0;
 
+    // ✅ SPEED v0 state (deg/s)
     let mSpeedEMA = 0;
     let speedOut  = 0;
 
+    // continuity memory for meters (NOT speed)
     let meterHoldLeft = 0;
     let lastGrooveUI = 0;
     let lastOrbitUI  = 0;
     let lastSmoothUI = 0;
 
+    // SHAKE state
     let shake01 = 0;
     let accelBaseMag = 9.81;
     let shakeCooldownLeft = 0;
@@ -782,6 +808,7 @@
       const sh = updateShake(e, t, dt);
       const rr = e.rotationRate;
 
+      // if no rr, still coast + publish
       if (!rr) {
         const dtMean = Math.max(1e-3, computeAvg(dtBuf.slice(-50)) || 1/60);
         const dtForFilter = (dt > 0) ? dt : dtMean;
@@ -851,9 +878,9 @@
         const rms = Math.sqrt(Math.max(1e-6, emaVar));
         omegaNorm.push((mStability - emaMean) / rms);
 
-        // ✅ BIG CHANGE: orbit geometry from RAW direction (not LPF’d)
-        const invW = 1 / Math.max(1e-6, wRaw);
-        omegaVec.push({ x: x*invW, y: y*invW, z: z*invW });
+        // ✅ ORBIT v2.1: store DIRECTION-NORMALIZED omega (unit vector)
+        const invM = 1 / Math.max(1e-6, mStability);
+        omegaVec.push({ x: ox*invM, y: oy*invM, z: oz*invM });
 
         if (dt > 0) {
           const dtSafe = Math.max(dt, dtMean * 0.5, 1/120);
@@ -912,9 +939,11 @@
       const avgJerk = median(jerkWindow);
       const smoothScore = smoothnessFromJerk(avgJerk);
 
+      // ✅ ORBIT v2.1 compute (raw ingredients)
       const omegaCov = covOmega3(omegaVec);
       const oRaw = orbitFromOmegaCov(omegaCov);
 
+      // ✅ envelope gate: only “tricks” inside stable levitation, and anti-shake
       const envGate = orbitEnvelopeGate({
         groove01: lockStrength,
         smooth01: smoothScore,
@@ -922,14 +951,15 @@
         shake01:  sh.shake01
       });
 
+      // Combine: liss core * plane gate * envelope gate
       const shapedCore = clamp01(oRaw.core01 * oRaw.planeGate * envGate);
 
+      // Energy uses ORBIT_FLOOR..1
       const orbitBonus = ORBIT_FLOOR + (1 - ORBIT_FLOOR) * shapedCore;
 
-      // ✅ HARD UI LIFT (soft-knee)
-      // 0 -> 0, small -> visible, big -> saturates cleanly
-      let orbitUI = 1 - Math.exp(-ORBIT_UI_KNEE_GAIN * shapedCore);
-      orbitUI = clamp01(orbitUI);
+      // UI published is 0..1, shaped + scaled for visibility
+      let orbitUI = Math.pow(shapedCore, ORBIT_UI_EXP);
+      orbitUI = clamp01(orbitUI * ORBIT_UI_GAIN);
       if (orbitUI > 0) orbitUI = Math.max(orbitUI, ORBIT_UI_FLOOR);
 
       meterHoldLeft = METER_HOLD_SEC;
@@ -961,7 +991,7 @@
       if (dt > 0) {
         const grooveTerm = Math.pow(clamp01(lockStrength), GROOVE_EXP);
         const smoothTerm = Math.pow(clamp01(smoothScore), SMOOTH_EXP);
-        const orbitTerm  = Math.pow(clamp01(orbitBonus),  ORBIT_EXP);
+        const orbitTerm  = Math.pow(clamp01(orbitBonus),  ORBIT_EXP); // ✅ energy uses orbitBonus
 
         const qualityTerm = grooveTerm * smoothTerm;
         const earnBase = EARN_SCALE * grooveTerm * smoothTerm * orbitTerm;
@@ -1004,6 +1034,9 @@
         locked: lockedNow,
         hz: grooveHz,
 
+        // ✅ ORBIT DEBUG:
+        // r2/r3/balance/couple remain “shape” diagnostics.
+        // o_gate now reflects the REAL “orbit availability” (planeGate * envelope gate).
         o_r2: oRaw.r2,
         o_r3: oRaw.r3,
         o_gate: clamp01(oRaw.planeGate * envGate),
@@ -1015,6 +1048,9 @@
       setAudio(energyUI, lockStrength, lockedNow);
     }
 
+    // =========================================================================
+    // iOS permission gate (UI-less)
+    // =========================================================================
     async function requestMotionPermissionIfNeeded() {
       const needs = (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function')
                  || (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function');
@@ -1035,6 +1071,9 @@
       return results.every(Boolean);
     }
 
+    // =========================================================================
+    // Start/Stop (button label toggles only)
+    // =========================================================================
     async function start() {
       if (!window.isSecureContext) return;
 
@@ -1048,7 +1087,7 @@
 
         nextSendAtMs = 0;
         lastSig = null;
-        await connectRelay();
+        await connectRelay(); // ok if false; can run locally
 
         running = true;
         lastT = null;
@@ -1096,6 +1135,7 @@
         startBtn.disabled = false;
       }
 
+      // Attempt to lock to portrait (best-effort; may fail on iOS depending on context)
       if (screen.orientation && screen.orientation.lock) {
         try { await screen.orientation.lock('portrait-primary'); }
         catch (e) { /* no-op */ }
