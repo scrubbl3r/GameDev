@@ -235,7 +235,7 @@
         shakeHit: sig.shakeHit,
         hz:       sig.hz,
 
-        // ✅ ORBIT DEBUG (numbers are already present in payload; normalize precision here)
+        // ✅ ORBIT DEBUG
         o_r2:      roundN(payload.o_r2, 4),
         o_r3:      roundN(payload.o_r3, 4),
         o_gate:    roundN(payload.o_gate, 4),
@@ -249,12 +249,12 @@
     // =========================================================================
     // DIAL PACK v4 — base detection (PRESERVED)
     // =========================================================================
-    const OMEGA_LPF = 0.22; // was .22
+    const OMEGA_LPF = 0.22;
 
-    const HUNT_WINDOW_SEC   = .80; // was 1.35
-    const STABLE_WINDOW_SEC = 1.60; // was 3.10
+    const HUNT_WINDOW_SEC   = .80;
+    const STABLE_WINDOW_SEC = 1.60;
 
-    const MIN_WINDOW_SAMPLES = 28;  // was 55
+    const MIN_WINDOW_SAMPLES = 28;
     const MAX_WINDOW_SAMPLES = 260;
 
     const MIN_OMEGA = 0.02;
@@ -269,20 +269,17 @@
     const JERK_LOOSE = 2600.0;
 
     // =========================================================================
-    // ✅ ORBIT TUNE — v2.2 (more forgiving / easier to “grab”)
-    // Keep the look/shape logic the same; this just loosens the envelope and
-    // increases “coupled liss” sensitivity so orbit shows up sooner.
+    // ✅ ORBIT — v3.0 (INDEPENDENT)
+    // Orbit measures direction diversity, NOT “levitation cleanliness”.
+    // Only gating is a low-motion floor to prevent sensor jitter from filling it.
     // =========================================================================
     const ORBIT_FLOOR = 0.18;
 
-    // less punitive balance curve
     const ORBIT_BALANCE_POW = 1.45;
 
-    // stronger coupling sensitivity
     const ORBIT_COUPLE_GAIN = 2.50;
     const ORBIT_COUPLE_POW  = 1.25;
 
-    // easier axis ratios
     const ORBIT_AX2_MIN = 0.11;
     const ORBIT_AX3_MIN = 0.06;
 
@@ -292,17 +289,12 @@
     const ORBIT_GATE_POW = 1.0;
     const ORBIT_GATE_FLOOR = 0.10;
 
-    // UI shaping for published orbit01 (meter feel)
+    // UI shaping for published orbit01
     const ORBIT_UI_EXP = 0.45;
 
-    // ✅ “tricks while levitating” envelope (loosened)
-    const ORBIT_GROOVE_MIN   = 0.20;
-    const ORBIT_SMOOTH_MIN   = 0.22;
-    const ORBIT_SPEED_MIN01  = 0.06;
-    const ORBIT_ENV_POW      = 1.05;
-
-    // ✅ anti-shake suppression (still kills orbit, but less brutally)
-    const ORBIT_ANTISHAKE_POW = 1.60;
+    // ✅ low-motion / anti-jitter floor (based on speed01)
+    const ORBIT_ACTIVITY_MIN01 = 0.06;  // below this, orbit is forced ~0
+    const ORBIT_ACTIVITY_POW   = 1.15;  // curve feel
 
     const ENERGY_GAIN_LOCKED = 1.25;
     const ENERGY_GAIN_FREE   = 0.65;
@@ -396,11 +388,6 @@
       const tau = 1 / (2 * Math.PI * cutoffHz);
       return 1 / (1 + tau / Math.max(1e-4, dt));
     }
-
-    const invLerp01 = (a, b, v) => {
-      if (Math.abs(b - a) < 1e-9) return 0;
-      return clamp01((v - a) / (b - a));
-    };
 
     function median(arr) {
       if (!arr.length) return 0;
@@ -507,7 +494,7 @@
     }
 
     // =========================================================================
-    // ✅ ORBIT helpers
+    // ORBIT helpers
     // =========================================================================
     function covOmega3(vecs) {
       const n = vecs.length;
@@ -566,18 +553,14 @@
       const couple = Math.pow(clamp01(coupleRaw * ORBIT_COUPLE_GAIN), ORBIT_COUPLE_POW);
 
       const core01 = clamp01(balance * couple);
-
       return { core01, r2, r3, planeGate, balance, couple };
     }
 
-    function orbitEnvelopeGate({ groove01, smooth01, speed01, shake01 }) {
-      const g = Math.pow(clamp01((groove01 - ORBIT_GROOVE_MIN) / (1 - ORBIT_GROOVE_MIN)), ORBIT_ENV_POW);
-      const s = Math.pow(clamp01((smooth01 - ORBIT_SMOOTH_MIN) / (1 - ORBIT_SMOOTH_MIN)), ORBIT_ENV_POW);
-      const v = Math.pow(clamp01((speed01  - ORBIT_SPEED_MIN01) / (1 - ORBIT_SPEED_MIN01)), ORBIT_ENV_POW);
-
-      const anti = Math.pow(1 - clamp01(shake01), ORBIT_ANTISHAKE_POW);
-
-      return clamp01(g * s * v * anti);
+    // ✅ only gate: low-motion floor to prevent jitter orbit
+    function orbitActivityGate(speed01){
+      const v = clamp01(speed01 || 0);
+      const x = (v - ORBIT_ACTIVITY_MIN01) / (1 - ORBIT_ACTIVITY_MIN01);
+      return Math.pow(clamp01(x), ORBIT_ACTIVITY_POW);
     }
 
     function computeAvg(arr) {
@@ -601,7 +584,7 @@
     }
 
     // =========================================================================
-    // ✅ Meter continuity (logic preserved; no UI)
+    // Meter continuity (logic preserved; no UI)
     // =========================================================================
     const METER_HOLD_SEC = 0.55;
     const METER_FADE_HZ  = 3.0;
@@ -926,17 +909,12 @@
       const avgJerk = median(jerkWindow);
       const smoothScore = smoothnessFromJerk(avgJerk);
 
+      // ✅ ORBIT (independent): diversity metric + low-motion gate only
       const omegaCov = covOmega3(omegaVec);
       const oRaw = orbitFromOmegaCov(omegaCov);
 
-      const envGate = orbitEnvelopeGate({
-        groove01: lockStrength,
-        smooth01: smoothScore,
-        speed01:  sv.speed,
-        shake01:  sh.shake01
-      });
-
-      const shapedCore = clamp01(oRaw.core01 * oRaw.planeGate * envGate);
+      const actGate = orbitActivityGate(sv.speed);
+      const shapedCore = clamp01(oRaw.core01 * oRaw.planeGate * actGate);
 
       const orbitBonus = ORBIT_FLOOR + (1 - ORBIT_FLOOR) * shapedCore;
       const orbitUI = Math.pow(shapedCore, ORBIT_UI_EXP);
@@ -1015,7 +993,8 @@
 
         o_r2: oRaw.r2,
         o_r3: oRaw.r3,
-        o_gate: clamp01(oRaw.planeGate * envGate),
+        // ✅ now: “orbit availability” = planeGate * activity gate (NO levitation terms)
+        o_gate: clamp01(oRaw.planeGate * actGate),
         o_balance: oRaw.balance,
         o_couple: oRaw.couple
       }, dt);
