@@ -8,19 +8,19 @@
     :root { --green:#7dd35f; }
 
     html, body {
-        height: 100%;
-        margin: 0;
-        background: #000;
-        color: var(--green);
-        font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
-        transition: background-color 80ms linear; /* keep phone glow mapping */
-        touch-action: manipulation;
+      height: 100%;
+      margin: 0;
+      background: #000;
+      color: var(--green);
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      transition: background-color 80ms linear; /* keep phone glow mapping */
+      touch-action: manipulation;
     }
 
     .app{
-        height: calc(var(--vh, 1vh) * 100);
-        display: grid;
-        place-items: center;
+      height: calc(var(--vh, 1vh) * 100);
+      display: grid;
+      place-items: center;
     }
 
     /* Single centered round Start button */
@@ -52,23 +52,23 @@
   <!-- center button on screen hack -->
   <script>
     (function setVhUnit(){
-        const root = document.documentElement;
+      const root = document.documentElement;
 
-        const set = () => {
+      const set = () => {
         const vv = window.visualViewport;
         const h = (vv && vv.height) ? vv.height : window.innerHeight;
         root.style.setProperty('--vh', (h * 0.01) + 'px');
-        };
+      };
 
-        set();
+      set();
 
-        // iOS Chrome: visualViewport changes when bars show/hide & during scroll
-        window.addEventListener('resize', set, { passive: true });
-        window.addEventListener('orientationchange', set, { passive: true });
-        if (window.visualViewport) {
+      // iOS Chrome: visualViewport changes when bars show/hide & during scroll
+      window.addEventListener('resize', set, { passive: true });
+      window.addEventListener('orientationchange', set, { passive: true });
+      if (window.visualViewport) {
         window.visualViewport.addEventListener('resize', set, { passive: true });
         window.visualViewport.addEventListener('scroll', set, { passive: true });
-        }
+      }
     })();
   </script>
 
@@ -150,6 +150,22 @@
     const SEND_HZ = 12;
     const SEND_MIN_MS = 1000 / SEND_HZ;
 
+    // =========================================================================
+    // ✅ TELEMETRY SIZE SWITCH
+    // false = send only core meters needed by game (small payload)
+    // true  = include debug-ish / orbit internals (big payload)
+    //
+    // Optional URL override: add ?telemetry=1 to force telemetry on
+    // =========================================================================
+    const TELEMETRY = false;
+    const TELEMETRY_URL = (() => {
+      try {
+        const u = new URL(location.href);
+        return (u.searchParams.get("telemetry") === "1");
+      } catch { return false; }
+    })();
+    const TELEMETRY_ON = TELEMETRY || TELEMETRY_URL;
+
     const EPS = {
       energy01: 0.006,
       groove01: 0.008,
@@ -201,6 +217,9 @@
       return false;
     }
 
+    // =========================================================================
+    // ✅ publishOrb now truly trims payload when TELEMETRY_ON is false
+    // =========================================================================
     function publishOrb(payload, dt, force=false) {
       if (!ablyChannel) return;
 
@@ -213,18 +232,11 @@
       lastSig = sig;
       nextSendAtMs = now + SEND_MIN_MS;
 
+      // ✅ SMALL base payload (what the game needs)
+      // IMPORTANT: do NOT spread ...payload, or you ship all the extra keys.
       const out = {
-        ...payload,
+        room: payload.room,
 
-        // ✅ keep existing “debug-ish” fields
-        t: roundN(payload.t, 1),
-        dt: roundN(payload.dt, 4),
-        wRaw: roundN(payload.wRaw, 2),
-        wCap: roundN(payload.wCap, 2),
-        wFilt: roundN(payload.wFilt, 2),
-        cap: roundN(payload.cap, 2),
-
-        // ✅ core meters
         energy01: sig.energy01,
         groove01: sig.groove01,
         orbit01:  sig.orbit01,
@@ -234,14 +246,24 @@
         locked:   sig.locked,
         shakeHit: sig.shakeHit,
         hz:       sig.hz,
-
-        // ✅ ORBIT DEBUG
-        o_r2:      roundN(payload.o_r2, 4),
-        o_r3:      roundN(payload.o_r3, 4),
-        o_gate:    roundN(payload.o_gate, 4),
-        o_balance: roundN(payload.o_balance, 4),
-        o_couple:  roundN(payload.o_couple, 4),
       };
+
+      // ✅ Optional telemetry / debug payload
+      if (TELEMETRY_ON) {
+        out.t     = roundN(payload.t, 1);
+        out.dt    = roundN(payload.dt, 4);
+        out.wRaw  = roundN(payload.wRaw, 2);
+        out.wCap  = roundN(payload.wCap, 2);
+        out.wFilt = roundN(payload.wFilt, 2);
+        out.cap   = roundN(payload.cap, 2);
+
+        // ORBIT DEBUG
+        out.o_r2      = roundN(payload.o_r2, 4);
+        out.o_r3      = roundN(payload.o_r3, 4);
+        out.o_gate    = roundN(payload.o_gate, 4);
+        out.o_balance = roundN(payload.o_balance, 4);
+        out.o_couple  = roundN(payload.o_couple, 4);
+      }
 
       ablyChannel.publish("orb", out, () => {});
     }
@@ -270,8 +292,6 @@
 
     // =========================================================================
     // ✅ ORBIT — v3.0 (INDEPENDENT)
-    // Orbit measures direction diversity, NOT “levitation cleanliness”.
-    // Only gating is a low-motion floor to prevent sensor jitter from filling it.
     // =========================================================================
     const ORBIT_FLOOR = 0.18;
 
@@ -809,7 +829,6 @@
           shakeHit: sh.shakeHit,
           locked: false,
           hz: 0,
-
           o_r2: 0, o_r3: 0, o_gate: 0, o_balance: 0, o_couple: 0
         }, dt);
 
@@ -892,7 +911,6 @@
           shakeHit: sh.shakeHit,
           locked: false,
           hz: 0,
-
           o_r2: 0, o_r3: 0, o_gate: 0, o_balance: 0, o_couple: 0
         }, dt);
 
@@ -993,7 +1011,6 @@
 
         o_r2: oRaw.r2,
         o_r3: oRaw.r3,
-        // ✅ now: “orbit availability” = planeGate * activity gate (NO levitation terms)
         o_gate: clamp01(oRaw.planeGate * actGate),
         o_balance: oRaw.balance,
         o_couple: oRaw.couple
