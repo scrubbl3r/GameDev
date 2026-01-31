@@ -130,8 +130,20 @@
         <div class="body">
           <div class="row">
             <button class="primary" id="btnStart">Start Audio</button>
-            <span class="pill"><span>Master</span><input id="master" type="range" min="0" max="1" step="0.001" value="0.35"><span class="mono" id="masterVal">0.35</span></span>
-            <span class="pill"><span>Lo-Fi</span><input id="crush" type="range" min="0" max="1" step="0.001" value="0.35"><span class="mono" id="crushVal">0.35</span></span>
+
+            <!-- DEFAULTS MATCH SCREENSHOT -->
+            <span class="pill">
+              <span>Master</span>
+              <input id="master" type="range" min="0" max="1" step="0.001" value="0.85">
+              <span class="mono" id="masterVal">0.85</span>
+            </span>
+
+            <span class="pill">
+              <span>Lo-Fi</span>
+              <input id="crush" type="range" min="0" max="1" step="0.001" value="1.00">
+              <span class="mono" id="crushVal">1.00</span>
+            </span>
+
             <span class="tag mono" id="revTag">rev#0</span>
           </div>
 
@@ -157,13 +169,15 @@
             <label for="mode">Randomize Mode</label>
             <select id="mode">
               <option value="faithful">Faithful (tight)</option>
-              <option value="spicy" selected>Spicy (sweet spot)</option>
-              <option value="chaos">Chaos (big swings)</option>
+              <option value="spicy">Spicy (sweet spot)</option>
+              <option value="chaos" selected>Chaos (big swings)</option>
             </select>
 
             <label for="mutAmt">Mutation</label>
-            <input id="mutAmt" type="range" min="0" max="1" step="0.001" value="0.85">
-            <span class="mono" id="mutAmtVal">0.85</span>
+
+            <!-- DEFAULT MATCH SCREENSHOT -->
+            <input id="mutAmt" type="range" min="0" max="1" step="0.001" value="1.00">
+            <span class="mono" id="mutAmtVal">1.00</span>
 
             <label for="seed">Seed</label>
             <input id="seed" type="text" value="DEFENDER" class="mono" style="width:180px;">
@@ -172,9 +186,7 @@
           </div>
 
           <div class="hint">
-            Changes in this drop:
-            <span class="mono">Chaos</span> now has *much* wider ranges + more “jump” events, and durations are biased to include
-            longer tails (without eliminating short blips).
+            Changes in this drop: Chaos now has wider ranges + more “jump” events, and durations are biased to include longer tails (without eliminating short blips).
           </div>
 
           <div class="divider"></div>
@@ -219,7 +231,7 @@
       return ((r ^ (r >>> 14)) >>> 0) / 4294967296;
     };
   }
-  function triRand(rng){ return (rng() + rng()) * 0.5; } // centered-ish
+  function triRand(rng){ return (rng() + rng()) * 0.5; }
   function randSym(rng){ return (triRand(rng) - 0.5) * 2.0; }
 
   function makeDriveCurve(amount){
@@ -234,60 +246,40 @@
   }
 
   function modeConfig(mode){
-    // wide: multiplies *range*; jumpP/jumpScale: more big leaps in chaos
     if (mode === "faithful") return { wide: 0.75, jumpP: 0.08, jumpScale: 0.55 };
     if (mode === "chaos")   return { wide: 3.00, jumpP: 0.28, jumpScale: 1.65 };
-    return { wide: 1.55, jumpP: 0.16, jumpScale: 1.00 }; // spicy
+    return { wide: 1.55, jumpP: 0.16, jumpScale: 1.00 };
   }
 
-  // BIGGER variation:
-  // - jitter is now much larger
-  // - more frequent/bigger jumps, especially in chaos
-  // - occasional "reroll anywhere in range" events
   function pickVal(rng, base, min, max, mutAmt, modeWide, jumpP, jumpScale){
     const span = (max - min);
-
-    // Normal-ish jitter around base
-    const jitter = randSym(rng) * span * 0.42 * modeWide;  // was ~0.18; now much bigger
-
-    // Big jump events
+    const jitter = randSym(rng) * span * 0.42 * modeWide;
     const jump = (rng() < (jumpP * (0.35 + 0.65 * mutAmt)))
       ? randSym(rng) * span * 0.70 * modeWide * jumpScale
       : 0;
 
-    // Rare full reroll across full range (chaos loves this)
     const rerollP = (0.03 + 0.10 * (modeWide/3.0)) * (0.25 + 0.75 * mutAmt);
     if (rng() < rerollP){
       return min + rng() * span;
     }
 
-    // Blend base->wild by mutation amount
     const v = base + (jitter + jump) * (0.25 + 0.75 * mutAmt);
     return clamp(v, min, max);
   }
 
-  // Duration picker biased to include longer tails sometimes.
-  // We keep short sounds alive, but introduce a heavy-tail option.
   function pickDur(rng, base, min, max, mutAmt, modeWide){
     const span = max - min;
-
-    // Mix of:
-    // - tight-ish around base (triangular)
-    // - wide uniform
-    // - heavy tail via power curve (bias high)
     const pTail = clamp(0.10 + 0.25 * mutAmt + 0.12 * (modeWide/3.0), 0.10, 0.55);
     const pUni  = clamp(0.10 + 0.20 * mutAmt, 0.10, 0.35);
     const r = rng();
 
     let v;
     if (r < pTail){
-      // heavy tail: bias toward max
-      const u = Math.pow(rng(), 0.35); // smaller exponent => more near 1
+      const u = Math.pow(rng(), 0.35);
       v = min + u * span;
     } else if (r < pTail + pUni){
       v = min + rng() * span;
     } else {
-      // around base with wider jitter
       const tri = triRand(rng);
       const jitter = (tri - 0.5) * 2.0 * span * (0.35 + 0.45 * mutAmt) * modeWide;
       v = base + jitter;
@@ -408,9 +400,6 @@
     return src;
   }
 
-  // Envelope helper:
-  // - p.dur is interpreted as "tail length" (release)
-  // - we also allow a longer sustain plateau by using a higher sustain value on long sounds
   function expEnv(param, t0, a, d, peak, sustain, rel){
     const tA = t0 + a;
     const tD = tA + d;
@@ -454,7 +443,7 @@
   }
 
   // ----------------------------
-  // Base Patch (template)
+  // Base Patch
   // ----------------------------
   const BASE = {
     laser:      { baseHz: 900,  sweepHz: 520,  sweepTime: 0.055, bite: 0.55, click: 0.12, noise: 0.08, hp: 260, dur: 0.14 },
@@ -469,16 +458,15 @@
     teleport:   { dur: 0.60, chirp0: 420, chirp1: 2200, chirpTime: 0.14, sparkleBP: 1800, sparkleQ: 9, sparkle: 0.28, edge: 0.45, delayT: 0.045, delayFb: 0.25, wet: 0.22 }
   };
 
-  let patch = deepClone(BASE);
-  function deepClone(o){ return JSON.parse(JSON.stringify(o)); }
+  let patch = JSON.parse(JSON.stringify(BASE));
 
   // ----------------------------
-  // Randomizer (BIGGER + longer tails)
+  // Randomizer
   // ----------------------------
   let REV = 0;
 
   function resetToBase(){
-    patch = deepClone(BASE);
+    patch = JSON.parse(JSON.stringify(BASE));
     renderPatch();
   }
 
@@ -500,7 +488,6 @@
       patch[name][key] = pickDur(rng, BASE[name][key], min, max, mutAmt, wide);
     };
 
-    // LASER
     r("laser","baseHz",   260, 2200);
     r("laser","sweepHz",  60,  2600);
     r("laser","sweepTime",0.018,0.22);
@@ -508,9 +495,8 @@
     r("laser","click",    0.00,0.45);
     r("laser","noise",    0.00,0.65);
     r("laser","hp",       30,  2200);
-    rd("laser","dur",     0.05,2.20);   // MUCH longer possible
+    rd("laser","dur",     0.05,2.20);
 
-    // ZAP
     r("zap","baseHz",     50,  900);
     r("zap","sweepHz",    180, 5000);
     r("zap","sweepTime",  0.020,0.35);
@@ -521,7 +507,6 @@
     r("zap","q",          0.6, 40);
     rd("zap","dur",       0.07,2.60);
 
-    // THRUST
     r("thrust","noise",     0.10,1.00);
     r("thrust","lp",        80,  2400);
     r("thrust","q",         0.2, 10.0);
@@ -529,7 +514,6 @@
     r("thrust","flutterAmt",0.00,0.75);
     rd("thrust","dur",      0.12,3.20);
 
-    // EXPLOSION
     r("explosion","noise",     0.15,1.00);
     r("explosion","lp0",       600, 10000);
     r("explosion","lp1",       40,  1200);
@@ -539,7 +523,6 @@
     r("explosion","crackle",   0.00,1.00);
     rd("explosion","dur",      0.18,4.20);
 
-    // PICKUP
     r("pickup","baseHz",  120, 2200);
     r("pickup","upHz",    220, 8200);
     r("pickup","glide",   0.02,0.70);
@@ -548,14 +531,12 @@
     r("pickup","twang",   0.00,1.00);
     rd("pickup","dur",    0.05,2.80);
 
-    // ALARM
     r("alarm","aHz",  80,  2200);
     r("alarm","bHz",  120, 5200);
     r("alarm","rate", 0.5, 40.0);
     r("alarm","edge", 0.00,1.00);
-    rd("alarm","dur", 0.12,5.00);  // alarms can get LONG
+    rd("alarm","dur", 0.12,5.00);
 
-    // SMART BOMB
     rd("smartbomb","dur",      0.25,5.50);
     r("smartbomb","boomHz",    10,  160);
     r("smartbomb","boomAmt",   0.05,1.00);
@@ -567,7 +548,6 @@
     r("smartbomb","noise",     0.10,1.00);
     r("smartbomb","crackle",   0.00,1.00);
 
-    // HYPERSPACE
     rd("hyperspace","dur",       0.18,4.50);
     r("hyperspace","whooshLP0",  500, 12000);
     r("hyperspace","whooshLP1",  40,  2200);
@@ -580,7 +560,6 @@
     r("hyperspace","delayFb",    0.00,0.88);
     r("hyperspace","wet",        0.00,0.85);
 
-    // TELEPORT
     rd("teleport","dur",         0.06,2.80);
     r("teleport","chirp0",       40,  2200);
     r("teleport","chirp1",       120, 12000);
@@ -598,11 +577,8 @@
 
   // ----------------------------
   // Sound Models
-  // (Key change: release/tails are now longer when p.dur is long.
-  //  We also use a higher sustain for longer durations so it doesn't vanish instantly.)
   // ----------------------------
   function tailSustainFromDur(d){
-    // short blips: low sustain; long sounds: keep more body
     return clamp(lerp(0.10, 0.32, clamp(d / 2.5, 0, 1)), 0.08, 0.36);
   }
 
@@ -708,7 +684,6 @@
     lp.frequency.setValueAtTime(p.lp, t0);
     lp.Q.value = p.q;
 
-    // Flutter tremolo on gain
     const lfo = ctx.createOscillator();
     lfo.type = "sine";
     lfo.frequency.value = p.flutterHz;
@@ -762,7 +737,6 @@
     const sustain = tailSustainFromDur(p.dur);
     const tEnd = expEnv(g.gain, t0, 0.004, 0.12, 1.00, sustain, p.dur);
 
-    // boom/crackle tails scale with dur (so long explosions keep body)
     expEnv(boomG.gain, t0, 0.002, 0.14, p.boomAmt, 0.0001, clamp(0.25 + p.dur*0.40, 0.18, 3.20));
     expEnv(crackG.gain, t0, 0.001, 0.08, p.crackle, 0.0001, clamp(0.15 + p.dur*0.25, 0.12, 2.20));
 
@@ -835,7 +809,6 @@
     osc.type = "square";
     osc.frequency.setValueAtTime(p.aHz, t0);
 
-    // toggles freq (arcade alarm)
     const step = ctx.createOscillator();
     step.type = "square";
     step.frequency.value = p.rate;
@@ -849,7 +822,6 @@
     sh.curve = makeDriveCurve(lerp(5, 900, p.edge));
     sh.oversample = "2x";
 
-    // alarms: keep more sustain on long dur
     const sustain = clamp(lerp(0.18, 0.40, clamp(p.dur/3.0, 0, 1)), 0.14, 0.48);
     const tEnd = expEnv(g.gain, t0, 0.010, 0.08, 0.50, sustain, p.dur);
 
@@ -1056,6 +1028,11 @@
   }
 
   function hook(){
+    // Sync labels with defaults at boot (in case you change HTML values)
+    $("#masterVal").textContent = (+$("#master").value).toFixed(2);
+    $("#crushVal").textContent  = (+$("#crush").value).toFixed(2);
+    $("#mutAmtVal").textContent = (+$("#mutAmt").value).toFixed(2);
+
     $("#btnStart").addEventListener("click", async () => {
       ensureAudio();
       if (ctx.state !== "running") await ctx.resume();
@@ -1102,7 +1079,6 @@
     $("#hyperspace").addEventListener("click", () => { ifReady(playHyperspace); });
     $("#teleport").addEventListener("click", () => { ifReady(playTeleport); });
 
-    // Keyboard: 1..9 trigger, R randomize
     window.addEventListener("keydown", (e) => {
       if (e.repeat) return;
       if (e.key === "r" || e.key === "R"){ $("#randAll").click(); return; }
@@ -1114,7 +1090,6 @@
     });
   }
 
-  // Init
   renderPatch();
   hook();
 })();
