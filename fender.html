@@ -2,29 +2,25 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Defender-ish SFX Generator</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <title>Defender-ish SFX Generator — Mobile</title>
   <style>
     :root{
-      /* fierce red/orange page background */
-      --bg:#ff3b18;
-
-      /* monochrome black strokes for UI chrome */
-      --ink:#000;
-      --stroke:#000;
-      --stroke2:#000;
-
-      /* NEW: button swap */
-      --btnFill:#000;        /* flat black fill */
-      --btnText:var(--bg);   /* text is fiery orange (same as background color) */
-
-      /* sliders stay black line/circle */
-      --sliderLine:#000;
-      --sliderLineSoft:#000;
-      --sliderKnob:#000;
+      --bg:#ff3b18;      /* fierce orange/red */
+      --ink:#000;        /* UI stroke */
+      --btnFill:#000;    /* flat black buttons */
+      --btnText:var(--bg);
 
       --gap:10px;
-      --sfxBtnH:240px;
+
+      /* piano keys */
+      --keyH: 56vh;        /* tall stripe height */
+      --keyMinH: 320px;
+      --keyBorder: 2px;
+
+      /* sliders */
+      --sliderTrack:#000;
+      --sliderKnob:#000;
     }
 
     html,body{height:100%;}
@@ -35,32 +31,15 @@
       font:14px system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
       letter-spacing:.2px;
       overflow-x:hidden;
-
-      min-height:100vh;
-      display:flex;
-      align-items:center;
-      justify-content:center;
     }
-    @media (max-height: 760px){
-      body{ align-items:flex-start; }
-    }
-
     *{ box-sizing:border-box; }
 
+    /* phone-first wrap */
     .wrap{
       width:100%;
-      max-width:1120px;
-      padding:24px 14px;
+      max-width:520px;
       margin:0 auto;
-    }
-
-    .box{
-      background:transparent;
-      border:2px solid var(--stroke);
-    }
-    .boxInner{
-      background:transparent;
-      border:2px solid var(--stroke2);
+      padding:14px 12px calc(18px + env(safe-area-inset-bottom));
     }
 
     /* Start overlay */
@@ -69,16 +48,15 @@
       display:flex; align-items:center; justify-content:center;
       background:rgba(0,0,0,.10);
       z-index:9999;
+      padding:24px;
     }
     .startBtn{
-      width:min(360px, calc(100vw - 28px));
+      width:min(360px, calc(100vw - 48px));
       padding:18px 14px;
       font-size:18px;
       font-weight:950;
       text-transform:uppercase;
       letter-spacing:1.2px;
-
-      /* NEW: same swap on start button */
       color:var(--btnText);
       background:var(--btnFill);
       border:3px solid #000;
@@ -86,111 +64,133 @@
     }
     .startBtn:active{ transform:translateY(1px); }
 
-    /* ---------- JIGSAW LAYOUT ---------- */
-    .lane{
+    /* sections */
+    .panel{
+      border:2px solid #000;
+      background:transparent;
+      margin-bottom:12px;
+    }
+
+    /* ===== Piano stripe keys ===== */
+    .keys{
+      display:flex;
       width:100%;
-      display:grid;
-      gap:var(--gap);
-      padding:12px 14px;
+      height:clamp(var(--keyMinH), var(--keyH), 520px);
       border-bottom:2px solid #000;
     }
-    .lane:last-child{ border-bottom:0; }
+    .key{
+      flex:1 1 0%;
+      min-width:0;
+      height:100%;
+      background:var(--btnFill);
+      border:var(--keyBorder) solid #000;
+      border-top:0;
+      border-bottom:0;
+      padding:0;
+      margin:0;
+      cursor:pointer;
+      position:relative;
+    }
+    /* keep only vertical separators between keys */
+    .key + .key{ border-left:0; }
 
-    .lane.jigsaw{
-      grid-auto-flow:column;
-      grid-auto-columns: 1fr;
+    /* tiny identifier dots (no labels) */
+    .key::after{
+      content:"";
+      position:absolute;
+      left:50%;
+      top:10px;
+      width:10px;
+      height:10px;
+      margin-left:-5px;
+      border:2px solid var(--btnText);
+      border-radius:50%;
+      background:transparent;
+      opacity:.85;
+    }
+
+    /* category color cues via subtle top bar (still orange as "text" color) */
+    .key::before{
+      content:"";
+      position:absolute;
+      left:0; top:0;
+      height:6px;
+      width:100%;
+      background:var(--btnText);
+      opacity:.85;
+    }
+
+    /* active press feedback */
+    .key:active{ filter:brightness(1.18); }
+
+    /* RANDOMIZE: full width */
+    .row{
+      display:flex;
+      gap:10px;
+      padding:12px;
+      border-bottom:2px solid #000;
       align-items:stretch;
     }
-    @media (max-width: 760px){
-      .lane.jigsaw{
-        grid-auto-flow:row;
-        grid-template-columns: 1fr;
-      }
-    }
+    .row:last-child{ border-bottom:0; }
 
-    .tile{
-      min-height:48px;
-      display:flex;
-      align-items:center;
-      justify-content:stretch;
-      gap:12px;
-      padding:10px 12px;
-      background:transparent;
-      border:2px solid #000;
+    button.big{
+      width:100%;
+      min-height:54px;
+      background:var(--btnFill);
+      color:var(--btnText);
+      border:3px solid #000;
+      font-weight:950;
+      text-transform:uppercase;
+      letter-spacing:1.1px;
+      font-size:14px;
+      cursor:pointer;
     }
-    .tile .left{
+    button.big:active{ transform:translateY(1px); }
+    button.big:hover{ filter:brightness(1.12); }
+    button.big:disabled{ opacity:.35; cursor:not-allowed; transform:none; }
+
+    /* compact control tiles */
+    .tile{
+      border:2px solid #000;
+      padding:10px 12px;
       display:flex;
       flex-direction:column;
-      gap:2px;
-      min-width:120px;
-    }
-    .tile .right{
-      flex:1;
-      display:flex;
-      align-items:center;
-      justify-content:stretch;
-      min-width:0;
-    }
-
-    .label{
-      color:#000;
-      font-size:11px;
-      line-height:1;
-      text-transform:uppercase;
-      letter-spacing:.9px;
-      font-weight:900;
-    }
-
-    /* NEW: buttons = flat black fill, text = fiery orange */
-    button{
-      width:100%;
-      height:100%;
-      min-height:48px;
-
-      appearance:none;
-      cursor:pointer;
-      user-select:none;
-      white-space:nowrap;
-      text-transform:uppercase;
-      letter-spacing:1px;
-      font-weight:950;
-      font-size:12px;
-
-      color:var(--btnText);
-      background:var(--btnFill);
-      border:2px solid #000;
-      padding:12px 12px;
-    }
-    button:hover{ filter:brightness(1.12); }
-    button:active{ transform:translateY(1px); }
-    button:disabled{opacity:.35;cursor:not-allowed;transform:none;}
-
-    select{
+      gap:8px;
       width:100%;
       background:transparent;
-      border:2px solid #000;
-      color:#000;
-      padding:10px 10px;
-      outline:none;
-      min-height:42px;
-      cursor:pointer;
-      font-weight:900;
+    }
+    .tileHeader{
+      display:flex;
+      align-items:baseline;
+      justify-content:space-between;
+      gap:10px;
+    }
+    .label{
+      font-size:11px;
       text-transform:uppercase;
-      letter-spacing:.8px;
+      letter-spacing:.9px;
+      font-weight:950;
+      color:#000;
+    }
+    .value{
+      font-size:11px;
+      text-transform:uppercase;
+      letter-spacing:.9px;
+      font-weight:950;
+      color:#000;
     }
 
-    /* ---- SLIDERS: simple black line + circle knob ---- */
+    /* sliders: basic line + circle */
     input[type="range"]{
       width:100%;
       -webkit-appearance:none;
       appearance:none;
       background:transparent;
-      min-width:0;
       height:22px;
     }
     input[type="range"]::-webkit-slider-runnable-track{
       height:2px;
-      background:#000;
+      background:var(--sliderTrack);
       border:none;
       border-radius:0;
     }
@@ -199,51 +199,61 @@
       width:14px; height:14px;
       margin-top:-6px;
       background:transparent;
-      border:2px solid #000;
+      border:2px solid var(--sliderKnob);
       border-radius:50%;
     }
     input[type="range"]::-moz-range-track{
       height:2px;
-      background:#000;
+      background:var(--sliderTrack);
       border:none;
       border-radius:0;
     }
     input[type="range"]::-moz-range-thumb{
       width:14px; height:14px;
       background:transparent;
-      border:2px solid #000;
+      border:2px solid var(--sliderKnob);
       border-radius:50%;
     }
     input[type="range"]::-moz-range-progress{
       height:2px;
-      background:#000;
+      background:var(--sliderTrack);
       border:none;
     }
-    input[type="range"]:focus{ outline:none; }
+
+    select{
+      width:100%;
+      background:transparent;
+      border:2px solid #000;
+      color:#000;
+      padding:10px 10px;
+      outline:none;
+      min-height:44px;
+      cursor:pointer;
+      font-weight:950;
+      text-transform:uppercase;
+      letter-spacing:.8px;
+    }
 
     .status{
-      padding:10px 14px 14px;
-      color:#000;
-      font-size:12px;
       border-top:2px solid #000;
+      padding:10px 12px 12px;
       min-height:18px;
-      letter-spacing:.8px;
+      font-size:11px;
       text-transform:uppercase;
-      font-weight:900;
+      letter-spacing:1px;
+      font-weight:950;
+      color:#000;
     }
 
-    @media (max-width: 520px){
-      .tile{ flex-direction:column; align-items:stretch; }
-      .tile .left{ min-width:auto; }
-      .tile .right{ width:100%; }
-    }
-
-    #laneSfx button{
-      min-height: var(--sfxBtnH);
-      padding-top: 18px;
-      padding-bottom: 18px;
-      font-size: 13px;
-      letter-spacing: 1.1px;
+    /* make sure it still looks ok on desktop: center + keep phone width */
+    @media (min-width: 700px){
+      body{
+        display:flex;
+        align-items:center;
+        justify-content:center;
+        min-height:100vh;
+      }
+      .wrap{ padding:20px 16px; }
     }
   </style>
 </head>
@@ -254,72 +264,70 @@
   </div>
 
   <div class="wrap">
-    <div class="box">
 
-      <div class="lane jigsaw" id="laneSfx">
-        <button id="laser">Laser</button>
-        <button id="zap">Zap</button>
-        <button id="thrust">Thrust</button>
-        <button id="explosion">Explosion</button>
-        <button id="pickup">Pickup</button>
-        <button id="alarm">Alarm</button>
-        <button id="smartbomb">Smart Bomb</button>
-        <button id="hyperspace">Hyperspace</button>
-        <button id="teleport">Teleport</button>
+    <!-- Piano keys panel -->
+    <div class="panel">
+      <div class="keys" id="keys">
+        <!-- 9 vertical stripes, no labels -->
+        <button class="key" id="k_laser"      aria-label="Laser"></button>
+        <button class="key" id="k_zap"        aria-label="Zap"></button>
+        <button class="key" id="k_thrust"     aria-label="Thrust"></button>
+        <button class="key" id="k_explosion"  aria-label="Explosion"></button>
+        <button class="key" id="k_pickup"     aria-label="Pickup"></button>
+        <button class="key" id="k_alarm"      aria-label="Alarm"></button>
+        <button class="key" id="k_smartbomb"  aria-label="Smart Bomb"></button>
+        <button class="key" id="k_hyperspace" aria-label="Hyperspace"></button>
+        <button class="key" id="k_teleport"   aria-label="Teleport"></button>
       </div>
 
-      <div class="lane jigsaw" id="laneRand">
-        <button id="randAll" style="border-width:3px; font-size:13px; letter-spacing:1.1px;">
-          RANDOMIZE
-        </button>
+      <div class="row">
+        <button class="big" id="randAll">RANDOMIZE</button>
       </div>
+    </div>
 
-      <div class="lane" id="laneFreq">
-        <div class="tile boxInner">
-          <div class="left">
+    <!-- Controls flow below -->
+    <div class="panel">
+      <div class="row" style="flex-direction:column;">
+        <div class="tile">
+          <div class="tileHeader">
             <div class="label">Frequency</div>
+            <div class="value" id="crushVal">0.042</div>
           </div>
-          <div class="right">
-            <input id="crush" type="range" min="0" max="1" step="0.001" value="0.042">
-          </div>
+          <input id="crush" type="range" min="0" max="1" step="0.001" value="0.042">
         </div>
-      </div>
 
-      <div class="lane jigsaw" id="laneCtlA">
-        <div class="tile boxInner">
-          <div class="left">
+        <div class="tile">
+          <div class="tileHeader">
             <div class="label">Master</div>
+            <div class="value" id="masterVal">0.824</div>
           </div>
-          <div class="right">
-            <input id="master" type="range" min="0" max="1" step="0.001" value="0.824">
-          </div>
+          <input id="master" type="range" min="0" max="1" step="0.001" value="0.824">
         </div>
 
-        <div class="tile boxInner">
-          <div class="left">
+        <div class="tile">
+          <div class="tileHeader">
             <div class="label">Mutation</div>
+            <div class="value" id="mutVal">0.964</div>
           </div>
-          <div class="right">
-            <input id="mutAmt" type="range" min="0" max="1" step="0.001" value="0.964">
-          </div>
+          <input id="mutAmt" type="range" min="0" max="1" step="0.001" value="0.964">
         </div>
 
-        <div class="tile boxInner">
-          <div class="left">
+        <div class="tile">
+          <div class="tileHeader">
             <div class="label">Mode</div>
+            <div class="value" id="modeVal">Chaos</div>
           </div>
-          <div class="right">
-            <select id="mode">
-              <option value="faithful">Faithful</option>
-              <option value="spicy">Spicy</option>
-              <option value="chaos" selected>Chaos</option>
-            </select>
-          </div>
+          <select id="mode">
+            <option value="faithful">Faithful</option>
+            <option value="spicy">Spicy</option>
+            <option value="chaos" selected>Chaos</option>
+          </select>
         </div>
       </div>
 
       <div class="status" id="status"></div>
     </div>
+
   </div>
 
 <script>
@@ -673,7 +681,6 @@
     return local;
   }
 
-  // --- SFX implementations (unchanged) ---
   function playLaser(rng){
     const p = patch.laser, t0 = now();
     randomizeStereoByFreq(rng);
@@ -1073,7 +1080,7 @@
 
   function setControlsEnabled(enabled){
     const ids = [
-      "laser","zap","thrust","explosion","pickup","alarm","smartbomb","hyperspace","teleport",
+      "k_laser","k_zap","k_thrust","k_explosion","k_pickup","k_alarm","k_smartbomb","k_hyperspace","k_teleport",
       "randAll","master","crush","mode","mutAmt"
     ];
     ids.forEach(id => { const el = $("#"+id); if (el) el.disabled = !enabled; });
@@ -1099,8 +1106,17 @@
     $("#status").textContent = "";
   }
 
+  function updateReadouts(){
+    $("#crushVal").textContent  = (+$("#crush").value).toFixed(3);
+    $("#masterVal").textContent = (+$("#master").value).toFixed(3);
+    $("#mutVal").textContent    = (+$("#mutAmt").value).toFixed(3);
+    const m = $("#mode").value;
+    $("#modeVal").textContent = m.charAt(0).toUpperCase() + m.slice(1);
+  }
+
   function hook(){
     setControlsEnabled(false);
+    updateReadouts();
 
     $("#bigStartBtn").addEventListener("click", startSession);
     $("#startOverlay").addEventListener("click", (e) => {
@@ -1108,8 +1124,12 @@
     });
 
     $("#master").addEventListener("input", (e) => {
+      updateReadouts();
       if (masterGain) masterGain.gain.value = +e.target.value;
     });
+    $("#crush").addEventListener("input", updateReadouts);
+    $("#mutAmt").addEventListener("input", updateReadouts);
+    $("#mode").addEventListener("change", updateReadouts);
 
     $("#randAll").addEventListener("click", () => {
       if (!audioReady) return;
@@ -1119,22 +1139,24 @@
       setTimeout(() => { if ($("#status").textContent === "randomized") $("#status").textContent = ""; }, 650);
     });
 
-    $("#laser").addEventListener("click", () => stopThenPlay(playLaser));
-    $("#zap").addEventListener("click", () => stopThenPlay(playZap));
-    $("#thrust").addEventListener("click", () => stopThenPlay(playThrust));
-    $("#explosion").addEventListener("click", () => stopThenPlay(playExplosion));
-    $("#pickup").addEventListener("click", () => stopThenPlay(playPickup));
-    $("#alarm").addEventListener("click", () => stopThenPlay(playAlarm));
-    $("#smartbomb").addEventListener("click", () => stopThenPlay(playSmartBomb));
-    $("#hyperspace").addEventListener("click", () => stopThenPlay(playHyperspace));
-    $("#teleport").addEventListener("click", () => stopThenPlay(playTeleport));
+    // piano keys
+    $("#k_laser").addEventListener("click", () => stopThenPlay(playLaser));
+    $("#k_zap").addEventListener("click", () => stopThenPlay(playZap));
+    $("#k_thrust").addEventListener("click", () => stopThenPlay(playThrust));
+    $("#k_explosion").addEventListener("click", () => stopThenPlay(playExplosion));
+    $("#k_pickup").addEventListener("click", () => stopThenPlay(playPickup));
+    $("#k_alarm").addEventListener("click", () => stopThenPlay(playAlarm));
+    $("#k_smartbomb").addEventListener("click", () => stopThenPlay(playSmartBomb));
+    $("#k_hyperspace").addEventListener("click", () => stopThenPlay(playHyperspace));
+    $("#k_teleport").addEventListener("click", () => stopThenPlay(playTeleport));
 
+    // keyboard support (desktop testing)
     window.addEventListener("keydown", (e) => {
       if (e.repeat) return;
       if (!audioReady && (e.key === "Enter" || e.key === " ")){ e.preventDefault(); startSession(); return; }
       if (!audioReady) return;
       if (e.key === "r" || e.key === "R"){ $("#randAll").click(); return; }
-      const map = {"1":"laser","2":"zap","3":"thrust","4":"explosion","5":"pickup","6":"alarm","7":"smartbomb","8":"hyperspace","9":"teleport"};
+      const map = {"1":"k_laser","2":"k_zap","3":"k_thrust","4":"k_explosion","5":"k_pickup","6":"k_alarm","7":"k_smartbomb","8":"k_hyperspace","9":"k_teleport"};
       if (map[e.key]) $("#"+map[e.key]).click();
     });
   }
