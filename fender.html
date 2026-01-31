@@ -18,19 +18,15 @@
       /* Brutalist bevel palette */
       --panel:#070b0d;
       --plate:#05080a;
-      --edgeHi:rgba(255,255,255,.10);
-      --edgeLo:rgba(0,0,0,.85);
-      --edgeMid:rgba(255,255,255,.06);
       --stroke:rgba(53,255,122,.18);
       --stroke2:rgba(255,227,90,.14);
-      --shadow:rgba(0,0,0,.72);
+      --shadow:rgba(0,0,0,.78);
     }
 
     html,body{height:100%;}
     body{
       margin:0;
-      background:
-        linear-gradient(180deg, #030506 0%, #020304 70%, #010203 100%);
+      background: linear-gradient(180deg, #030506 0%, #020304 70%, #010203 100%);
       color:var(--ink);
       font:14px system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
       letter-spacing:.2px;
@@ -39,30 +35,69 @@
 
     .wrap{max-width:1120px;margin:24px auto;padding:0 14px;}
 
-    /* BIG BRUTALIST BEVEL */
-    .bevel{
-      border-radius:14px;
-      background:linear-gradient(180deg, rgba(255,255,255,.03), rgba(255,255,255,.015));
-      border:1px solid var(--stroke);
-      box-shadow:
-        0 18px 46px var(--shadow);
+    /* =========================================================
+       CHAMFERED / BEVELED SHAPE SYSTEM (NO ROUNDED CORNERS)
+       - Uses clip-path to make harsh chamfer corners.
+       - "Big chunky bevels" are sized via --ch.
+       ========================================================= */
+    .chamfer{
+      --ch: 18px;              /* corner cut size (chunky) */
+      --b: 1px;                /* outer border */
+      --hi: rgba(255,255,255,.06);
+      --lo: rgba(0,0,0,.62);
+
       position:relative;
+      background: linear-gradient(180deg, rgba(255,255,255,.03), rgba(255,255,255,.015));
+      box-shadow: 0 18px 46px var(--shadow);
+      border: var(--b) solid var(--stroke);
+
+      /* Harsh beveled corners */
+      -webkit-clip-path: polygon(
+        var(--ch) 0,
+        calc(100% - var(--ch)) 0,
+        100% var(--ch),
+        100% calc(100% - var(--ch)),
+        calc(100% - var(--ch)) 100%,
+        var(--ch) 100%,
+        0 calc(100% - var(--ch)),
+        0 var(--ch)
+      );
+      clip-path: polygon(
+        var(--ch) 0,
+        calc(100% - var(--ch)) 0,
+        100% var(--ch),
+        100% calc(100% - var(--ch)),
+        calc(100% - var(--ch)) 100%,
+        var(--ch) 100%,
+        0 calc(100% - var(--ch)),
+        0 var(--ch)
+      );
     }
-    .bevel:before{
+
+    /* Inner bevel + plate */
+    .chamfer::before{
       content:"";
       position:absolute;
       inset:0;
-      border-radius:14px;
       pointer-events:none;
 
-      /* thick inner bevel */
+      /* match chamfer shape */
+      -webkit-clip-path: inherit;
+      clip-path: inherit;
+
+      /* big chunky inner bevel */
       box-shadow:
         inset 0 0 0 2px rgba(255,255,255,.03),
-        inset 10px 10px 0 rgba(0,0,0,.45),
-        inset -10px -10px 0 rgba(255,255,255,.05),
-        inset 0 10px 0 rgba(255,255,255,.02),
-        inset 0 -10px 0 rgba(0,0,0,.55);
+        inset 12px 12px 0 rgba(0,0,0,.55),
+        inset -12px -12px 0 rgba(255,255,255,.06),
+        inset 0 12px 0 rgba(255,255,255,.02),
+        inset 0 -12px 0 rgba(0,0,0,.62);
     }
+
+    /* Smaller chamfer for tight elements */
+    .ch-sm{ --ch: 14px; }
+    .ch-xs{ --ch: 10px; }
+    .ch-lg{ --ch: 22px; }
 
     .card{ overflow:hidden; }
     .card .body{padding:14px;}
@@ -76,9 +111,11 @@
       padding-bottom:6px;
     }
 
+    /* =========================================================
+       BUTTONS / CONTROLS (ALL CHAMFERED)
+       ========================================================= */
     button{
       appearance:none;
-      border-radius:12px;
       cursor:pointer;
       user-select:none;
       white-space:nowrap;
@@ -88,39 +125,48 @@
       font-size:12px;
 
       color:var(--ink);
-      background:linear-gradient(180deg, rgba(0,0,0,.70), rgba(0,0,0,.40));
+      background:linear-gradient(180deg, rgba(0,0,0,.72), rgba(0,0,0,.38));
       border:1px solid rgba(53,255,122,.22);
       box-shadow: 0 12px 26px rgba(0,0,0,.78);
       padding:10px 12px;
+
       position:relative;
+      --ch: 14px;
+      -webkit-clip-path: polygon(
+        var(--ch) 0, calc(100% - var(--ch)) 0, 100% var(--ch),
+        100% calc(100% - var(--ch)), calc(100% - var(--ch)) 100%,
+        var(--ch) 100%, 0 calc(100% - var(--ch)), 0 var(--ch)
+      );
+      clip-path: polygon(
+        var(--ch) 0, calc(100% - var(--ch)) 0, 100% var(--ch),
+        100% calc(100% - var(--ch)), calc(100% - var(--ch)) 100%,
+        var(--ch) 100%, 0 calc(100% - var(--ch)), 0 var(--ch)
+      );
     }
 
-    /* bevel for ALL boxes */
-    button:before{
+    button::before{
       content:"";
       position:absolute; inset:0;
-      border-radius:12px;
       pointer-events:none;
+      -webkit-clip-path: inherit;
+      clip-path: inherit;
       box-shadow:
-        inset 8px 8px 0 rgba(0,0,0,.55),
-        inset -8px -8px 0 rgba(255,255,255,.06),
+        inset 10px 10px 0 rgba(0,0,0,.58),
+        inset -10px -10px 0 rgba(255,255,255,.07),
         inset 0 0 0 2px rgba(255,255,255,.02);
     }
 
     button:hover{
       border-color:rgba(255,227,90,.32);
-      background:linear-gradient(180deg, rgba(0,0,0,.62), rgba(0,0,0,.34));
+      background:linear-gradient(180deg, rgba(0,0,0,.64), rgba(0,0,0,.34));
     }
-    button:active{
-      transform:translateY(1px);
-      filter:contrast(1.05);
-    }
+    button:active{ transform:translateY(1px); filter:contrast(1.05); }
     button:disabled{opacity:.45;cursor:not-allowed;transform:none;}
 
     /* color hints */
-    #explosion, #smartbomb{ border-color: rgba(255,59,47,.32); }
-    #hyperspace, #teleport{ border-color: rgba(255,154,47,.30); }
-    #laser, #zap{ border-color: rgba(53,255,122,.28); }
+    #explosion, #smartbomb{ border-color: rgba(255,59,47,.34); }
+    #hyperspace, #teleport{ border-color: rgba(255,154,47,.32); }
+    #laser, #zap{ border-color: rgba(53,255,122,.30); }
 
     .randWrap{
       display:flex;
@@ -130,22 +176,15 @@
     #randAll{
       min-width:300px;
       padding:15px 18px;
-      border-radius:16px;
       font-weight:1000;
       letter-spacing:1.1px;
       font-size:13px;
-      border:1px solid rgba(255,227,90,.44);
-      background:linear-gradient(180deg, rgba(255,227,90,.14), rgba(0,0,0,.40));
-      box-shadow: 0 18px 44px rgba(0,0,0,.80);
+      border:1px solid rgba(255,227,90,.48);
+      background:linear-gradient(180deg, rgba(255,227,90,.16), rgba(0,0,0,.40));
+      box-shadow: 0 18px 44px rgba(0,0,0,.82);
+      --ch: 18px; /* chunkier for primary */
     }
-    #randAll:before{
-      border-radius:16px;
-      box-shadow:
-        inset 10px 10px 0 rgba(0,0,0,.55),
-        inset -10px -10px 0 rgba(255,255,255,.06),
-        inset 0 0 0 2px rgba(255,255,255,.02);
-    }
-    #randAll:hover{ border-color:rgba(255,227,90,.70); }
+    #randAll:hover{ border-color:rgba(255,227,90,.74); }
 
     .controls{
       border-top:1px solid rgba(255,255,255,.06);
@@ -166,21 +205,33 @@
       align-items:center;
       justify-content:space-between;
       padding:10px 12px;
-      border-radius:14px;
 
-      background:linear-gradient(180deg, rgba(0,0,0,.62), rgba(0,0,0,.34));
+      background:linear-gradient(180deg, rgba(0,0,0,.64), rgba(0,0,0,.34));
       border:1px solid rgba(53,255,122,.16);
       box-shadow:0 12px 28px rgba(0,0,0,.74);
+
       position:relative;
+      --ch: 18px;
+      -webkit-clip-path: polygon(
+        var(--ch) 0, calc(100% - var(--ch)) 0, 100% var(--ch),
+        100% calc(100% - var(--ch)), calc(100% - var(--ch)) 100%,
+        var(--ch) 100%, 0 calc(100% - var(--ch)), 0 var(--ch)
+      );
+      clip-path: polygon(
+        var(--ch) 0, calc(100% - var(--ch)) 0, 100% var(--ch),
+        100% calc(100% - var(--ch)), calc(100% - var(--ch)) 100%,
+        var(--ch) 100%, 0 calc(100% - var(--ch)), 0 var(--ch)
+      );
     }
-    .ctl:before{
+    .ctl::before{
       content:"";
       position:absolute; inset:0;
-      border-radius:14px;
       pointer-events:none;
+      -webkit-clip-path: inherit;
+      clip-path: inherit;
       box-shadow:
-        inset 10px 10px 0 rgba(0,0,0,.55),
-        inset -10px -10px 0 rgba(255,255,255,.06),
+        inset 12px 12px 0 rgba(0,0,0,.58),
+        inset -12px -12px 0 rgba(255,255,255,.06),
         inset 0 0 0 2px rgba(255,255,255,.02);
     }
 
@@ -204,15 +255,27 @@
       color:rgba(53,255,122,.95);
     }
 
+    /* Inputs / selects: chamfered too */
     input[type="text"], select{
       background:rgba(0,0,0,.60);
       border:1px solid rgba(255,227,90,.16);
       color:var(--ink);
-      border-radius:10px;
       padding:8px 10px;
       outline:none;
+
       position:relative;
       z-index:1;
+      --ch: 14px;
+      -webkit-clip-path: polygon(
+        var(--ch) 0, calc(100% - var(--ch)) 0, 100% var(--ch),
+        100% calc(100% - var(--ch)), calc(100% - var(--ch)) 100%,
+        var(--ch) 100%, 0 calc(100% - var(--ch)), 0 var(--ch)
+      );
+      clip-path: polygon(
+        var(--ch) 0, calc(100% - var(--ch)) 0, 100% var(--ch),
+        100% calc(100% - var(--ch)), calc(100% - var(--ch)) 100%,
+        var(--ch) 100%, 0 calc(100% - var(--ch)), 0 var(--ch)
+      );
     }
     select{cursor:pointer;}
     .row2{display:flex; gap:10px; align-items:center; flex-wrap:wrap;}
@@ -229,7 +292,7 @@
       text-transform:uppercase;
     }
 
-    /* START overlay, no glow */
+    /* START overlay */
     .startOverlay{
       position:fixed; inset:0;
       display:flex; align-items:center; justify-content:center;
@@ -239,32 +302,44 @@
     .bigStartBtn{
       width:min(360px, calc(100vw - 28px));
       padding:18px 14px;
-      border-radius:20px;
       font-size:18px;
       font-weight:1000;
       letter-spacing:1.6px;
       text-transform:uppercase;
 
-      background:linear-gradient(180deg, rgba(255,227,90,.14), rgba(0,0,0,.48));
-      border:1px solid rgba(255,227,90,.55);
-      box-shadow: 0 28px 80px rgba(0,0,0,.78);
+      background:linear-gradient(180deg, rgba(255,227,90,.16), rgba(0,0,0,.50));
+      border:1px solid rgba(255,227,90,.58);
+      box-shadow: 0 28px 80px rgba(0,0,0,.80);
+
       position:relative;
+      --ch: 26px;
+      -webkit-clip-path: polygon(
+        var(--ch) 0, calc(100% - var(--ch)) 0, 100% var(--ch),
+        100% calc(100% - var(--ch)), calc(100% - var(--ch)) 100%,
+        var(--ch) 100%, 0 calc(100% - var(--ch)), 0 var(--ch)
+      );
+      clip-path: polygon(
+        var(--ch) 0, calc(100% - var(--ch)) 0, 100% var(--ch),
+        100% calc(100% - var(--ch)), calc(100% - var(--ch)) 100%,
+        var(--ch) 100%, 0 calc(100% - var(--ch)), 0 var(--ch)
+      );
     }
-    .bigStartBtn:before{
+    .bigStartBtn::before{
       content:"";
       position:absolute; inset:0;
-      border-radius:20px;
       pointer-events:none;
+      -webkit-clip-path: inherit;
+      clip-path: inherit;
       box-shadow:
-        inset 14px 14px 0 rgba(0,0,0,.58),
-        inset -14px -14px 0 rgba(255,255,255,.06),
+        inset 16px 16px 0 rgba(0,0,0,.62),
+        inset -16px -16px 0 rgba(255,255,255,.06),
         inset 0 0 0 2px rgba(255,255,255,.02);
     }
-    .bigStartBtn:hover{ border-color:rgba(255,227,90,.85); }
+    .bigStartBtn:hover{ border-color:rgba(255,227,90,.88); }
 
     /* ------------------------------------------------------------
-       SLIDERS: make track + thumb the SAME GREEN as values
-       (no glow). Cross-browser-ish.
+       SLIDERS: track + thumb same green as values (no glow)
+       Also chamfer thumb (approx) by using square+shadow; browsers limit shapes.
        ------------------------------------------------------------ */
     input[type="range"]{
       width:220px;
@@ -278,9 +353,7 @@
     /* WebKit track */
     input[type="range"]::-webkit-slider-runnable-track{
       height:12px;
-      border-radius:10px;
-      background:
-        linear-gradient(180deg, rgba(53,255,122,.22), rgba(53,255,122,.10));
+      background: linear-gradient(180deg, rgba(53,255,122,.22), rgba(53,255,122,.10));
       border:1px solid rgba(53,255,122,.35);
       box-shadow:
         inset 6px 6px 0 rgba(0,0,0,.55),
@@ -289,9 +362,7 @@
     input[type="range"]::-webkit-slider-thumb{
       -webkit-appearance:none;
       width:20px; height:20px;
-      border-radius:6px;
-      background:
-        linear-gradient(180deg, rgba(53,255,122,.40), rgba(53,255,122,.18));
+      background: linear-gradient(180deg, rgba(53,255,122,.40), rgba(53,255,122,.18));
       border:1px solid rgba(53,255,122,.70);
       margin-top:-5px;
       box-shadow:
@@ -303,9 +374,7 @@
     /* Firefox track */
     input[type="range"]::-moz-range-track{
       height:12px;
-      border-radius:10px;
-      background:
-        linear-gradient(180deg, rgba(53,255,122,.22), rgba(53,255,122,.10));
+      background: linear-gradient(180deg, rgba(53,255,122,.22), rgba(53,255,122,.10));
       border:1px solid rgba(53,255,122,.35);
       box-shadow:
         inset 6px 6px 0 rgba(0,0,0,.55),
@@ -313,9 +382,7 @@
     }
     input[type="range"]::-moz-range-thumb{
       width:20px; height:20px;
-      border-radius:6px;
-      background:
-        linear-gradient(180deg, rgba(53,255,122,.40), rgba(53,255,122,.18));
+      background: linear-gradient(180deg, rgba(53,255,122,.40), rgba(53,255,122,.18));
       border:1px solid rgba(53,255,122,.70);
       box-shadow:
         inset 6px 6px 0 rgba(0,0,0,.50),
@@ -323,9 +390,7 @@
         0 10px 18px rgba(0,0,0,.65);
     }
 
-    /* Keep button bevels readable on very small screens */
     @media (max-width: 420px){
-      button{ padding:10px 10px; }
       #randAll{ min-width: 0; width:100%; }
       input[type="range"]{ width:180px; }
     }
@@ -338,7 +403,7 @@
   </div>
 
   <div class="wrap">
-    <div class="card bevel">
+    <div class="card chamfer ch-lg">
       <div class="body">
 
         <div class="sfxRow" id="sfxRow">
@@ -414,9 +479,6 @@
 
 <script>
 (() => {
-  // ------------------------------------------------------------
-  // Small utilities
-  // ------------------------------------------------------------
   const $ = (q) => document.querySelector(q);
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
   const lerp  = (a, b, t) => a + (b - a) * t;
@@ -452,9 +514,6 @@
     return curve;
   }
 
-  // ------------------------------------------------------------
-  // ADSR: sharp attack, decay to zero, no sustain
-  // ------------------------------------------------------------
   function adsrToZeroLinear(param, t0, A, D, S, R, peak=1.0){
     const a = Math.max(0.0005, A);
     const d = Math.max(0.001, D);
@@ -474,9 +533,6 @@
     return tR;
   }
 
-  // ------------------------------------------------------------
-  // Randomizer helpers
-  // ------------------------------------------------------------
   function modeConfig(mode){
     if (mode === "faithful") return { wide: 0.75, jumpP: 0.08, jumpScale: 0.55 };
     if (mode === "chaos")   return { wide: 3.00, jumpP: 0.28, jumpScale: 1.65 };
@@ -515,9 +571,6 @@
     return clamp(v, min, max);
   }
 
-  // ------------------------------------------------------------
-  // Audio Graph + stereo band spatialization
-  // ------------------------------------------------------------
   let ctx = null;
   let masterGain, compressor, postGain, crusher = null;
   let globalStop = [];
@@ -596,11 +649,9 @@
   }
 
   function buildStereoBands(){
-    // entry accepts mono, outputs stereo into masterGain
     STEREO.entry = ctx.createGain();
     STEREO.entry.gain.value = 1.0;
 
-    // bandpass bank
     const centers = [80, 120, 180, 260, 380, 560, 820, 1200, 2000, 3800, 6500, 9000];
     const Qs      = [1.2,1.4,1.6,1.8,2.0,2.2,2.4,2.6,2.8,3.0,3.2,3.4];
 
@@ -624,7 +675,6 @@
       STEREO.bands.push({ bp, pan, gain:g, fc });
     });
 
-    // dry center feed
     STEREO.dry = ctx.createGain();
     STEREO.dry.gain.value = 0.55;
     STEREO.entry.connect(STEREO.dry);
@@ -632,6 +682,7 @@
   }
 
   function randomizeStereoByFreq(rng){
+    if (!STEREO.entry || !STEREO.bands.length) return;
     STEREO.bands.forEach((b) => {
       const fNorm = clamp((Math.log(b.fc) - Math.log(80)) / (Math.log(9000) - Math.log(80)), 0, 1);
       const maxPan = lerp(0.35, 1.0, fNorm);
@@ -655,9 +706,6 @@
     globalStop.length = 0;
   }
 
-  // ------------------------------------------------------------
-  // Noise buffer (LFSR-ish)
-  // ------------------------------------------------------------
   let noiseBuf = null;
   function getNoiseBuffer(){
     if (noiseBuf) return noiseBuf;
@@ -707,9 +755,6 @@
     return { out, delay:d, fb, wetG, dryG };
   }
 
-  // ------------------------------------------------------------
-  // Base Patch
-  // ------------------------------------------------------------
   const BASE = {
     laser:      { baseHz: 900,  sweepHz: 520,  sweepTime: 0.055, bite: 0.55, click: 0.12, noise: 0.08, hp: 260, dur: 0.14 },
     zap:        { baseHz: 220,  sweepHz: 1400, sweepTime: 0.090, fmAmt: 180, fmHz: 32, noise: 0.18, bp: 1200, q: 8, dur: 0.22 },
@@ -724,9 +769,6 @@
   };
   let patch = JSON.parse(JSON.stringify(BASE));
 
-  // ------------------------------------------------------------
-  // Randomizer
-  // ------------------------------------------------------------
   let REV = 0;
   function resetToBase(){ patch = JSON.parse(JSON.stringify(BASE)); }
 
@@ -741,7 +783,7 @@
     const seedStr = `${$("#seed").value}|${mode}|${REV}`;
     const rng = mulberry32(hash32(seedStr));
 
-    const r = (name, key, min, max) => patch[name][key] = pickVal(rng, BASE[name][key], min, max, mutAmt, wide, jumpP, jumpScale);
+    const r  = (name, key, min, max) => patch[name][key] = pickVal(rng, BASE[name][key], min, max, mutAmt, wide, jumpP, jumpScale);
     const rd = (name, key, min, max) => patch[name][key] = pickDur(rng, BASE[name][key], min, max, mutAmt, wide);
 
     r("laser","baseHz",   260, 2200); r("laser","sweepHz",  60,  2600); r("laser","sweepTime",0.018,0.22);
@@ -782,41 +824,16 @@
     r("teleport","delayFb",      0.00,0.78); r("teleport","wet",          0.00,0.80);
   }
 
-  // ------------------------------------------------------------
-  // Routing
-  // ------------------------------------------------------------
   function routeToConsoleStereo(node){
     ensureCrusher();
-
     const local = ctx.createGain();
     local.gain.value = 1.0;
     node.connect(local);
     local.connect(crusher.input);
-
     globalStop.push(() => { try{ local.disconnect(); }catch(e){} });
     return local;
   }
 
-  // ------------------------------------------------------------
-  // Noise / FX
-  // ------------------------------------------------------------
-  function randomizeStereoByFreq(rng){
-    // if audio not built yet, no-op
-    if (!STEREO.entry || !STEREO.bands.length) return;
-    STEREO.bands.forEach((b) => {
-      const fNorm = clamp((Math.log(b.fc) - Math.log(80)) / (Math.log(9000) - Math.log(80)), 0, 1);
-      const maxPan = lerp(0.35, 1.0, fNorm);
-      const pan = (rng()*2 - 1) * maxPan;
-
-      const gJ = lerp(0.10, 0.26, rng());
-      b.gain.gain.setValueAtTime(gJ, now());
-      b.pan.pan.setValueAtTime(pan, now());
-    });
-  }
-
-  // ------------------------------------------------------------
-  // Sound models
-  // ------------------------------------------------------------
   function playLaser(rng){
     const p = patch.laser, t0 = now();
     randomizeStereoByFreq(rng);
@@ -1216,9 +1233,6 @@
     scheduleStopDisconnect(out, tEnd + 0.30);
   }
 
-  // ------------------------------------------------------------
-  // UI wiring
-  // ------------------------------------------------------------
   const status = $("#status");
 
   function setControlsEnabled(enabled){
