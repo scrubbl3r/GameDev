@@ -3,213 +3,420 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Defender-ish Sound Generator (Procedural, No Samples)</title>
+  <title>Defender-ish SFX Generator</title>
   <style>
     :root{
-      --bg:#07090b;
-      --ink:#d7f7e3;
-      --muted:#89a39a;
-      --accent:#39ff88;
-      --border:rgba(57,255,136,.18);
-      --shadow:rgba(0,0,0,.45);
-      --warn:#ffb84d;
+      --bg:#030506;
+      --ink:#e8fff2;
+
+      /* HOT REACTOR CONSOLE */
+      --g:#35ff7a;
+      --y:#ffe35a;
+      --o:#ff9a2f;
+      --r:#ff3b2f;
+
+      /* Brutalist bevel palette */
+      --panel:#070b0d;
+      --plate:#05080a;
+      --edgeHi:rgba(255,255,255,.10);
+      --edgeLo:rgba(0,0,0,.85);
+      --edgeMid:rgba(255,255,255,.06);
+      --stroke:rgba(53,255,122,.18);
+      --stroke2:rgba(255,227,90,.14);
+      --shadow:rgba(0,0,0,.72);
     }
+
     html,body{height:100%;}
     body{
       margin:0;
-      background:radial-gradient(1200px 700px at 40% 0%, #0b1216 0%, var(--bg) 55%);
+      background:
+        linear-gradient(180deg, #030506 0%, #020304 70%, #010203 100%);
       color:var(--ink);
       font:14px system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
       letter-spacing:.2px;
+      overflow-x:hidden;
     }
+
     .wrap{max-width:1120px;margin:24px auto;padding:0 14px;}
-    .title{
-      display:flex;align-items:flex-end;justify-content:space-between;gap:12px;flex-wrap:wrap;
-      margin:6px 0 14px 0;
-    }
-    h1{font-size:18px;margin:0;font-weight:650;}
-    .sub{color:var(--muted);font-size:12px;margin-top:4px;}
-    .badge{
-      border:1px solid var(--border);
-      background:rgba(0,0,0,.25);
-      padding:8px 10px;border-radius:12px;
-      box-shadow:0 10px 24px var(--shadow);
-      color:var(--muted);
-      max-width:620px;
-    }
-    .grid{
-      display:grid;
-      grid-template-columns: 1.15fr .85fr;
-      gap:12px;
-    }
-    @media (max-width: 900px){ .grid{grid-template-columns:1fr;} }
-    .card{
+
+    /* BIG BRUTALIST BEVEL */
+    .bevel{
+      border-radius:14px;
       background:linear-gradient(180deg, rgba(255,255,255,.03), rgba(255,255,255,.015));
-      border:1px solid var(--border);
-      border-radius:16px;
-      box-shadow:0 18px 42px var(--shadow);
-      overflow:hidden;
+      border:1px solid var(--stroke);
+      box-shadow:
+        0 18px 46px var(--shadow);
+      position:relative;
     }
-    .card h2{
-      margin:0;padding:12px 14px;
-      font-size:13px;font-weight:650;
-      border-bottom:1px solid rgba(255,255,255,.06);
-      color:#eafdf4;
+    .bevel:before{
+      content:"";
+      position:absolute;
+      inset:0;
+      border-radius:14px;
+      pointer-events:none;
+
+      /* thick inner bevel */
+      box-shadow:
+        inset 0 0 0 2px rgba(255,255,255,.03),
+        inset 10px 10px 0 rgba(0,0,0,.45),
+        inset -10px -10px 0 rgba(255,255,255,.05),
+        inset 0 10px 0 rgba(255,255,255,.02),
+        inset 0 -10px 0 rgba(0,0,0,.55);
     }
-    .card .body{padding:12px 14px;}
-    .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:8px 0;}
+
+    .card{ overflow:hidden; }
+    .card .body{padding:14px;}
+
+    .sfxRow{
+      display:flex;
+      gap:10px;
+      justify-content:center;
+      align-items:center;
+      flex-wrap:wrap;
+      padding-bottom:6px;
+    }
+
     button{
-      appearance:none;border:1px solid var(--border);
-      background:rgba(0,0,0,.35);
-      color:var(--ink);
-      padding:10px 12px;border-radius:12px;
+      appearance:none;
+      border-radius:12px;
       cursor:pointer;
-      transition:transform .04s ease, background .12s ease, border-color .12s ease;
-      box-shadow:0 10px 24px var(--shadow);
+      user-select:none;
+      white-space:nowrap;
+      text-transform:uppercase;
+      letter-spacing:.7px;
+      font-weight:900;
+      font-size:12px;
+
+      color:var(--ink);
+      background:linear-gradient(180deg, rgba(0,0,0,.70), rgba(0,0,0,.40));
+      border:1px solid rgba(53,255,122,.22);
+      box-shadow: 0 12px 26px rgba(0,0,0,.78);
+      padding:10px 12px;
+      position:relative;
     }
-    button:hover{background:rgba(57,255,136,.10);border-color:rgba(57,255,136,.35);}
-    button:active{transform:translateY(1px);}
-    button.primary{
-      background:rgba(57,255,136,.14);
-      border-color:rgba(57,255,136,.35);
+
+    /* bevel for ALL boxes */
+    button:before{
+      content:"";
+      position:absolute; inset:0;
+      border-radius:12px;
+      pointer-events:none;
+      box-shadow:
+        inset 8px 8px 0 rgba(0,0,0,.55),
+        inset -8px -8px 0 rgba(255,255,255,.06),
+        inset 0 0 0 2px rgba(255,255,255,.02);
     }
-    button.danger{
-      background:rgba(255,184,77,.12);
-      border-color:rgba(255,184,77,.35);
-      color:#fff2dc;
+
+    button:hover{
+      border-color:rgba(255,227,90,.32);
+      background:linear-gradient(180deg, rgba(0,0,0,.62), rgba(0,0,0,.34));
     }
-    .pill{
-      display:inline-flex;align-items:center;gap:8px;
-      border:1px solid rgba(255,255,255,.10);
-      background:rgba(0,0,0,.25);
-      padding:8px 10px;border-radius:999px;
-      color:var(--muted);
+    button:active{
+      transform:translateY(1px);
+      filter:contrast(1.05);
     }
-    label{color:var(--muted);font-size:12px;}
-    input[type="range"]{width:210px;}
+    button:disabled{opacity:.45;cursor:not-allowed;transform:none;}
+
+    /* color hints */
+    #explosion, #smartbomb{ border-color: rgba(255,59,47,.32); }
+    #hyperspace, #teleport{ border-color: rgba(255,154,47,.30); }
+    #laser, #zap{ border-color: rgba(53,255,122,.28); }
+
+    .randWrap{
+      display:flex;
+      justify-content:center;
+      margin:12px 0 12px 0;
+    }
+    #randAll{
+      min-width:300px;
+      padding:15px 18px;
+      border-radius:16px;
+      font-weight:1000;
+      letter-spacing:1.1px;
+      font-size:13px;
+      border:1px solid rgba(255,227,90,.44);
+      background:linear-gradient(180deg, rgba(255,227,90,.14), rgba(0,0,0,.40));
+      box-shadow: 0 18px 44px rgba(0,0,0,.80);
+    }
+    #randAll:before{
+      border-radius:16px;
+      box-shadow:
+        inset 10px 10px 0 rgba(0,0,0,.55),
+        inset -10px -10px 0 rgba(255,255,255,.06),
+        inset 0 0 0 2px rgba(255,255,255,.02);
+    }
+    #randAll:hover{ border-color:rgba(255,227,90,.70); }
+
+    .controls{
+      border-top:1px solid rgba(255,255,255,.06);
+      padding-top:12px;
+      display:grid;
+      grid-template-columns: 1fr 1fr;
+      gap:10px 12px;
+      align-items:center;
+    }
+    @media (max-width: 860px){
+      .controls{grid-template-columns:1fr;}
+      input[type="range"]{max-width:58vw;}
+    }
+
+    .ctl{
+      display:flex;
+      gap:10px;
+      align-items:center;
+      justify-content:space-between;
+      padding:10px 12px;
+      border-radius:14px;
+
+      background:linear-gradient(180deg, rgba(0,0,0,.62), rgba(0,0,0,.34));
+      border:1px solid rgba(53,255,122,.16);
+      box-shadow:0 12px 28px rgba(0,0,0,.74);
+      position:relative;
+    }
+    .ctl:before{
+      content:"";
+      position:absolute; inset:0;
+      border-radius:14px;
+      pointer-events:none;
+      box-shadow:
+        inset 10px 10px 0 rgba(0,0,0,.55),
+        inset -10px -10px 0 rgba(255,255,255,.06),
+        inset 0 0 0 2px rgba(255,255,255,.02);
+    }
+
+    .ctl .left{
+      display:flex;
+      flex-direction:column;
+      gap:2px;
+      min-width:120px;
+      position:relative;
+      z-index:1;
+    }
+    .label{
+      color:rgba(255,227,90,.85);
+      font-size:11px;
+      line-height:1;
+      text-transform:uppercase;
+      letter-spacing:.9px;
+    }
+    .value{
+      font:12px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono","Courier New", monospace;
+      color:rgba(53,255,122,.95);
+    }
+
     input[type="text"], select{
-      background:rgba(0,0,0,.35);
-      border:1px solid rgba(255,255,255,.10);
+      background:rgba(0,0,0,.60);
+      border:1px solid rgba(255,227,90,.16);
       color:var(--ink);
       border-radius:10px;
       padding:8px 10px;
       outline:none;
+      position:relative;
+      z-index:1;
     }
     select{cursor:pointer;}
-    .kvs{
-      display:grid;grid-template-columns: 155px 1fr;
-      gap:8px 10px;align-items:center;
-      margin-top:8px;
-    }
+    .row2{display:flex; gap:10px; align-items:center; flex-wrap:wrap;}
     .mono{font:12px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono","Courier New", monospace;}
-    .hint{color:var(--muted);font-size:12px;line-height:1.35;}
-    .warn{color:var(--warn);}
-    .small{font-size:12px;color:var(--muted);}
-    .divider{height:1px;background:rgba(255,255,255,.06);margin:12px 0;}
-    .tag{padding:2px 8px;border:1px solid rgba(255,255,255,.10);border-radius:999px;color:var(--muted);}
+
+    .status{
+      margin-top:10px;
+      color:rgba(255,227,90,.75);
+      font-size:12px;
+      border-top:1px solid rgba(255,255,255,.06);
+      padding-top:10px;
+      min-height:16px;
+      letter-spacing:.5px;
+      text-transform:uppercase;
+    }
+
+    /* START overlay, no glow */
+    .startOverlay{
+      position:fixed; inset:0;
+      display:flex; align-items:center; justify-content:center;
+      background:rgba(0,0,0,.88);
+      z-index:9999;
+    }
+    .bigStartBtn{
+      width:min(360px, calc(100vw - 28px));
+      padding:18px 14px;
+      border-radius:20px;
+      font-size:18px;
+      font-weight:1000;
+      letter-spacing:1.6px;
+      text-transform:uppercase;
+
+      background:linear-gradient(180deg, rgba(255,227,90,.14), rgba(0,0,0,.48));
+      border:1px solid rgba(255,227,90,.55);
+      box-shadow: 0 28px 80px rgba(0,0,0,.78);
+      position:relative;
+    }
+    .bigStartBtn:before{
+      content:"";
+      position:absolute; inset:0;
+      border-radius:20px;
+      pointer-events:none;
+      box-shadow:
+        inset 14px 14px 0 rgba(0,0,0,.58),
+        inset -14px -14px 0 rgba(255,255,255,.06),
+        inset 0 0 0 2px rgba(255,255,255,.02);
+    }
+    .bigStartBtn:hover{ border-color:rgba(255,227,90,.85); }
+
+    /* ------------------------------------------------------------
+       SLIDERS: make track + thumb the SAME GREEN as values
+       (no glow). Cross-browser-ish.
+       ------------------------------------------------------------ */
+    input[type="range"]{
+      width:220px;
+      position:relative;
+      z-index:1;
+      -webkit-appearance:none;
+      appearance:none;
+      background:transparent;
+    }
+
+    /* WebKit track */
+    input[type="range"]::-webkit-slider-runnable-track{
+      height:12px;
+      border-radius:10px;
+      background:
+        linear-gradient(180deg, rgba(53,255,122,.22), rgba(53,255,122,.10));
+      border:1px solid rgba(53,255,122,.35);
+      box-shadow:
+        inset 6px 6px 0 rgba(0,0,0,.55),
+        inset -6px -6px 0 rgba(255,255,255,.06);
+    }
+    input[type="range"]::-webkit-slider-thumb{
+      -webkit-appearance:none;
+      width:20px; height:20px;
+      border-radius:6px;
+      background:
+        linear-gradient(180deg, rgba(53,255,122,.40), rgba(53,255,122,.18));
+      border:1px solid rgba(53,255,122,.70);
+      margin-top:-5px;
+      box-shadow:
+        inset 6px 6px 0 rgba(0,0,0,.50),
+        inset -6px -6px 0 rgba(255,255,255,.08),
+        0 10px 18px rgba(0,0,0,.65);
+    }
+
+    /* Firefox track */
+    input[type="range"]::-moz-range-track{
+      height:12px;
+      border-radius:10px;
+      background:
+        linear-gradient(180deg, rgba(53,255,122,.22), rgba(53,255,122,.10));
+      border:1px solid rgba(53,255,122,.35);
+      box-shadow:
+        inset 6px 6px 0 rgba(0,0,0,.55),
+        inset -6px -6px 0 rgba(255,255,255,.06);
+    }
+    input[type="range"]::-moz-range-thumb{
+      width:20px; height:20px;
+      border-radius:6px;
+      background:
+        linear-gradient(180deg, rgba(53,255,122,.40), rgba(53,255,122,.18));
+      border:1px solid rgba(53,255,122,.70);
+      box-shadow:
+        inset 6px 6px 0 rgba(0,0,0,.50),
+        inset -6px -6px 0 rgba(255,255,255,.08),
+        0 10px 18px rgba(0,0,0,.65);
+    }
+
+    /* Keep button bevels readable on very small screens */
+    @media (max-width: 420px){
+      button{ padding:10px 10px; }
+      #randAll{ min-width: 0; width:100%; }
+      input[type="range"]{ width:180px; }
+    }
   </style>
 </head>
 <body>
+
+  <div class="startOverlay" id="startOverlay" role="dialog" aria-modal="true">
+    <button class="bigStartBtn" id="bigStartBtn">start</button>
+  </div>
+
   <div class="wrap">
-    <div class="title">
-      <div>
-        <h1>Defender-ish Sound Generator <span class="small">(procedural Web Audio, no samples)</span></h1>
-        <div class="sub">Randomize generates a new “variant set” for every category (bigger swings + longer tail potential).</div>
-      </div>
-      <div class="badge">
-        <div class="mono">Note</div>
-        <div class="hint">
-          Original synth inspired by early-80s arcade *characteristics* — <span class="warn">no ROM / proprietary code</span>.
+    <div class="card bevel">
+      <div class="body">
+
+        <div class="sfxRow" id="sfxRow">
+          <button id="laser">Laser</button>
+          <button id="zap">Zap</button>
+          <button id="thrust">Thrust</button>
+          <button id="explosion">Explosion</button>
+          <button id="pickup">Pickup</button>
+          <button id="alarm">Alarm</button>
+          <button id="smartbomb">Smart Bomb</button>
+          <button id="hyperspace">Hyperspace</button>
+          <button id="teleport">Teleport</button>
         </div>
-      </div>
-    </div>
 
-    <div class="grid">
-      <div class="card">
-        <h2>Play SFX</h2>
-        <div class="body">
-          <div class="row">
-            <button class="primary" id="btnStart">Start Audio</button>
+        <div class="randWrap">
+          <button id="randAll">Randomize All</button>
+        </div>
 
-            <!-- DEFAULTS MATCH SCREENSHOT -->
-            <span class="pill">
-              <span>Master</span>
-              <input id="master" type="range" min="0" max="1" step="0.001" value="0.85">
-              <span class="mono" id="masterVal">0.85</span>
-            </span>
-
-            <span class="pill">
-              <span>Lo-Fi</span>
-              <input id="crush" type="range" min="0" max="1" step="0.001" value="1.00">
-              <span class="mono" id="crushVal">1.00</span>
-            </span>
-
-            <span class="tag mono" id="revTag">rev#0</span>
+        <div class="controls">
+          <div class="ctl">
+            <div class="left">
+              <div class="label">Master</div>
+              <div class="value mono" id="masterVal">0.85</div>
+            </div>
+            <input id="master" type="range" min="0" max="1" step="0.001" value="0.85">
           </div>
 
-          <div class="row">
-            <button id="laser">Laser</button>
-            <button id="zap">Zap</button>
-            <button id="thrust">Thrust</button>
-            <button id="explosion">Explosion</button>
-            <button id="pickup">Pickup</button>
-            <button id="alarm">Alarm</button>
+          <div class="ctl">
+            <div class="left">
+              <div class="label">Lo-Fi</div>
+              <div class="value mono" id="crushVal">1.00</div>
+            </div>
+            <input id="crush" type="range" min="0" max="1" step="0.001" value="1.00">
           </div>
 
-          <div class="row">
-            <button id="smartbomb">Smart Bomb</button>
-            <button id="hyperspace">Hyperspace</button>
-            <button id="teleport">Teleport</button>
-            <button class="danger" id="panic">Stop All</button>
-          </div>
-
-          <div class="divider"></div>
-
-          <div class="row">
-            <label for="mode">Randomize Mode</label>
+          <div class="ctl">
+            <div class="left">
+              <div class="label">Mode</div>
+              <div class="value mono" id="modeVal">chaos</div>
+            </div>
             <select id="mode">
-              <option value="faithful">Faithful (tight)</option>
-              <option value="spicy">Spicy (sweet spot)</option>
-              <option value="chaos" selected>Chaos (big swings)</option>
+              <option value="faithful">Faithful</option>
+              <option value="spicy">Spicy</option>
+              <option value="chaos" selected>Chaos</option>
             </select>
+          </div>
 
-            <label for="mutAmt">Mutation</label>
-
-            <!-- DEFAULT MATCH SCREENSHOT -->
+          <div class="ctl">
+            <div class="left">
+              <div class="label">Mutation</div>
+              <div class="value mono" id="mutAmtVal">1.00</div>
+            </div>
             <input id="mutAmt" type="range" min="0" max="1" step="0.001" value="1.00">
-            <span class="mono" id="mutAmtVal">1.00</span>
-
-            <label for="seed">Seed</label>
-            <input id="seed" type="text" value="DEFENDER" class="mono" style="width:180px;">
-            <button id="randAll" class="primary">Randomize All</button>
-            <button id="resetBase">Reset to Base</button>
           </div>
 
-          <div class="hint">
-            Changes in this drop: Chaos now has wider ranges + more “jump” events, and durations are biased to include longer tails (without eliminating short blips).
+          <div class="ctl" style="grid-column:1 / -1;">
+            <div class="left">
+              <div class="label">Seed</div>
+              <div class="value mono" id="revTag">rev#0</div>
+            </div>
+            <div class="row2" style="justify-content:flex-end; width:100%; position:relative; z-index:1;">
+              <input id="seed" type="text" value="DEFENDER" class="mono" style="width:220px; max-width:52vw;">
+              <button id="resetBase">Reset</button>
+            </div>
           </div>
-
-          <div class="divider"></div>
-          <div class="mono small" id="status">Audio not started.</div>
         </div>
-      </div>
 
-      <div class="card">
-        <h2>Current Patch (per effect)</h2>
-        <div class="body">
-          <div class="hint">These are the live params used by each category model. Randomize replaces them.</div>
-          <div class="divider"></div>
-          <div class="kvs mono" id="patchView"></div>
-        </div>
+        <div class="status mono" id="status"></div>
+
       </div>
     </div>
   </div>
 
 <script>
 (() => {
-  // ----------------------------
-  // Utils
-  // ----------------------------
+  // ------------------------------------------------------------
+  // Small utilities
+  // ------------------------------------------------------------
   const $ = (q) => document.querySelector(q);
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
   const lerp  = (a, b, t) => a + (b - a) * t;
@@ -245,12 +452,36 @@
     return curve;
   }
 
+  // ------------------------------------------------------------
+  // ADSR: sharp attack, decay to zero, no sustain
+  // ------------------------------------------------------------
+  function adsrToZeroLinear(param, t0, A, D, S, R, peak=1.0){
+    const a = Math.max(0.0005, A);
+    const d = Math.max(0.001, D);
+    const r = Math.max(0.001, R);
+
+    const tA = t0 + a;
+    const tD = tA + d;
+    const tS = tD + Math.max(0, S);
+    const tR = tS + r;
+
+    param.cancelScheduledValues(t0);
+    param.setValueAtTime(0, t0);
+    param.linearRampToValueAtTime(peak, tA);
+    param.linearRampToValueAtTime(0, tD);
+    param.setValueAtTime(0, tS);
+    param.linearRampToValueAtTime(0, tR);
+    return tR;
+  }
+
+  // ------------------------------------------------------------
+  // Randomizer helpers
+  // ------------------------------------------------------------
   function modeConfig(mode){
     if (mode === "faithful") return { wide: 0.75, jumpP: 0.08, jumpScale: 0.55 };
     if (mode === "chaos")   return { wide: 3.00, jumpP: 0.28, jumpScale: 1.65 };
     return { wide: 1.55, jumpP: 0.16, jumpScale: 1.00 };
   }
-
   function pickVal(rng, base, min, max, mutAmt, modeWide, jumpP, jumpScale){
     const span = (max - min);
     const jitter = randSym(rng) * span * 0.42 * modeWide;
@@ -259,25 +490,22 @@
       : 0;
 
     const rerollP = (0.03 + 0.10 * (modeWide/3.0)) * (0.25 + 0.75 * mutAmt);
-    if (rng() < rerollP){
-      return min + rng() * span;
-    }
+    if (rng() < rerollP) return min + rng() * span;
 
     const v = base + (jitter + jump) * (0.25 + 0.75 * mutAmt);
     return clamp(v, min, max);
   }
-
   function pickDur(rng, base, min, max, mutAmt, modeWide){
     const span = max - min;
     const pTail = clamp(0.10 + 0.25 * mutAmt + 0.12 * (modeWide/3.0), 0.10, 0.55);
     const pUni  = clamp(0.10 + 0.20 * mutAmt, 0.10, 0.35);
-    const r = rng();
+    const rr = rng();
 
     let v;
-    if (r < pTail){
+    if (rr < pTail){
       const u = Math.pow(rng(), 0.35);
       v = min + u * span;
-    } else if (r < pTail + pUni){
+    } else if (rr < pTail + pUni){
       v = min + rng() * span;
     } else {
       const tri = triRand(rng);
@@ -287,12 +515,15 @@
     return clamp(v, min, max);
   }
 
-  // ----------------------------
-  // Audio Graph
-  // ----------------------------
+  // ------------------------------------------------------------
+  // Audio Graph + stereo band spatialization
+  // ------------------------------------------------------------
   let ctx = null;
   let masterGain, compressor, postGain, crusher = null;
   let globalStop = [];
+  let audioReady = false;
+
+  const STEREO = { entry:null, bands:[], dry:null };
 
   function ensureAudio(){
     if (ctx) return ctx;
@@ -313,8 +544,11 @@
     masterGain.connect(compressor);
     compressor.connect(postGain);
     postGain.connect(ctx.destination);
+
+    buildStereoBands();
     return ctx;
   }
+
   const now = () => ctx.currentTime;
 
   function makeBitcrusher(ctx){
@@ -354,10 +588,59 @@
     return { input: inGain, output: outGain, node: proc };
   }
 
-  function connectToMaster(node){
-    if (!crusher) crusher = makeBitcrusher(ctx);
-    node.connect(crusher.input);
-    crusher.output.connect(masterGain);
+  function ensureCrusher(){
+    if (!crusher){
+      crusher = makeBitcrusher(ctx);
+      crusher.output.connect(STEREO.entry);
+    }
+  }
+
+  function buildStereoBands(){
+    // entry accepts mono, outputs stereo into masterGain
+    STEREO.entry = ctx.createGain();
+    STEREO.entry.gain.value = 1.0;
+
+    // bandpass bank
+    const centers = [80, 120, 180, 260, 380, 560, 820, 1200, 2000, 3800, 6500, 9000];
+    const Qs      = [1.2,1.4,1.6,1.8,2.0,2.2,2.4,2.6,2.8,3.0,3.2,3.4];
+
+    centers.forEach((fc, i) => {
+      const bp = ctx.createBiquadFilter();
+      bp.type = "bandpass";
+      bp.frequency.value = fc;
+      bp.Q.value = Qs[i % Qs.length];
+
+      const pan = ctx.createStereoPanner();
+      pan.pan.value = 0;
+
+      const g = ctx.createGain();
+      g.gain.value = 0.16;
+
+      STEREO.entry.connect(bp);
+      bp.connect(g);
+      g.connect(pan);
+      pan.connect(masterGain);
+
+      STEREO.bands.push({ bp, pan, gain:g, fc });
+    });
+
+    // dry center feed
+    STEREO.dry = ctx.createGain();
+    STEREO.dry.gain.value = 0.55;
+    STEREO.entry.connect(STEREO.dry);
+    STEREO.dry.connect(masterGain);
+  }
+
+  function randomizeStereoByFreq(rng){
+    STEREO.bands.forEach((b) => {
+      const fNorm = clamp((Math.log(b.fc) - Math.log(80)) / (Math.log(9000) - Math.log(80)), 0, 1);
+      const maxPan = lerp(0.35, 1.0, fNorm);
+      const pan = (rng()*2 - 1) * maxPan;
+
+      const gJ = lerp(0.10, 0.26, rng());
+      b.gain.gain.setValueAtTime(gJ, now());
+      b.pan.pan.setValueAtTime(pan, now());
+    });
   }
 
   function scheduleStopDisconnect(node, tStop){
@@ -372,9 +655,9 @@
     globalStop.length = 0;
   }
 
-  // ----------------------------
+  // ------------------------------------------------------------
   // Noise buffer (LFSR-ish)
-  // ----------------------------
+  // ------------------------------------------------------------
   let noiseBuf = null;
   function getNoiseBuffer(){
     if (noiseBuf) return noiseBuf;
@@ -392,29 +675,11 @@
     noiseBuf = buf;
     return noiseBuf;
   }
-
   function noiseSource(){
     const src = ctx.createBufferSource();
     src.buffer = getNoiseBuffer();
     src.loop = true;
     return src;
-  }
-
-  function expEnv(param, t0, a, d, peak, sustain, rel){
-    const tA = t0 + a;
-    const tD = tA + d;
-
-    param.cancelScheduledValues(t0);
-    param.setValueAtTime(0.0001, t0);
-    param.exponentialRampToValueAtTime(Math.max(0.0001, peak), tA);
-    param.exponentialRampToValueAtTime(Math.max(0.0001, sustain), tD);
-
-    if (rel != null){
-      const tR = tD + rel;
-      param.exponentialRampToValueAtTime(0.0001, tR);
-      return tR;
-    }
-    return tD;
   }
 
   function feedbackDelay(input, timeSec, feedback, wet){
@@ -442,9 +707,9 @@
     return { out, delay:d, fb, wetG, dryG };
   }
 
-  // ----------------------------
+  // ------------------------------------------------------------
   // Base Patch
-  // ----------------------------
+  // ------------------------------------------------------------
   const BASE = {
     laser:      { baseHz: 900,  sweepHz: 520,  sweepTime: 0.055, bite: 0.55, click: 0.12, noise: 0.08, hp: 260, dur: 0.14 },
     zap:        { baseHz: 220,  sweepHz: 1400, sweepTime: 0.090, fmAmt: 180, fmHz: 32, noise: 0.18, bp: 1200, q: 8, dur: 0.22 },
@@ -457,18 +722,13 @@
     hyperspace: { dur: 1.20, whooshLP0: 4200, whooshLP1: 220, whooshTime: 0.75, tone0: 180, tone1: 1500, toneTime: 0.55, edge: 0.55, delayT: 0.075, delayFb: 0.45, wet: 0.35 },
     teleport:   { dur: 0.60, chirp0: 420, chirp1: 2200, chirpTime: 0.14, sparkleBP: 1800, sparkleQ: 9, sparkle: 0.28, edge: 0.45, delayT: 0.045, delayFb: 0.25, wet: 0.22 }
   };
-
   let patch = JSON.parse(JSON.stringify(BASE));
 
-  // ----------------------------
+  // ------------------------------------------------------------
   // Randomizer
-  // ----------------------------
+  // ------------------------------------------------------------
   let REV = 0;
-
-  function resetToBase(){
-    patch = JSON.parse(JSON.stringify(BASE));
-    renderPatch();
-  }
+  function resetToBase(){ patch = JSON.parse(JSON.stringify(BASE)); }
 
   function randomizeAll(){
     REV++;
@@ -481,113 +741,88 @@
     const seedStr = `${$("#seed").value}|${mode}|${REV}`;
     const rng = mulberry32(hash32(seedStr));
 
-    const r = (name, key, min, max) => {
-      patch[name][key] = pickVal(rng, BASE[name][key], min, max, mutAmt, wide, jumpP, jumpScale);
-    };
-    const rd = (name, key, min, max) => {
-      patch[name][key] = pickDur(rng, BASE[name][key], min, max, mutAmt, wide);
-    };
+    const r = (name, key, min, max) => patch[name][key] = pickVal(rng, BASE[name][key], min, max, mutAmt, wide, jumpP, jumpScale);
+    const rd = (name, key, min, max) => patch[name][key] = pickDur(rng, BASE[name][key], min, max, mutAmt, wide);
 
-    r("laser","baseHz",   260, 2200);
-    r("laser","sweepHz",  60,  2600);
-    r("laser","sweepTime",0.018,0.22);
-    r("laser","bite",     0.02,1.00);
-    r("laser","click",    0.00,0.45);
-    r("laser","noise",    0.00,0.65);
-    r("laser","hp",       30,  2200);
-    rd("laser","dur",     0.05,2.20);
+    r("laser","baseHz",   260, 2200); r("laser","sweepHz",  60,  2600); r("laser","sweepTime",0.018,0.22);
+    r("laser","bite",     0.02,1.00); r("laser","click",    0.00,0.45); r("laser","noise",    0.00,0.65);
+    r("laser","hp",       30,  2200); rd("laser","dur",     0.05,2.20);
 
-    r("zap","baseHz",     50,  900);
-    r("zap","sweepHz",    180, 5000);
-    r("zap","sweepTime",  0.020,0.35);
-    r("zap","fmAmt",      0,   2200);
-    r("zap","fmHz",       2,   220);
-    r("zap","noise",      0.00,0.90);
-    r("zap","bp",         160, 5200);
-    r("zap","q",          0.6, 40);
-    rd("zap","dur",       0.07,2.60);
+    r("zap","baseHz",     50,  900);  r("zap","sweepHz",    180, 5000); r("zap","sweepTime",  0.020,0.35);
+    r("zap","fmAmt",      0,   2200); r("zap","fmHz",       2,   220);  r("zap","noise",      0.00,0.90);
+    r("zap","bp",         160, 5200); r("zap","q",          0.6, 40);   rd("zap","dur",       0.07,2.60);
 
-    r("thrust","noise",     0.10,1.00);
-    r("thrust","lp",        80,  2400);
-    r("thrust","q",         0.2, 10.0);
-    r("thrust","flutterHz", 0.5, 60);
-    r("thrust","flutterAmt",0.00,0.75);
-    rd("thrust","dur",      0.12,3.20);
+    r("thrust","noise",     0.10,1.00); r("thrust","lp",        80,  2400); r("thrust","q",         0.2, 10.0);
+    r("thrust","flutterHz", 0.5, 60);   r("thrust","flutterAmt",0.00,0.75); rd("thrust","dur",      0.12,3.20);
 
-    r("explosion","noise",     0.15,1.00);
-    r("explosion","lp0",       600, 10000);
-    r("explosion","lp1",       40,  1200);
-    r("explosion","sweepTime", 0.10,2.20);
-    r("explosion","boomHz",    16,  220);
-    r("explosion","boomAmt",   0.05,1.00);
-    r("explosion","crackle",   0.00,1.00);
-    rd("explosion","dur",      0.18,4.20);
+    r("explosion","noise",     0.15,1.00); r("explosion","lp0",       600, 10000); r("explosion","lp1",       40,  1200);
+    r("explosion","sweepTime", 0.10,2.20); r("explosion","boomHz",    16,  220);   r("explosion","boomAmt",   0.05,1.00);
+    r("explosion","crackle",   0.00,1.00); rd("explosion","dur",      0.18,4.20);
 
-    r("pickup","baseHz",  120, 2200);
-    r("pickup","upHz",    220, 8200);
-    r("pickup","glide",   0.02,0.70);
-    r("pickup","vibHz",   0.5, 50);
-    r("pickup","vibAmt",  0.0, 0.20);
-    r("pickup","twang",   0.00,1.00);
+    r("pickup","baseHz",  120, 2200); r("pickup","upHz",    220, 8200); r("pickup","glide",   0.02,0.70);
+    r("pickup","vibHz",   0.5, 50);   r("pickup","vibAmt",  0.0, 0.20); r("pickup","twang",   0.00,1.00);
     rd("pickup","dur",    0.05,2.80);
 
-    r("alarm","aHz",  80,  2200);
-    r("alarm","bHz",  120, 5200);
-    r("alarm","rate", 0.5, 40.0);
-    r("alarm","edge", 0.00,1.00);
-    rd("alarm","dur", 0.12,5.00);
+    r("alarm","aHz",  80,  2200); r("alarm","bHz",  120, 5200); r("alarm","rate", 0.5, 40.0);
+    r("alarm","edge", 0.00,1.00); rd("alarm","dur", 0.12,5.00);
 
-    rd("smartbomb","dur",      0.25,5.50);
-    r("smartbomb","boomHz",    10,  160);
-    r("smartbomb","boomAmt",   0.05,1.00);
-    r("smartbomb","sweep0",    700, 12000);
-    r("smartbomb","sweep1",    30,  1800);
-    r("smartbomb","sweepTime", 0.12,4.00);
-    r("smartbomb","ringHz",    30,  1600);
-    r("smartbomb","ringAmt",   0.00,1.00);
-    r("smartbomb","noise",     0.10,1.00);
+    rd("smartbomb","dur",      0.25,5.50); r("smartbomb","boomHz",    10,  160); r("smartbomb","boomAmt",   0.05,1.00);
+    r("smartbomb","sweep0",    700, 12000); r("smartbomb","sweep1",    30,  1800); r("smartbomb","sweepTime", 0.12,4.00);
+    r("smartbomb","ringHz",    30,  1600);  r("smartbomb","ringAmt",   0.00,1.00); r("smartbomb","noise",     0.10,1.00);
     r("smartbomb","crackle",   0.00,1.00);
 
-    rd("hyperspace","dur",       0.18,4.50);
-    r("hyperspace","whooshLP0",  500, 12000);
-    r("hyperspace","whooshLP1",  40,  2200);
-    r("hyperspace","whooshTime", 0.10,3.20);
-    r("hyperspace","tone0",      20,  900);
-    r("hyperspace","tone1",      80,  9000);
-    r("hyperspace","toneTime",   0.06,2.60);
-    r("hyperspace","edge",       0.00,1.00);
-    r("hyperspace","delayT",     0.010,0.250);
-    r("hyperspace","delayFb",    0.00,0.88);
-    r("hyperspace","wet",        0.00,0.85);
+    rd("hyperspace","dur",       0.18,4.50); r("hyperspace","whooshLP0",  500, 12000); r("hyperspace","whooshLP1",  40,  2200);
+    r("hyperspace","whooshTime", 0.10,3.20); r("hyperspace","tone0",      20,  900);   r("hyperspace","tone1",      80,  9000);
+    r("hyperspace","toneTime",   0.06,2.60); r("hyperspace","edge",       0.00,1.00);  r("hyperspace","delayT",     0.010,0.250);
+    r("hyperspace","delayFb",    0.00,0.88); r("hyperspace","wet",        0.00,0.85);
 
-    rd("teleport","dur",         0.06,2.80);
-    r("teleport","chirp0",       40,  2200);
-    r("teleport","chirp1",       120, 12000);
-    r("teleport","chirpTime",    0.02,0.95);
-    r("teleport","sparkleBP",    120, 9000);
-    r("teleport","sparkleQ",     0.6, 55.0);
-    r("teleport","sparkle",      0.00,1.00);
-    r("teleport","edge",         0.00,1.00);
-    r("teleport","delayT",       0.005,0.180);
-    r("teleport","delayFb",      0.00,0.78);
-    r("teleport","wet",          0.00,0.80);
-
-    renderPatch();
+    rd("teleport","dur",         0.06,2.80); r("teleport","chirp0",       40,  2200); r("teleport","chirp1",       120, 12000);
+    r("teleport","chirpTime",    0.02,0.95); r("teleport","sparkleBP",    120, 9000); r("teleport","sparkleQ",     0.6, 55.0);
+    r("teleport","sparkle",      0.00,1.00); r("teleport","edge",         0.00,1.00); r("teleport","delayT",       0.005,0.180);
+    r("teleport","delayFb",      0.00,0.78); r("teleport","wet",          0.00,0.80);
   }
 
-  // ----------------------------
-  // Sound Models
-  // ----------------------------
-  function tailSustainFromDur(d){
-    return clamp(lerp(0.10, 0.32, clamp(d / 2.5, 0, 1)), 0.08, 0.36);
+  // ------------------------------------------------------------
+  // Routing
+  // ------------------------------------------------------------
+  function routeToConsoleStereo(node){
+    ensureCrusher();
+
+    const local = ctx.createGain();
+    local.gain.value = 1.0;
+    node.connect(local);
+    local.connect(crusher.input);
+
+    globalStop.push(() => { try{ local.disconnect(); }catch(e){} });
+    return local;
   }
 
-  function playLaser(){
-    const p = patch.laser;
-    const t0 = now();
+  // ------------------------------------------------------------
+  // Noise / FX
+  // ------------------------------------------------------------
+  function randomizeStereoByFreq(rng){
+    // if audio not built yet, no-op
+    if (!STEREO.entry || !STEREO.bands.length) return;
+    STEREO.bands.forEach((b) => {
+      const fNorm = clamp((Math.log(b.fc) - Math.log(80)) / (Math.log(9000) - Math.log(80)), 0, 1);
+      const maxPan = lerp(0.35, 1.0, fNorm);
+      const pan = (rng()*2 - 1) * maxPan;
+
+      const gJ = lerp(0.10, 0.26, rng());
+      b.gain.gain.setValueAtTime(gJ, now());
+      b.pan.pan.setValueAtTime(pan, now());
+    });
+  }
+
+  // ------------------------------------------------------------
+  // Sound models
+  // ------------------------------------------------------------
+  function playLaser(rng){
+    const p = patch.laser, t0 = now();
+    randomizeStereoByFreq(rng);
 
     const out = ctx.createGain();
-    const g = ctx.createGain(); g.gain.value = 0.0001;
+    const g = ctx.createGain(); g.gain.value = 0;
 
     const osc = ctx.createOscillator();
     osc.type = "square";
@@ -599,7 +834,7 @@
     shaper.oversample = "2x";
 
     const n = noiseSource();
-    const nG = ctx.createGain(); nG.gain.value = 0.0001;
+    const nG = ctx.createGain(); nG.gain.value = 0;
 
     const hp = ctx.createBiquadFilter();
     hp.type = "highpass";
@@ -608,29 +843,28 @@
     const mixTone = ctx.createGain(); mixTone.gain.value = 1.0 - p.noise;
     const mixNoise = ctx.createGain(); mixNoise.gain.value = p.noise;
 
-    const sustain = tailSustainFromDur(p.dur);
-    const tEnd = expEnv(g.gain, t0, 0.002, 0.030, 0.85, sustain, p.dur);
-    expEnv(nG.gain, t0, 0.001, 0.010, p.click, 0.0001, Math.min(0.20, 0.04 + p.dur*0.10));
+    const tEnd = adsrToZeroLinear(g.gain, t0, 0.002, Math.max(0.04, p.dur), 0, 0.001, 0.9);
+    adsrToZeroLinear(nG.gain, t0, 0.001, Math.min(0.12, 0.02 + p.dur*0.25), 0, 0.001, Math.max(0.001, p.click));
 
     osc.connect(shaper); shaper.connect(mixTone);
     n.connect(hp); hp.connect(nG); nG.connect(mixNoise);
     mixTone.connect(g); mixNoise.connect(g);
 
     g.connect(out);
-    connectToMaster(out);
+    routeToConsoleStereo(out);
 
-    osc.start(t0); osc.stop(tEnd + 0.03);
-    n.start(t0);   n.stop(tEnd + 0.03);
+    osc.start(t0); osc.stop(tEnd + 0.05);
+    n.start(t0);   n.stop(tEnd + 0.05);
 
-    scheduleStopDisconnect(out, tEnd + 0.18);
+    scheduleStopDisconnect(out, tEnd + 0.25);
   }
 
-  function playZap(){
-    const p = patch.zap;
-    const t0 = now();
+  function playZap(rng){
+    const p = patch.zap, t0 = now();
+    randomizeStereoByFreq(rng);
 
     const out = ctx.createGain();
-    const g = ctx.createGain(); g.gain.value = 0.0001;
+    const g = ctx.createGain(); g.gain.value = 0;
 
     const osc = ctx.createOscillator();
     osc.type = "sawtooth";
@@ -654,29 +888,28 @@
     const mixTone = ctx.createGain(); mixTone.gain.value = 0.85;
     const mixNoise= ctx.createGain(); mixNoise.gain.value= p.noise;
 
-    const sustain = tailSustainFromDur(p.dur);
-    const tEnd = expEnv(g.gain, t0, 0.004, 0.05, 0.95, sustain, p.dur);
+    const tEnd = adsrToZeroLinear(g.gain, t0, 0.003, Math.max(0.05, p.dur), 0, 0.001, 1.0);
 
     osc.connect(mixTone);
     n.connect(bp); bp.connect(mixNoise);
     mixTone.connect(g); mixNoise.connect(g);
 
     g.connect(out);
-    connectToMaster(out);
+    routeToConsoleStereo(out);
 
-    osc.start(t0); osc.stop(tEnd + 0.03);
-    mod.start(t0); mod.stop(tEnd + 0.03);
-    n.start(t0);   n.stop(tEnd + 0.03);
+    osc.start(t0); osc.stop(tEnd + 0.05);
+    mod.start(t0); mod.stop(tEnd + 0.05);
+    n.start(t0);   n.stop(tEnd + 0.05);
 
-    scheduleStopDisconnect(out, tEnd + 0.20);
+    scheduleStopDisconnect(out, tEnd + 0.30);
   }
 
-  function playThrust(){
-    const p = patch.thrust;
-    const t0 = now();
+  function playThrust(rng){
+    const p = patch.thrust, t0 = now();
+    randomizeStereoByFreq(rng);
 
     const out = ctx.createGain();
-    const g = ctx.createGain(); g.gain.value = 0.0001;
+    const g = ctx.createGain(); g.gain.value = 0;
 
     const n = noiseSource();
     const lp = ctx.createBiquadFilter();
@@ -688,85 +921,84 @@
     lfo.type = "sine";
     lfo.frequency.value = p.flutterHz;
     const lfoG = ctx.createGain();
-    lfoG.gain.value = p.flutterAmt;
+    lfoG.gain.value = p.flutterAmt * 0.35;
     lfo.connect(lfoG);
     lfoG.connect(g.gain);
 
-    const sustain = tailSustainFromDur(p.dur);
-    const tEnd = expEnv(g.gain, t0, 0.010, 0.12, 0.65, sustain, p.dur);
+    const tEnd = adsrToZeroLinear(g.gain, t0, 0.008, Math.max(0.08, p.dur), 0, 0.001, 0.7);
 
     const mix = ctx.createGain();
     mix.gain.value = p.noise;
 
     n.connect(lp); lp.connect(mix); mix.connect(g);
     g.connect(out);
-    connectToMaster(out);
+    routeToConsoleStereo(out);
 
-    n.start(t0); n.stop(tEnd + 0.05);
-    lfo.start(t0); lfo.stop(tEnd + 0.05);
+    n.start(t0); n.stop(tEnd + 0.08);
+    lfo.start(t0); lfo.stop(tEnd + 0.08);
 
-    scheduleStopDisconnect(out, tEnd + 0.25);
+    scheduleStopDisconnect(out, tEnd + 0.35);
   }
 
-  function playExplosion(){
-    const p = patch.explosion;
-    const t0 = now();
+  function playExplosion(rng){
+    const p = patch.explosion, t0 = now();
+    randomizeStereoByFreq(rng);
 
     const out = ctx.createGain();
-    const g = ctx.createGain(); g.gain.value = 0.0001;
+    const g = ctx.createGain(); g.gain.value = 0;
+
+    const A = 0.003;
+    const D = clamp(p.dur, 0.08, 6.0);
+    const R = 0.012;
+
+    const tEnd = adsrToZeroLinear(g.gain, t0, A, D, 0, R, 1.0);
 
     const n = noiseSource();
     const lp = ctx.createBiquadFilter();
     lp.type = "lowpass";
     lp.frequency.setValueAtTime(p.lp0, t0);
-    lp.frequency.exponentialRampToValueAtTime(Math.max(50, p.lp1), t0 + p.sweepTime);
+    lp.frequency.exponentialRampToValueAtTime(Math.max(50, p.lp1), t0 + Math.min(p.sweepTime, D));
     lp.Q.value = 0.7;
+    const nG = ctx.createGain(); nG.gain.value = 0;
+    adsrToZeroLinear(nG.gain, t0, A, D, 0, R, clamp(p.noise, 0, 1));
 
     const boom = ctx.createOscillator();
     boom.type = "sine";
-    boom.frequency.setValueAtTime(p.boomHz * 1.15, t0);
-    boom.frequency.exponentialRampToValueAtTime(Math.max(12, p.boomHz), t0 + 0.30);
-    const boomG = ctx.createGain(); boomG.gain.value = 0.0001;
+    boom.frequency.setValueAtTime(p.boomHz * 1.2, t0);
+    boom.frequency.exponentialRampToValueAtTime(Math.max(12, p.boomHz), t0 + Math.min(0.35, D));
+    const boomG = ctx.createGain(); boomG.gain.value = 0;
+    adsrToZeroLinear(boomG.gain, t0, 0.002, Math.max(0.06, D*0.65), 0, R, clamp(p.boomAmt, 0, 1));
 
     const crack = noiseSource();
     const hp = ctx.createBiquadFilter();
     hp.type = "highpass";
     hp.frequency.value = 1200;
-    const crackG = ctx.createGain(); crackG.gain.value = 0.0001;
+    const crackG = ctx.createGain(); crackG.gain.value = 0;
+    adsrToZeroLinear(crackG.gain, t0, 0.001, Math.max(0.04, D*0.45), 0, R, clamp(p.crackle, 0, 1));
 
-    const sustain = tailSustainFromDur(p.dur);
-    const tEnd = expEnv(g.gain, t0, 0.004, 0.12, 1.00, sustain, p.dur);
+    const mix = ctx.createGain(); mix.gain.value = 1.0;
 
-    expEnv(boomG.gain, t0, 0.002, 0.14, p.boomAmt, 0.0001, clamp(0.25 + p.dur*0.40, 0.18, 3.20));
-    expEnv(crackG.gain, t0, 0.001, 0.08, p.crackle, 0.0001, clamp(0.15 + p.dur*0.25, 0.12, 2.20));
+    n.connect(lp); lp.connect(nG); nG.connect(mix);
+    boom.connect(boomG); boomG.connect(mix);
+    crack.connect(hp); hp.connect(crackG); crackG.connect(mix);
 
-    const mixN = ctx.createGain(); mixN.gain.value = p.noise;
-    const mixB = ctx.createGain(); mixB.gain.value = 0.75;
-
-    n.connect(lp); lp.connect(mixN);
-    boom.connect(boomG); boomG.connect(mixB);
-    crack.connect(hp); hp.connect(crackG);
-
-    mixN.connect(g);
-    mixB.connect(g);
-    crackG.connect(g);
-
+    mix.connect(g);
     g.connect(out);
-    connectToMaster(out);
+    routeToConsoleStereo(out);
 
-    n.start(t0);     n.stop(tEnd + 0.06);
-    crack.start(t0); crack.stop(tEnd + 0.06);
-    boom.start(t0);  boom.stop(tEnd + 0.06);
+    n.start(t0); n.stop(tEnd + 0.12);
+    crack.start(t0); crack.stop(tEnd + 0.12);
+    boom.start(t0); boom.stop(tEnd + 0.12);
 
-    scheduleStopDisconnect(out, tEnd + 0.30);
+    scheduleStopDisconnect(out, tEnd + 0.70);
   }
 
-  function playPickup(){
-    const p = patch.pickup;
-    const t0 = now();
+  function playPickup(rng){
+    const p = patch.pickup, t0 = now();
+    randomizeStereoByFreq(rng);
 
     const out = ctx.createGain();
-    const g = ctx.createGain(); g.gain.value = 0.0001;
+    const g = ctx.createGain(); g.gain.value = 0;
 
     const osc = ctx.createOscillator();
     osc.type = "triangle";
@@ -785,25 +1017,24 @@
     sh.curve = makeDriveCurve(lerp(5, 900, p.twang));
     sh.oversample = "2x";
 
-    const sustain = tailSustainFromDur(p.dur);
-    const tEnd = expEnv(g.gain, t0, 0.004, 0.07, 0.75, sustain, p.dur);
+    const tEnd = adsrToZeroLinear(g.gain, t0, 0.004, Math.max(0.06, p.dur), 0, 0.01, 0.8);
 
     osc.connect(sh); sh.connect(g);
     g.connect(out);
-    connectToMaster(out);
+    routeToConsoleStereo(out);
 
-    osc.start(t0); osc.stop(tEnd + 0.03);
-    vib.start(t0); vib.stop(tEnd + 0.03);
+    osc.start(t0); osc.stop(tEnd + 0.06);
+    vib.start(t0); vib.stop(tEnd + 0.06);
 
-    scheduleStopDisconnect(out, tEnd + 0.20);
+    scheduleStopDisconnect(out, tEnd + 0.25);
   }
 
-  function playAlarm(){
-    const p = patch.alarm;
-    const t0 = now();
+  function playAlarm(rng){
+    const p = patch.alarm, t0 = now();
+    randomizeStereoByFreq(rng);
 
     const out = ctx.createGain();
-    const g = ctx.createGain(); g.gain.value = 0.0001;
+    const g = ctx.createGain(); g.gain.value = 0;
 
     const osc = ctx.createOscillator();
     osc.type = "square";
@@ -822,93 +1053,90 @@
     sh.curve = makeDriveCurve(lerp(5, 900, p.edge));
     sh.oversample = "2x";
 
-    const sustain = clamp(lerp(0.18, 0.40, clamp(p.dur/3.0, 0, 1)), 0.14, 0.48);
-    const tEnd = expEnv(g.gain, t0, 0.010, 0.08, 0.50, sustain, p.dur);
+    const tEnd = adsrToZeroLinear(g.gain, t0, 0.010, Math.max(0.10, p.dur), 0, 0.01, 0.55);
 
     osc.connect(sh); sh.connect(g);
     g.connect(out);
-    connectToMaster(out);
+    routeToConsoleStereo(out);
 
-    osc.start(t0);  osc.stop(tEnd + 0.03);
-    step.start(t0); step.stop(tEnd + 0.03);
+    osc.start(t0);  osc.stop(tEnd + 0.06);
+    step.start(t0); step.stop(tEnd + 0.06);
 
-    scheduleStopDisconnect(out, tEnd + 0.25);
+    scheduleStopDisconnect(out, tEnd + 0.30);
   }
 
-  function playSmartBomb(){
-    const p = patch.smartbomb;
-    const t0 = now();
+  function playSmartBomb(rng){
+    const p = patch.smartbomb, t0 = now();
+    randomizeStereoByFreq(rng);
 
     const out = ctx.createGain();
-    const g = ctx.createGain(); g.gain.value = 0.0001;
+    const g = ctx.createGain(); g.gain.value = 0;
+
+    const A = 0.003;
+    const D = clamp(p.dur, 0.10, 8.0);
+    const R = 0.014;
+
+    const tEnd = adsrToZeroLinear(g.gain, t0, A, D, 0, R, 1.0);
 
     const n = noiseSource();
     const lp = ctx.createBiquadFilter();
     lp.type = "lowpass";
     lp.frequency.setValueAtTime(p.sweep0, t0);
-    lp.frequency.exponentialRampToValueAtTime(Math.max(40, p.sweep1), t0 + p.sweepTime);
-    lp.Q.value = 0.7;
+    lp.frequency.exponentialRampToValueAtTime(Math.max(40, p.sweep1), t0 + Math.min(p.sweepTime, D));
+    lp.Q.value = 0.75;
+    const nG = ctx.createGain(); nG.gain.value = 0;
+    adsrToZeroLinear(nG.gain, t0, A, D, 0, R, clamp(p.noise, 0, 1));
 
     const boom = ctx.createOscillator();
     boom.type = "sine";
-    boom.frequency.setValueAtTime(p.boomHz * 1.1, t0);
-    boom.frequency.exponentialRampToValueAtTime(Math.max(10, p.boomHz), t0 + 0.40);
-    const boomG = ctx.createGain(); boomG.gain.value = 0.0001;
+    boom.frequency.setValueAtTime(p.boomHz * 1.15, t0);
+    boom.frequency.exponentialRampToValueAtTime(Math.max(10, p.boomHz), t0 + Math.min(0.50, D));
+    const boomG = ctx.createGain(); boomG.gain.value = 0;
+    adsrToZeroLinear(boomG.gain, t0, 0.002, Math.max(0.08, D*0.75), 0, R, clamp(p.boomAmt, 0, 1));
 
     const ring = ctx.createOscillator();
     ring.type = "square";
     ring.frequency.setValueAtTime(p.ringHz, t0);
-    ring.frequency.exponentialRampToValueAtTime(Math.max(10, p.ringHz * 0.45), t0 + Math.min(1.2, 0.4 + p.dur*0.2));
-    const ringG = ctx.createGain(); ringG.gain.value = 0.0001;
+    ring.frequency.exponentialRampToValueAtTime(Math.max(10, p.ringHz * 0.45), t0 + Math.min(1.0, D*0.6));
+    const ringG = ctx.createGain(); ringG.gain.value = 0;
+    adsrToZeroLinear(ringG.gain, t0, 0.002, Math.max(0.08, D*0.85), 0, R, clamp(p.ringAmt, 0, 1));
+
+    const ringSh = ctx.createWaveShaper();
+    ringSh.curve = makeDriveCurve(lerp(5, 700, 0.6));
+    ringSh.oversample = "2x";
 
     const crack = noiseSource();
     const hp = ctx.createBiquadFilter();
     hp.type = "highpass";
     hp.frequency.value = 1000;
-    const crackG = ctx.createGain(); crackG.gain.value = 0.0001;
+    const crackG = ctx.createGain(); crackG.gain.value = 0;
+    adsrToZeroLinear(crackG.gain, t0, 0.001, Math.max(0.05, D*0.55), 0, R, clamp(p.crackle, 0, 1));
 
-    const sustain = clamp(lerp(0.12, 0.36, clamp(p.dur/3.0, 0, 1)), 0.10, 0.40);
-    const tEnd = expEnv(g.gain, t0, 0.006, 0.14, 1.00, sustain, p.dur);
+    const mix = ctx.createGain(); mix.gain.value = 1.0;
 
-    expEnv(boomG.gain, t0, 0.002, 0.10, p.boomAmt, 0.0001, clamp(0.30 + p.dur*0.55, 0.18, 4.20));
-    expEnv(ringG.gain, t0, 0.002, 0.08, p.ringAmt, 0.0001, clamp(0.25 + p.dur*0.60, 0.18, 4.60));
-    expEnv(crackG.gain, t0, 0.001, 0.10, p.crackle, 0.0001, clamp(0.18 + p.dur*0.35, 0.15, 3.20));
+    n.connect(lp); lp.connect(nG); nG.connect(mix);
+    boom.connect(boomG); boomG.connect(mix);
+    ring.connect(ringSh); ringSh.connect(ringG); ringG.connect(mix);
+    crack.connect(hp); hp.connect(crackG); crackG.connect(mix);
 
-    const mixN = ctx.createGain(); mixN.gain.value = p.noise;
-    const mixB = ctx.createGain(); mixB.gain.value = 0.80;
-
-    n.connect(lp); lp.connect(mixN);
-    boom.connect(boomG); boomG.connect(mixB);
-
-    const ringSh = ctx.createWaveShaper();
-    ringSh.curve = makeDriveCurve(lerp(5, 700, 0.6));
-    ringSh.oversample = "2x";
-    ring.connect(ringSh); ringSh.connect(ringG);
-
-    crack.connect(hp); hp.connect(crackG);
-
-    mixN.connect(g);
-    mixB.connect(g);
-    ringG.connect(g);
-    crackG.connect(g);
-
+    mix.connect(g);
     g.connect(out);
-    connectToMaster(out);
+    routeToConsoleStereo(out);
 
-    n.start(t0);      n.stop(tEnd + 0.08);
-    boom.start(t0);   boom.stop(tEnd + 0.08);
-    ring.start(t0);   ring.stop(tEnd + 0.08);
-    crack.start(t0);  crack.stop(tEnd + 0.08);
+    n.start(t0); n.stop(tEnd + 0.12);
+    crack.start(t0); crack.stop(tEnd + 0.12);
+    boom.start(t0); boom.stop(tEnd + 0.12);
+    ring.start(t0); ring.stop(tEnd + 0.12);
 
-    scheduleStopDisconnect(out, tEnd + 0.40);
+    scheduleStopDisconnect(out, tEnd + 0.70);
   }
 
-  function playHyperspace(){
-    const p = patch.hyperspace;
-    const t0 = now();
+  function playHyperspace(rng){
+    const p = patch.hyperspace, t0 = now();
+    randomizeStereoByFreq(rng);
 
     const out = ctx.createGain();
-    const g = ctx.createGain(); g.gain.value = 0.0001;
+    const g = ctx.createGain(); g.gain.value = 0;
 
     const n = noiseSource();
     const lp = ctx.createBiquadFilter();
@@ -916,7 +1144,6 @@
     lp.frequency.setValueAtTime(p.whooshLP0, t0);
     lp.frequency.exponentialRampToValueAtTime(Math.max(60, p.whooshLP1), t0 + p.whooshTime);
     lp.Q.value = 0.8;
-
     const nG = ctx.createGain(); nG.gain.value = 0.65;
 
     const osc = ctx.createOscillator();
@@ -927,7 +1154,6 @@
     const sh = ctx.createWaveShaper();
     sh.curve = makeDriveCurve(lerp(5, 1100, p.edge));
     sh.oversample = "2x";
-
     const oG = ctx.createGain(); oG.gain.value = 0.40;
 
     const mix = ctx.createGain();
@@ -936,12 +1162,11 @@
 
     const fx = feedbackDelay(mix, p.delayT, p.delayFb, p.wet);
 
-    const sustain = clamp(lerp(0.10, 0.34, clamp(p.dur/3.0, 0, 1)), 0.10, 0.38);
-    const tEnd = expEnv(g.gain, t0, 0.010, 0.10, 0.80, sustain, p.dur);
+    const tEnd = adsrToZeroLinear(g.gain, t0, 0.010, Math.max(0.10, p.dur), 0, 0.01, 0.85);
 
     fx.out.connect(g);
     g.connect(out);
-    connectToMaster(out);
+    routeToConsoleStereo(out);
 
     n.start(t0);   n.stop(tEnd + 0.10);
     osc.start(t0); osc.stop(tEnd + 0.10);
@@ -949,12 +1174,12 @@
     scheduleStopDisconnect(out, tEnd + 0.45);
   }
 
-  function playTeleport(){
-    const p = patch.teleport;
-    const t0 = now();
+  function playTeleport(rng){
+    const p = patch.teleport, t0 = now();
+    randomizeStereoByFreq(rng);
 
     const out = ctx.createGain();
-    const g = ctx.createGain(); g.gain.value = 0.0001;
+    const g = ctx.createGain(); g.gain.value = 0;
 
     const osc = ctx.createOscillator();
     osc.type = "triangle";
@@ -964,7 +1189,6 @@
     const sh = ctx.createWaveShaper();
     sh.curve = makeDriveCurve(lerp(5, 1100, p.edge));
     sh.oversample = "2x";
-
     const oG = ctx.createGain(); oG.gain.value = 0.60;
 
     const n = noiseSource();
@@ -980,12 +1204,11 @@
 
     const fx = feedbackDelay(mix, p.delayT, p.delayFb, p.wet);
 
-    const sustain = tailSustainFromDur(p.dur);
-    const tEnd = expEnv(g.gain, t0, 0.003, 0.06, 0.85, sustain, p.dur);
+    const tEnd = adsrToZeroLinear(g.gain, t0, 0.003, Math.max(0.06, p.dur), 0, 0.01, 0.85);
 
     fx.out.connect(g);
     g.connect(out);
-    connectToMaster(out);
+    routeToConsoleStereo(out);
 
     osc.start(t0); osc.stop(tEnd + 0.08);
     n.start(t0);   n.stop(tEnd + 0.08);
@@ -993,104 +1216,100 @@
     scheduleStopDisconnect(out, tEnd + 0.30);
   }
 
-  // ----------------------------
-  // UI render + wiring
-  // ----------------------------
-  const patchView = $("#patchView");
+  // ------------------------------------------------------------
+  // UI wiring
+  // ------------------------------------------------------------
   const status = $("#status");
 
-  function fmt(v){
-    if (typeof v !== "number") return String(v);
-    if (Math.abs(v) >= 1000) return v.toFixed(0);
-    if (Math.abs(v) >= 100)  return v.toFixed(1);
-    if (Math.abs(v) >= 10)   return v.toFixed(2);
-    return v.toFixed(3);
+  function setControlsEnabled(enabled){
+    const ids = ["laser","zap","thrust","explosion","pickup","alarm","smartbomb","hyperspace","teleport","randAll","resetBase","master","crush","mode","mutAmt","seed"];
+    ids.forEach(id => { const el = $("#"+id); if (el) el.disabled = !enabled; });
   }
 
-  function renderPatch(){
-    const lines = [];
-    for (const [name, obj] of Object.entries(patch)){
-      lines.push(`<div style="grid-column:1 / -1;color:#eafdf4;margin:6px 0 2px 0;">${name.toUpperCase()}</div>`);
-      for (const [k,v] of Object.entries(obj)){
-        lines.push(`<div>${k}</div><div>${fmt(v)}</div>`);
-      }
-      lines.push(`<div style="grid-column:1 / -1;height:1px;background:rgba(255,255,255,.06);margin:8px 0;"></div>`);
-    }
-    patchView.innerHTML = lines.join("");
+  function stopThenPlay(playFn){
+    if (!audioReady || !ctx) return;
+    stopAll();
+
+    const tag = `${$("#seed").value}|${$("#mode").value}|${REV}|play|${performance.now().toFixed(3)}`;
+    const rng = mulberry32(hash32(tag));
+    randomizeStereoByFreq(rng);
+
+    playFn(rng);
   }
 
-  function ifReady(fn){
-    if (!ctx){
-      status.textContent = "Click Start Audio first (browser gesture requirement).";
-      return;
-    }
-    fn();
-  }
-
-  function hook(){
-    // Sync labels with defaults at boot (in case you change HTML values)
+  function syncReadouts(){
     $("#masterVal").textContent = (+$("#master").value).toFixed(2);
     $("#crushVal").textContent  = (+$("#crush").value).toFixed(2);
     $("#mutAmtVal").textContent = (+$("#mutAmt").value).toFixed(2);
+    $("#modeVal").textContent   = $("#mode").value;
+  }
 
-    $("#btnStart").addEventListener("click", async () => {
-      ensureAudio();
-      if (ctx.state !== "running") await ctx.resume();
-      status.textContent = "Audio running. Randomize All will regenerate every category.";
-    });
+  async function startSession(){
+    ensureAudio();
+    ensureCrusher();
+    if (ctx.state !== "running") await ctx.resume();
+    audioReady = true;
+    $("#startOverlay").style.display = "none";
+    setControlsEnabled(true);
+    masterGain.gain.value = parseFloat($("#master").value);
+    status.textContent = "";
+  }
 
-    $("#panic").addEventListener("click", () => {
-      if (!ctx) return;
-      stopAll();
-      status.textContent = "Stopped all voices.";
+  function hook(){
+    setControlsEnabled(false);
+    syncReadouts();
+
+    $("#bigStartBtn").addEventListener("click", startSession);
+    $("#startOverlay").addEventListener("click", (e) => {
+      if (e.target.id === "startOverlay") startSession();
     });
 
     $("#master").addEventListener("input", (e) => {
       $("#masterVal").textContent = (+e.target.value).toFixed(2);
       if (masterGain) masterGain.gain.value = +e.target.value;
     });
-
-    $("#crush").addEventListener("input", (e) => {
-      $("#crushVal").textContent = (+e.target.value).toFixed(2);
-    });
-
-    $("#mutAmt").addEventListener("input", (e) => {
-      $("#mutAmtVal").textContent = (+e.target.value).toFixed(2);
-    });
+    $("#crush").addEventListener("input", (e) => { $("#crushVal").textContent = (+e.target.value).toFixed(2); });
+    $("#mutAmt").addEventListener("input", (e) => { $("#mutAmtVal").textContent = (+e.target.value).toFixed(2); });
+    $("#mode").addEventListener("change", () => { $("#modeVal").textContent = $("#mode").value; });
 
     $("#randAll").addEventListener("click", () => {
+      if (!audioReady) return;
+      stopAll();
       randomizeAll();
-      status.textContent = `Randomized patches (${ $("#mode").value }) — rev#${REV}.`;
+      status.textContent = "randomized";
+      setTimeout(() => { if (status.textContent === "randomized") status.textContent = ""; }, 650);
     });
 
     $("#resetBase").addEventListener("click", () => {
+      if (!audioReady) return;
+      stopAll();
       resetToBase();
-      status.textContent = "Reset patch to base defaults.";
+      $("#revTag").textContent = "rev#0";
+      REV = 0;
+      status.textContent = "reset";
+      setTimeout(() => { if (status.textContent === "reset") status.textContent = ""; }, 650);
     });
 
-    $("#laser").addEventListener("click", () => { ifReady(playLaser); });
-    $("#zap").addEventListener("click", () => { ifReady(playZap); });
-    $("#thrust").addEventListener("click", () => { ifReady(playThrust); });
-    $("#explosion").addEventListener("click", () => { ifReady(playExplosion); });
-    $("#pickup").addEventListener("click", () => { ifReady(playPickup); });
-    $("#alarm").addEventListener("click", () => { ifReady(playAlarm); });
-
-    $("#smartbomb").addEventListener("click", () => { ifReady(playSmartBomb); });
-    $("#hyperspace").addEventListener("click", () => { ifReady(playHyperspace); });
-    $("#teleport").addEventListener("click", () => { ifReady(playTeleport); });
+    $("#laser").addEventListener("click", () => stopThenPlay(playLaser));
+    $("#zap").addEventListener("click", () => stopThenPlay(playZap));
+    $("#thrust").addEventListener("click", () => stopThenPlay(playThrust));
+    $("#explosion").addEventListener("click", () => stopThenPlay(playExplosion));
+    $("#pickup").addEventListener("click", () => stopThenPlay(playPickup));
+    $("#alarm").addEventListener("click", () => stopThenPlay(playAlarm));
+    $("#smartbomb").addEventListener("click", () => stopThenPlay(playSmartBomb));
+    $("#hyperspace").addEventListener("click", () => stopThenPlay(playHyperspace));
+    $("#teleport").addEventListener("click", () => stopThenPlay(playTeleport));
 
     window.addEventListener("keydown", (e) => {
       if (e.repeat) return;
+      if (!audioReady && (e.key === "Enter" || e.key === " ")){ e.preventDefault(); startSession(); return; }
+      if (!audioReady) return;
       if (e.key === "r" || e.key === "R"){ $("#randAll").click(); return; }
-      const map = {
-        "1":"laser","2":"zap","3":"thrust","4":"explosion","5":"pickup","6":"alarm",
-        "7":"smartbomb","8":"hyperspace","9":"teleport"
-      };
-      if (map[e.key]) { $("#"+map[e.key]).click(); }
+      const map = {"1":"laser","2":"zap","3":"thrust","4":"explosion","5":"pickup","6":"alarm","7":"smartbomb","8":"hyperspace","9":"teleport"};
+      if (map[e.key]) $("#"+map[e.key]).click();
     });
   }
 
-  renderPatch();
   hook();
 })();
 </script>
