@@ -6,27 +6,25 @@
   <title>Defender-ish SFX Generator</title>
   <style>
     :root{
-      --bg:#030506;
-      --ink:#eafff3;
+      /* fierce red/orange page background */
+      --bg:#ff3b18;
 
-      /* reactor console palette */
-      --g:#35ff7a;
-      --y:#ffe35a;
-      --o:#ff9a2f;
-      --r:#ff3b2f;
+      /* monochrome black strokes for UI chrome */
+      --ink:#000;
+      --stroke:#000;
+      --stroke2:#000;
 
-      --panel:#05080a;
-      --plate:#030607;
+      /* NEW: button swap */
+      --btnFill:#000;        /* flat black fill */
+      --btnText:var(--bg);   /* text is fiery orange (same as background color) */
 
-      --stroke:rgba(53,255,122,.45);
-      --stroke2:rgba(232,255,242,.18);
-
-      /* slider lines/knob */
-      --sliderLine: rgba(53,255,122,.70);
-      --sliderLineSoft: rgba(53,255,122,.22);
-      --sliderKnob: rgba(53,255,122,.92);
+      /* sliders stay black line/circle */
+      --sliderLine:#000;
+      --sliderLineSoft:#000;
+      --sliderKnob:#000;
 
       --gap:10px;
+      --sfxBtnH:240px;
     }
 
     html,body{height:100%;}
@@ -37,49 +35,64 @@
       font:14px system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
       letter-spacing:.2px;
       overflow-x:hidden;
+
+      min-height:100vh;
+      display:flex;
+      align-items:center;
+      justify-content:center;
     }
+    @media (max-height: 760px){
+      body{ align-items:flex-start; }
+    }
+
     *{ box-sizing:border-box; }
 
-    .wrap{max-width:1120px;margin:24px auto;padding:0 14px;}
+    .wrap{
+      width:100%;
+      max-width:1120px;
+      padding:24px 14px;
+      margin:0 auto;
+    }
 
     .box{
-      background:var(--panel);
-      border:1px solid var(--stroke);
+      background:transparent;
+      border:2px solid var(--stroke);
     }
     .boxInner{
-      background:var(--plate);
-      border:1px solid var(--stroke2);
+      background:transparent;
+      border:2px solid var(--stroke2);
     }
 
     /* Start overlay */
     .startOverlay{
       position:fixed; inset:0;
       display:flex; align-items:center; justify-content:center;
-      background:rgba(0,0,0,.90);
+      background:rgba(0,0,0,.10);
       z-index:9999;
     }
     .startBtn{
       width:min(360px, calc(100vw - 28px));
-      padding:16px 14px;
+      padding:18px 14px;
       font-size:18px;
-      font-weight:900;
+      font-weight:950;
       text-transform:uppercase;
       letter-spacing:1.2px;
-      color:var(--ink);
-      background:var(--plate);
-      border:2px solid var(--y);
+
+      /* NEW: same swap on start button */
+      color:var(--btnText);
+      background:var(--btnFill);
+      border:3px solid #000;
       cursor:pointer;
     }
     .startBtn:active{ transform:translateY(1px); }
 
     /* ---------- JIGSAW LAYOUT ---------- */
-
     .lane{
       width:100%;
       display:grid;
       gap:var(--gap);
       padding:12px 14px;
-      border-bottom:1px solid var(--stroke2);
+      border-bottom:2px solid #000;
     }
     .lane:last-child{ border-bottom:0; }
 
@@ -88,7 +101,6 @@
       grid-auto-columns: 1fr;
       align-items:stretch;
     }
-
     @media (max-width: 760px){
       .lane.jigsaw{
         grid-auto-flow:row;
@@ -99,12 +111,12 @@
     .tile{
       min-height:48px;
       display:flex;
-      align-items:stretch;
+      align-items:center;
       justify-content:stretch;
-      gap:10px;
+      gap:12px;
       padding:10px 12px;
-      background:var(--plate);
-      border:1px solid var(--stroke2);
+      background:transparent;
+      border:2px solid #000;
     }
     .tile .left{
       display:flex;
@@ -121,18 +133,15 @@
     }
 
     .label{
-      color:rgba(255,227,90,.85);
+      color:#000;
       font-size:11px;
       line-height:1;
       text-transform:uppercase;
       letter-spacing:.9px;
+      font-weight:900;
     }
-    .value{
-      font:12px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono","Courier New", monospace;
-      color:rgba(53,255,122,.95);
-    }
-    .mono{font:12px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono","Courier New", monospace;}
 
+    /* NEW: buttons = flat black fill, text = fiery orange */
     button{
       width:100%;
       height:100%;
@@ -143,37 +152,34 @@
       user-select:none;
       white-space:nowrap;
       text-transform:uppercase;
-      letter-spacing:.9px;
+      letter-spacing:1px;
       font-weight:950;
       font-size:12px;
 
-      color:var(--ink);
-      background:var(--plate);
-      border:1px solid var(--stroke2);
+      color:var(--btnText);
+      background:var(--btnFill);
+      border:2px solid #000;
       padding:12px 12px;
     }
-    button:hover{ border-color:rgba(232,255,242,.32); }
+    button:hover{ filter:brightness(1.12); }
     button:active{ transform:translateY(1px); }
-    button:disabled{opacity:.45;cursor:not-allowed;transform:none;}
+    button:disabled{opacity:.35;cursor:not-allowed;transform:none;}
 
-    /* category strokes */
-    .b-laser, .b-zap{ border-color: var(--stroke); }
-    .b-thrust, .b-pickup, .b-alarm{ border-color: rgba(232,255,242,.22); }
-    .b-explosion, .b-smartbomb{ border-color: rgba(255,59,47,.55); }
-    .b-hyperspace, .b-teleport{ border-color: rgba(255,154,47,.55); }
-
-    input[type="text"], select{
+    select{
       width:100%;
-      background:var(--plate);
-      border:1px solid rgba(232,255,242,.18);
-      color:var(--ink);
+      background:transparent;
+      border:2px solid #000;
+      color:#000;
       padding:10px 10px;
       outline:none;
       min-height:42px;
+      cursor:pointer;
+      font-weight:900;
+      text-transform:uppercase;
+      letter-spacing:.8px;
     }
-    select{cursor:pointer;}
 
-    /* ---- SLIDERS: simple line + circle knob ---- */
+    /* ---- SLIDERS: simple black line + circle knob ---- */
     input[type="range"]{
       width:100%;
       -webkit-appearance:none;
@@ -182,60 +188,62 @@
       min-width:0;
       height:22px;
     }
-    /* WebKit track */
     input[type="range"]::-webkit-slider-runnable-track{
       height:2px;
-      background:var(--sliderLineSoft);
+      background:#000;
       border:none;
       border-radius:0;
     }
-    /* WebKit thumb */
     input[type="range"]::-webkit-slider-thumb{
       -webkit-appearance:none;
       width:14px; height:14px;
-      margin-top:-6px; /* center on 2px track */
+      margin-top:-6px;
       background:transparent;
-      border:2px solid var(--sliderKnob);
+      border:2px solid #000;
       border-radius:50%;
     }
-
-    /* Firefox track */
     input[type="range"]::-moz-range-track{
       height:2px;
-      background:var(--sliderLineSoft);
+      background:#000;
       border:none;
       border-radius:0;
     }
     input[type="range"]::-moz-range-thumb{
       width:14px; height:14px;
       background:transparent;
-      border:2px solid var(--sliderKnob);
+      border:2px solid #000;
       border-radius:50%;
     }
-    /* Firefox progress fill */
     input[type="range"]::-moz-range-progress{
       height:2px;
-      background:var(--sliderLine);
+      background:#000;
       border:none;
     }
-
-    /* Optional: focus outline clean */
     input[type="range"]:focus{ outline:none; }
 
     .status{
       padding:10px 14px 14px;
-      color:rgba(255,227,90,.75);
+      color:#000;
       font-size:12px;
-      border-top:1px solid rgba(232,255,242,.10);
+      border-top:2px solid #000;
       min-height:18px;
-      letter-spacing:.6px;
+      letter-spacing:.8px;
       text-transform:uppercase;
+      font-weight:900;
     }
 
     @media (max-width: 520px){
-      .tile{ flex-direction:column; }
+      .tile{ flex-direction:column; align-items:stretch; }
       .tile .left{ min-width:auto; }
       .tile .right{ width:100%; }
+    }
+
+    #laneSfx button{
+      min-height: var(--sfxBtnH);
+      padding-top: 18px;
+      padding-bottom: 18px;
+      font-size: 13px;
+      letter-spacing: 1.1px;
     }
   </style>
 </head>
@@ -248,65 +256,57 @@
   <div class="wrap">
     <div class="box">
 
-      <!-- Lane 1: SFX buttons -->
       <div class="lane jigsaw" id="laneSfx">
-        <button class="b-laser" id="laser">Laser</button>
-        <button class="b-zap" id="zap">Zap</button>
-        <button class="b-thrust" id="thrust">Thrust</button>
-        <button class="b-explosion" id="explosion">Explosion</button>
-        <button class="b-pickup" id="pickup">Pickup</button>
-        <button class="b-alarm" id="alarm">Alarm</button>
-        <button class="b-smartbomb" id="smartbomb">Smart Bomb</button>
-        <button class="b-hyperspace" id="hyperspace">Hyperspace</button>
-        <button class="b-teleport" id="teleport">Teleport</button>
+        <button id="laser">Laser</button>
+        <button id="zap">Zap</button>
+        <button id="thrust">Thrust</button>
+        <button id="explosion">Explosion</button>
+        <button id="pickup">Pickup</button>
+        <button id="alarm">Alarm</button>
+        <button id="smartbomb">Smart Bomb</button>
+        <button id="hyperspace">Hyperspace</button>
+        <button id="teleport">Teleport</button>
       </div>
 
-      <!-- Lane 2: RANDOMIZE (moved above Frequency) -->
       <div class="lane jigsaw" id="laneRand">
-        <button id="randAll" class="b-zap" style="border-width:2px; border-color: rgba(255,227,90,.65); font-size:13px; letter-spacing:1.1px;">
+        <button id="randAll" style="border-width:3px; font-size:13px; letter-spacing:1.1px;">
           RANDOMIZE
         </button>
       </div>
 
-      <!-- Lane 3: Frequency (was LO-FI) -->
       <div class="lane" id="laneFreq">
         <div class="tile boxInner">
           <div class="left">
             <div class="label">Frequency</div>
-            <div class="value mono" id="crushVal">1.00</div>
           </div>
           <div class="right">
-            <input id="crush" type="range" min="0" max="1" step="0.001" value="1.00">
+            <input id="crush" type="range" min="0" max="1" step="0.001" value="0.042">
           </div>
         </div>
       </div>
 
-      <!-- Lane 4: Compact controls -->
       <div class="lane jigsaw" id="laneCtlA">
         <div class="tile boxInner">
           <div class="left">
             <div class="label">Master</div>
-            <div class="value mono" id="masterVal">0.85</div>
           </div>
           <div class="right">
-            <input id="master" type="range" min="0" max="1" step="0.001" value="0.85">
+            <input id="master" type="range" min="0" max="1" step="0.001" value="0.824">
           </div>
         </div>
 
         <div class="tile boxInner">
           <div class="left">
             <div class="label">Mutation</div>
-            <div class="value mono" id="mutAmtVal">1.00</div>
           </div>
           <div class="right">
-            <input id="mutAmt" type="range" min="0" max="1" step="0.001" value="1.00">
+            <input id="mutAmt" type="range" min="0" max="1" step="0.001" value="0.964">
           </div>
         </div>
 
         <div class="tile boxInner">
           <div class="left">
             <div class="label">Mode</div>
-            <div class="value mono" id="modeVal">chaos</div>
           </div>
           <div class="right">
             <select id="mode">
@@ -316,44 +316,9 @@
             </select>
           </div>
         </div>
-
-        <div class="tile boxInner">
-          <div class="left">
-            <div class="label">Revision</div>
-            <div class="value mono" id="revTag">rev#0</div>
-          </div>
-          <div class="right">
-            <button id="resetBase" class="b-alarm">Reset</button>
-          </div>
-        </div>
       </div>
 
-      <!-- Lane 5: Seed -->
-      <div class="lane jigsaw" id="laneSeed">
-        <div class="tile boxInner">
-          <div class="left">
-            <div class="label">Seed</div>
-            <div class="value mono" id="seedEcho">DEFENDER</div>
-          </div>
-          <div class="right">
-            <input id="seed" type="text" value="DEFENDER" class="mono">
-          </div>
-        </div>
-
-        <div class="tile boxInner">
-          <div class="left">
-            <div class="label">Hint</div>
-            <div class="value mono">R = randomize</div>
-          </div>
-          <div class="right">
-            <div class="mono" style="width:100%; border:1px solid rgba(232,255,242,.18); padding:10px 10px; color:rgba(232,255,242,.85);">
-              1..9 = play
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div class="status mono" id="status"></div>
+      <div class="status" id="status"></div>
     </div>
   </div>
 
@@ -362,6 +327,8 @@
   const $ = (q) => document.querySelector(q);
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
   const lerp  = (a, b, t) => a + (b - a) * t;
+
+  const HIDDEN_SEED = "DEFENDER";
 
   function hash32(str){
     let h = 2166136261 >>> 0;
@@ -394,7 +361,6 @@
     return curve;
   }
 
-  /* A/D -> to zero, no sustain */
   function adsrToZeroLinear(param, t0, A, D, S, R, peak=1.0){
     const a = Math.max(0.0005, A);
     const d = Math.max(0.001, D);
@@ -553,7 +519,7 @@
       g.connect(pan);
       pan.connect(masterGain);
 
-      STEREO.bands.push({ bp, pan, gain:g, fc });
+      STEREO.bands.push({ pan, gain:g, fc });
     });
 
     STEREO.dry = ctx.createGain();
@@ -643,17 +609,15 @@
   let patch = JSON.parse(JSON.stringify(BASE));
 
   let REV = 0;
-  function resetToBase(){ patch = JSON.parse(JSON.stringify(BASE)); }
 
   function randomizeAll(){
     REV++;
-    $("#revTag").textContent = `rev#${REV}`;
 
     const mode = $("#mode").value;
     const mutAmt = parseFloat($("#mutAmt").value);
     const { wide, jumpP, jumpScale } = modeConfig(mode);
 
-    const seedStr = `${$("#seed").value}|${mode}|${REV}`;
+    const seedStr = `${HIDDEN_SEED}|${mode}|${REV}`;
     const rng = mulberry32(hash32(seedStr));
 
     randomizeStereoByFreq(rng);
@@ -709,7 +673,7 @@
     return local;
   }
 
-  // --- SFX implementations ---
+  // --- SFX implementations (unchanged) ---
   function playLaser(rng){
     const p = patch.laser, t0 = now();
     randomizeStereoByFreq(rng);
@@ -1107,23 +1071,18 @@
     setTimeout(() => { try{ out.disconnect(); }catch(e){} }, Math.max(0, (tEnd - now()) * 1000) + 300);
   }
 
-  function syncReadouts(){
-    $("#masterVal").textContent = (+$("#master").value).toFixed(2);
-    $("#crushVal").textContent  = (+$("#crush").value).toFixed(2);
-    $("#mutAmtVal").textContent = (+$("#mutAmt").value).toFixed(2);
-    $("#modeVal").textContent   = $("#mode").value;
-    $("#seedEcho").textContent  = ($("#seed").value || "").slice(0, 22);
-  }
-
   function setControlsEnabled(enabled){
-    const ids = ["laser","zap","thrust","explosion","pickup","alarm","smartbomb","hyperspace","teleport","randAll","resetBase","master","crush","mode","mutAmt","seed"];
+    const ids = [
+      "laser","zap","thrust","explosion","pickup","alarm","smartbomb","hyperspace","teleport",
+      "randAll","master","crush","mode","mutAmt"
+    ];
     ids.forEach(id => { const el = $("#"+id); if (el) el.disabled = !enabled; });
   }
 
   function stopThenPlay(playFn){
     if (!audioReady || !ctx) return;
     stopAll();
-    const tag = `${$("#seed").value}|${$("#mode").value}|${REV}|play|${performance.now().toFixed(3)}`;
+    const tag = `${HIDDEN_SEED}|${$("#mode").value}|${REV}|play|${performance.now().toFixed(3)}`;
     const rng = mulberry32(hash32(tag));
     randomizeStereoByFreq(rng);
     playFn(rng);
@@ -1142,30 +1101,14 @@
 
   function hook(){
     setControlsEnabled(false);
-    syncReadouts();
 
     $("#bigStartBtn").addEventListener("click", startSession);
     $("#startOverlay").addEventListener("click", (e) => {
       if (e.target.id === "startOverlay") startSession();
     });
 
-    $("#seed").addEventListener("input", syncReadouts);
-
     $("#master").addEventListener("input", (e) => {
-      $("#masterVal").textContent = (+e.target.value).toFixed(2);
       if (masterGain) masterGain.gain.value = +e.target.value;
-    });
-
-    $("#crush").addEventListener("input", (e) => {
-      $("#crushVal").textContent = (+e.target.value).toFixed(2);
-    });
-
-    $("#mutAmt").addEventListener("input", (e) => {
-      $("#mutAmtVal").textContent = (+e.target.value).toFixed(2);
-    });
-
-    $("#mode").addEventListener("change", () => {
-      $("#modeVal").textContent = $("#mode").value;
     });
 
     $("#randAll").addEventListener("click", () => {
@@ -1174,16 +1117,6 @@
       randomizeAll();
       $("#status").textContent = "randomized";
       setTimeout(() => { if ($("#status").textContent === "randomized") $("#status").textContent = ""; }, 650);
-    });
-
-    $("#resetBase").addEventListener("click", () => {
-      if (!audioReady) return;
-      stopAll();
-      resetToBase();
-      $("#revTag").textContent = "rev#0";
-      REV = 0;
-      $("#status").textContent = "reset";
-      setTimeout(() => { if ($("#status").textContent === "reset") $("#status").textContent = ""; }, 650);
     });
 
     $("#laser").addEventListener("click", () => stopThenPlay(playLaser));
