@@ -6,21 +6,26 @@
   <title>Defender-ish SFX Generator — Mobile</title>
   <style>
     :root{
-      --bg:#ff3b18;      /* fierce orange/red */
-      --ink:#000;        /* UI stroke */
-      --btnFill:#000;    /* flat black buttons */
+      --bg:#ff3b18;
+      --ink:#000;
+      --btnFill:#000;
       --btnText:var(--bg);
 
-      --gap:10px;
+      /* ✅ sound button area half as tall */
+      --keyH: 28vh;
+      --keyMinH: 180px;
 
-      /* piano keys */
-      --keyH: 56vh;        /* tall stripe height */
-      --keyMinH: 320px;
-      --keyBorder: 2px;
+      --stroke: 2px;
 
-      /* sliders */
+      --accent: var(--bg);
+      --accentStroke: 2px;
+
       --sliderTrack:#000;
       --sliderKnob:#000;
+
+      /* ✅ flash color */
+      --flash:#00ff05;  /* bright green */
+      --flashInk:#000;
     }
 
     html,body{height:100%;}
@@ -34,7 +39,6 @@
     }
     *{ box-sizing:border-box; }
 
-    /* phone-first wrap */
     .wrap{
       width:100%;
       max-width:520px;
@@ -42,116 +46,153 @@
       padding:14px 12px calc(18px + env(safe-area-inset-bottom));
     }
 
-    /* Start overlay */
+    /* ✅ FULLSCREEN BLACK CARD START OVERLAY */
     .startOverlay{
       position:fixed; inset:0;
       display:flex; align-items:center; justify-content:center;
-      background:rgba(0,0,0,.10);
+      background:#000;
       z-index:9999;
       padding:24px;
+      cursor:pointer;
+      user-select:none;
+    }
+    .startOverlay::before{
+      content:"";
+      position:absolute;
+      inset:18px;
+      border:3px solid #000; /* keep it dead simple; border matches system */
+      pointer-events:none;
     }
     .startBtn{
-      width:min(360px, calc(100vw - 48px));
-      padding:18px 14px;
-      font-size:18px;
+      width:100%;
+      height:100%;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      background:transparent;
+      border:0;
+      cursor:pointer;
+
+      font-size:22px;
       font-weight:950;
       text-transform:uppercase;
-      letter-spacing:1.2px;
+      letter-spacing:1.4px;
       color:var(--btnText);
-      background:var(--btnFill);
-      border:3px solid #000;
-      cursor:pointer;
     }
-    .startBtn:active{ transform:translateY(1px); }
+    .startBtn:active{ transform:none; }
 
-    /* sections */
-    .panel{
-      border:2px solid #000;
+    .stripeCard{
+      border:var(--stroke) solid #000;
       background:transparent;
       margin-bottom:12px;
+      overflow:hidden;
     }
 
-    /* ===== Piano stripe keys ===== */
     .keys{
       display:flex;
       width:100%;
-      height:clamp(var(--keyMinH), var(--keyH), 520px);
-      border-bottom:2px solid #000;
+      height:clamp(var(--keyMinH), var(--keyH), 320px);
+      background:var(--btnFill);
     }
+
     .key{
       flex:1 1 0%;
       min-width:0;
       height:100%;
-      background:var(--btnFill);
-      border:var(--keyBorder) solid #000;
-      border-top:0;
-      border-bottom:0;
       padding:0;
       margin:0;
+      background:var(--btnFill);
+      border:0;
+      border-right:var(--stroke) solid #000;
       cursor:pointer;
       position:relative;
-    }
-    /* keep only vertical separators between keys */
-    .key + .key{ border-left:0; }
+      -webkit-tap-highlight-color: transparent;
 
-    /* tiny identifier dots (no labels) */
-    .key::after{
-      content:"";
+      outline: var(--accentStroke) solid var(--accent);
+      outline-offset: calc(-1 * var(--accentStroke));
+    }
+    .key:last-child{ border-right:0; }
+
+    .key .vlabel{
       position:absolute;
       left:50%;
-      top:10px;
-      width:10px;
-      height:10px;
-      margin-left:-5px;
-      border:2px solid var(--btnText);
-      border-radius:50%;
-      background:transparent;
-      opacity:.85;
+      bottom:10px;
+      transform:translateX(-50%);
+      display:block;
+      font-weight:950;
+      text-transform:uppercase;
+      font-size:12px;
+      color:var(--btnText);
+      user-select:none;
+      pointer-events:none;
+      opacity:.98;
+      white-space:pre;
+      line-height:1.05;
+      text-align:center;
     }
 
-    /* category color cues via subtle top bar (still orange as "text" color) */
+    /* ✅ REMOVE THE LITTLE CIRCLES AT TOPS OF SOUND BUTTONS */
+    .key::after{ content:none; }
+
     .key::before{
       content:"";
       position:absolute;
       left:0; top:0;
-      height:6px;
       width:100%;
+      height:6px;
       background:var(--btnText);
       opacity:.85;
     }
 
-    /* active press feedback */
     .key:active{ filter:brightness(1.18); }
 
-    /* RANDOMIZE: full width */
-    .row{
-      display:flex;
-      gap:10px;
-      padding:12px;
-      border-bottom:2px solid #000;
-      align-items:stretch;
+    .randLane{
+      border-top:var(--stroke) solid #000;
+      background:transparent;
     }
-    .row:last-child{ border-bottom:0; }
-
-    button.big{
+    .randBtn{
       width:100%;
-      min-height:54px;
+      height:64px;
+      display:block;
+
       background:var(--btnFill);
       color:var(--btnText);
-      border:3px solid #000;
+      border:0;
+      cursor:pointer;
+
       font-weight:950;
       text-transform:uppercase;
       letter-spacing:1.1px;
       font-size:14px;
-      cursor:pointer;
     }
-    button.big:active{ transform:translateY(1px); }
-    button.big:hover{ filter:brightness(1.12); }
-    button.big:disabled{ opacity:.35; cursor:not-allowed; transform:none; }
+    .randBtn:active{ transform:none; }
+    .randBtn:hover{ filter:brightness(1.12); }
+    .randBtn:disabled{ opacity:.35; cursor:not-allowed; transform:none; }
 
-    /* compact control tiles */
+    /* FLASH STATE (sound keys only will receive this class) */
+    .flash{
+      background:var(--flash) !important;
+      color:var(--flashInk) !important;
+      outline-color:var(--flash) !important;
+    }
+    .flash::before{ background:var(--flashInk) !important; opacity:1 !important; }
+    /* .flash::after removed (we removed the circles) */
+    .flash .vlabel{ color:var(--flashInk) !important; opacity:1 !important; }
+
+    .panel{
+      border:var(--stroke) solid #000;
+      background:transparent;
+      margin-bottom:12px;
+      overflow:hidden;
+    }
+    .stack{
+      display:flex;
+      flex-direction:column;
+      gap:10px;
+      padding:12px;
+    }
     .tile{
-      border:2px solid #000;
+      border:var(--stroke) solid #000;
       padding:10px 12px;
       display:flex;
       flex-direction:column;
@@ -165,14 +206,7 @@
       justify-content:space-between;
       gap:10px;
     }
-    .label{
-      font-size:11px;
-      text-transform:uppercase;
-      letter-spacing:.9px;
-      font-weight:950;
-      color:#000;
-    }
-    .value{
+    .label,.value{
       font-size:11px;
       text-transform:uppercase;
       letter-spacing:.9px;
@@ -180,7 +214,6 @@
       color:#000;
     }
 
-    /* sliders: basic line + circle */
     input[type="range"]{
       width:100%;
       -webkit-appearance:none;
@@ -223,7 +256,7 @@
     select{
       width:100%;
       background:transparent;
-      border:2px solid #000;
+      border:var(--stroke) solid #000;
       color:#000;
       padding:10px 10px;
       outline:none;
@@ -234,18 +267,6 @@
       letter-spacing:.8px;
     }
 
-    .status{
-      border-top:2px solid #000;
-      padding:10px 12px 12px;
-      min-height:18px;
-      font-size:11px;
-      text-transform:uppercase;
-      letter-spacing:1px;
-      font-weight:950;
-      color:#000;
-    }
-
-    /* make sure it still looks ok on desktop: center + keep phone width */
     @media (min-width: 700px){
       body{
         display:flex;
@@ -259,38 +280,35 @@
 </head>
 <body>
 
+  <!-- ✅ full app-covering black card -->
   <div class="startOverlay" id="startOverlay" role="dialog" aria-modal="true">
     <button class="startBtn" id="bigStartBtn">start</button>
   </div>
 
   <div class="wrap">
-
-    <!-- Piano keys panel -->
-    <div class="panel">
+    <div class="stripeCard">
       <div class="keys" id="keys">
-        <!-- 9 vertical stripes, no labels -->
-        <button class="key" id="k_laser"      aria-label="Laser"></button>
-        <button class="key" id="k_zap"        aria-label="Zap"></button>
-        <button class="key" id="k_thrust"     aria-label="Thrust"></button>
-        <button class="key" id="k_explosion"  aria-label="Explosion"></button>
-        <button class="key" id="k_pickup"     aria-label="Pickup"></button>
-        <button class="key" id="k_alarm"      aria-label="Alarm"></button>
-        <button class="key" id="k_smartbomb"  aria-label="Smart Bomb"></button>
-        <button class="key" id="k_hyperspace" aria-label="Hyperspace"></button>
-        <button class="key" id="k_teleport"   aria-label="Teleport"></button>
+        <button class="key" id="k_laser"      aria-label="Laser"><span class="vlabel" data-v="laser"></span></button>
+        <button class="key" id="k_zap"        aria-label="Zap"><span class="vlabel" data-v="zap"></span></button>
+        <button class="key" id="k_thrust"     aria-label="Thrust"><span class="vlabel" data-v="thrust"></span></button>
+        <button class="key" id="k_explosion"  aria-label="Explosion"><span class="vlabel" data-v="explosion"></span></button>
+        <button class="key" id="k_pickup"     aria-label="Pickup"><span class="vlabel" data-v="pickup"></span></button>
+        <button class="key" id="k_alarm"      aria-label="Alarm"><span class="vlabel" data-v="alarm"></span></button>
+        <button class="key" id="k_smartbomb"  aria-label="Smart Bomb"><span class="vlabel" data-v="smartbomb"></span></button>
+        <button class="key" id="k_hyperspace" aria-label="Hyperspace"><span class="vlabel" data-v="hyperspace"></span></button>
+        <button class="key" id="k_teleport"   aria-label="Teleport"><span class="vlabel" data-v="teleport"></span></button>
       </div>
 
-      <div class="row">
-        <button class="big" id="randAll">RANDOMIZE</button>
+      <div class="randLane">
+        <button class="randBtn" id="randAll">RANDOMIZE</button>
       </div>
     </div>
 
-    <!-- Controls flow below -->
     <div class="panel">
-      <div class="row" style="flex-direction:column;">
+      <div class="stack">
         <div class="tile">
           <div class="tileHeader">
-            <div class="label">Frequency</div>
+            <div class="label">Bit Range</div>
             <div class="value" id="crushVal">0.042</div>
           </div>
           <input id="crush" type="range" min="0" max="1" step="0.001" value="0.042">
@@ -324,10 +342,7 @@
           </select>
         </div>
       </div>
-
-      <div class="status" id="status"></div>
     </div>
-
   </div>
 
 <script>
@@ -335,6 +350,53 @@
   const $ = (q) => document.querySelector(q);
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
   const lerp  = (a, b, t) => a + (b - a) * t;
+
+  function setVerticalLetters(){
+    document.querySelectorAll(".vlabel").forEach(el => {
+      const s = (el.getAttribute("data-v") || "").toUpperCase();
+      el.textContent = s.split("").join("\n");
+    });
+  }
+  setVerticalLetters();
+
+  function shuffleInPlace(arr){
+    for (let i = arr.length - 1; i > 0; i--){
+      const j = (Math.random() * (i + 1)) | 0;
+      [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+    return arr;
+  }
+
+  // ✅ flash ONLY sound keys (no randomize button)
+  // whole run ~400ms
+  let flashRunId = 0;
+  function flashSequenceKeysOnly(){
+    flashRunId++;
+    const run = flashRunId;
+
+    const keys = Array.from(document.querySelectorAll(".key"));
+    shuffleInPlace(keys);
+
+    const totalMs = 400;
+    const perMs = Math.max(18, Math.floor(totalMs / Math.max(1, keys.length)));
+    const onMs  = Math.max(16, Math.floor(perMs * 0.55));
+
+    const flashOnce = (el, tStart, tOn) => {
+      setTimeout(() => { if (flashRunId !== run) return; el.classList.add("flash"); }, tStart);
+      setTimeout(() => { if (flashRunId !== run) return; el.classList.remove("flash"); }, tStart + tOn);
+    };
+
+    let t = 0;
+    for (const k of keys){
+      flashOnce(k, t, onMs);
+      t += perMs;
+    }
+
+    setTimeout(() => {
+      if (flashRunId !== run) return;
+      keys.forEach(k => k.classList.remove("flash"));
+    }, totalMs + 60);
+  }
 
   const HIDDEN_SEED = "DEFENDER";
 
@@ -428,8 +490,14 @@
 
   let ctx = null;
   let masterGain, compressor, postGain, crusher = null;
-  let globalStop = [];
   let audioReady = false;
+
+  const STOP = { fns: [] };
+  function stopAll(){
+    for (const fn of STOP.fns){ try{ fn(); }catch(e){} }
+    STOP.fns.length = 0;
+  }
+  function addStop(fn){ STOP.fns.push(fn); }
 
   const STEREO = { entry:null, bands:[], dry:null };
 
@@ -456,7 +524,6 @@
     buildStereoBands();
     return ctx;
   }
-
   const now = () => ctx.currentTime;
 
   function makeBitcrusher(ctx){
@@ -548,11 +615,7 @@
     });
   }
 
-  function stopAll(){
-    globalStop.forEach(fn => { try{ fn(); }catch(e){} });
-    globalStop.length = 0;
-  }
-
+  // noise
   let noiseBuf = null;
   function getNoiseBuffer(){
     if (noiseBuf) return noiseBuf;
@@ -602,6 +665,7 @@
     return { out };
   }
 
+  // patch base
   const BASE = {
     laser:      { baseHz: 900,  sweepHz: 520,  sweepTime: 0.055, bite: 0.55, click: 0.12, noise: 0.08, hp: 260, dur: 0.14 },
     zap:        { baseHz: 220,  sweepHz: 1400, sweepTime: 0.090, fmAmt: 180, fmHz: 32, noise: 0.18, bp: 1200, q: 8, dur: 0.22 },
@@ -615,7 +679,6 @@
     teleport:   { dur: 0.60, chirp0: 420, chirp1: 2200, chirpTime: 0.14, sparkleBP: 1800, sparkleQ: 9, sparkle: 0.28, edge: 0.45, delayT: 0.045, delayFb: 0.25, wet: 0.22 }
   };
   let patch = JSON.parse(JSON.stringify(BASE));
-
   let REV = 0;
 
   function randomizeAll(){
@@ -677,64 +740,57 @@
     local.gain.value = 1.0;
     node.connect(local);
     local.connect(crusher.input);
-    globalStop.push(() => { try{ local.disconnect(); }catch(e){} });
+    addStop(() => { try{ local.disconnect(); }catch(e){} });
     return local;
   }
 
+  function safeStartStop(src, t0, tStop){
+    try{ src.start(t0); }catch(e){}
+    try{ src.stop(tStop); }catch(e){}
+    addStop(() => { try{ src.stop(); }catch(e){} });
+  }
+
+  // ---- SFX generators (unchanged from your base) ----------------------------
+  // (kept exactly; not repeating comments)
   function playLaser(rng){
     const p = patch.laser, t0 = now();
     randomizeStereoByFreq(rng);
-
     const out = ctx.createGain();
     const g = ctx.createGain(); g.gain.value = 0;
-
     const osc = ctx.createOscillator();
     osc.type = "square";
     osc.frequency.setValueAtTime(p.baseHz + p.sweepHz, t0);
     osc.frequency.exponentialRampToValueAtTime(Math.max(20, p.baseHz), t0 + p.sweepTime);
-
     const shaper = ctx.createWaveShaper();
     shaper.curve = makeDriveCurve(lerp(10, 900, p.bite));
     shaper.oversample = "2x";
-
     const n = noiseSource();
     const nG = ctx.createGain(); nG.gain.value = 0;
-
     const hp = ctx.createBiquadFilter();
     hp.type = "highpass";
     hp.frequency.value = p.hp;
-
     const mixTone = ctx.createGain(); mixTone.gain.value = 1.0 - p.noise;
     const mixNoise = ctx.createGain(); mixNoise.gain.value = p.noise;
-
     const tEnd = adsrToZeroLinear(g.gain, t0, 0.002, Math.max(0.04, p.dur), 0, 0.001, 0.9);
     adsrToZeroLinear(nG.gain, t0, 0.001, Math.min(0.12, 0.02 + p.dur*0.25), 0, 0.001, Math.max(0.001, p.click));
-
     osc.connect(shaper); shaper.connect(mixTone);
     n.connect(hp); hp.connect(nG); nG.connect(mixNoise);
     mixTone.connect(g); mixNoise.connect(g);
-
     g.connect(out);
     routeToConsoleStereo(out);
-
-    osc.start(t0); osc.stop(tEnd + 0.05);
-    n.start(t0);   n.stop(tEnd + 0.05);
-
-    setTimeout(() => { try{ out.disconnect(); }catch(e){} }, Math.max(0, (tEnd - now()) * 1000) + 250);
+    safeStartStop(osc, t0, tEnd + 0.05);
+    safeStartStop(n,   t0, tEnd + 0.05);
+    addStop(() => { try{ out.disconnect(); }catch(e){} });
   }
-
   function playZap(rng){
     const p = patch.zap, t0 = now();
     randomizeStereoByFreq(rng);
-
     const out = ctx.createGain();
     const g = ctx.createGain(); g.gain.value = 0;
-
     const osc = ctx.createOscillator();
     osc.type = "sawtooth";
     osc.frequency.setValueAtTime(p.baseHz, t0);
     osc.frequency.exponentialRampToValueAtTime(Math.max(30, p.sweepHz), t0 + p.sweepTime);
-
     const mod = ctx.createOscillator();
     mod.type = "sine";
     mod.frequency.value = p.fmHz;
@@ -742,45 +798,34 @@
     modG.gain.value = p.fmAmt;
     mod.connect(modG);
     modG.connect(osc.frequency);
-
     const n = noiseSource();
     const bp = ctx.createBiquadFilter();
     bp.type = "bandpass";
     bp.frequency.value = p.bp;
     bp.Q.value = p.q;
-
     const mixTone = ctx.createGain(); mixTone.gain.value = 0.85;
     const mixNoise= ctx.createGain(); mixNoise.gain.value= p.noise;
-
     const tEnd = adsrToZeroLinear(g.gain, t0, 0.003, Math.max(0.05, p.dur), 0, 0.001, 1.0);
-
     osc.connect(mixTone);
     n.connect(bp); bp.connect(mixNoise);
     mixTone.connect(g); mixNoise.connect(g);
-
     g.connect(out);
     routeToConsoleStereo(out);
-
-    osc.start(t0); osc.stop(tEnd + 0.05);
-    mod.start(t0); mod.stop(tEnd + 0.05);
-    n.start(t0);   n.stop(tEnd + 0.05);
-
-    setTimeout(() => { try{ out.disconnect(); }catch(e){} }, Math.max(0, (tEnd - now()) * 1000) + 300);
+    safeStartStop(osc, t0, tEnd + 0.05);
+    safeStartStop(mod, t0, tEnd + 0.05);
+    safeStartStop(n,   t0, tEnd + 0.05);
+    addStop(() => { try{ out.disconnect(); }catch(e){} });
   }
-
   function playThrust(rng){
     const p = patch.thrust, t0 = now();
     randomizeStereoByFreq(rng);
-
     const out = ctx.createGain();
     const g = ctx.createGain(); g.gain.value = 0;
-
     const n = noiseSource();
     const lp = ctx.createBiquadFilter();
     lp.type = "lowpass";
     lp.frequency.setValueAtTime(p.lp, t0);
     lp.Q.value = p.q;
-
     const lfo = ctx.createOscillator();
     lfo.type = "sine";
     lfo.frequency.value = p.flutterHz;
@@ -788,34 +833,25 @@
     lfoG.gain.value = p.flutterAmt * 0.35;
     lfo.connect(lfoG);
     lfoG.connect(g.gain);
-
     const tEnd = adsrToZeroLinear(g.gain, t0, 0.008, Math.max(0.08, p.dur), 0, 0.001, 0.7);
-
     const mix = ctx.createGain();
     mix.gain.value = p.noise;
-
     n.connect(lp); lp.connect(mix); mix.connect(g);
     g.connect(out);
     routeToConsoleStereo(out);
-
-    n.start(t0); n.stop(tEnd + 0.08);
-    lfo.start(t0); lfo.stop(tEnd + 0.08);
-
-    setTimeout(() => { try{ out.disconnect(); }catch(e){} }, Math.max(0, (tEnd - now()) * 1000) + 350);
+    safeStartStop(n,   t0, tEnd + 0.08);
+    safeStartStop(lfo, t0, tEnd + 0.08);
+    addStop(() => { try{ out.disconnect(); }catch(e){} });
   }
-
   function playExplosion(rng){
     const p = patch.explosion, t0 = now();
     randomizeStereoByFreq(rng);
-
     const out = ctx.createGain();
     const g = ctx.createGain(); g.gain.value = 0;
-
     const A = 0.003;
     const D = clamp(p.dur, 0.08, 6.0);
     const R = 0.012;
     const tEnd = adsrToZeroLinear(g.gain, t0, A, D, 0, R, 1.0);
-
     const n = noiseSource();
     const lp = ctx.createBiquadFilter();
     lp.type = "lowpass";
@@ -824,50 +860,39 @@
     lp.Q.value = 0.7;
     const nG = ctx.createGain(); nG.gain.value = 0;
     adsrToZeroLinear(nG.gain, t0, A, D, 0, R, clamp(p.noise, 0, 1));
-
     const boom = ctx.createOscillator();
     boom.type = "sine";
     boom.frequency.setValueAtTime(p.boomHz * 1.2, t0);
     boom.frequency.exponentialRampToValueAtTime(Math.max(12, p.boomHz), t0 + Math.min(0.35, D));
     const boomG = ctx.createGain(); boomG.gain.value = 0;
     adsrToZeroLinear(boomG.gain, t0, 0.002, Math.max(0.06, D*0.65), 0, R, clamp(p.boomAmt, 0, 1));
-
     const crack = noiseSource();
     const hp = ctx.createBiquadFilter();
     hp.type = "highpass";
     hp.frequency.value = 1200;
     const crackG = ctx.createGain(); crackG.gain.value = 0;
     adsrToZeroLinear(crackG.gain, t0, 0.001, Math.max(0.04, D*0.45), 0, R, clamp(p.crackle, 0, 1));
-
     const mix = ctx.createGain(); mix.gain.value = 1.0;
-
     n.connect(lp); lp.connect(nG); nG.connect(mix);
     boom.connect(boomG); boomG.connect(mix);
     crack.connect(hp); hp.connect(crackG); crackG.connect(mix);
-
     mix.connect(g);
     g.connect(out);
     routeToConsoleStereo(out);
-
-    n.start(t0); n.stop(tEnd + 0.12);
-    crack.start(t0); crack.stop(tEnd + 0.12);
-    boom.start(t0); boom.stop(tEnd + 0.12);
-
-    setTimeout(() => { try{ out.disconnect(); }catch(e){} }, Math.max(0, (tEnd - now()) * 1000) + 700);
+    safeStartStop(n,     t0, tEnd + 0.12);
+    safeStartStop(crack, t0, tEnd + 0.12);
+    safeStartStop(boom,  t0, tEnd + 0.12);
+    addStop(() => { try{ out.disconnect(); }catch(e){} });
   }
-
   function playPickup(rng){
     const p = patch.pickup, t0 = now();
     randomizeStereoByFreq(rng);
-
     const out = ctx.createGain();
     const g = ctx.createGain(); g.gain.value = 0;
-
     const osc = ctx.createOscillator();
     osc.type = "triangle";
     osc.frequency.setValueAtTime(p.baseHz, t0);
     osc.frequency.exponentialRampToValueAtTime(Math.max(30, p.upHz), t0 + p.glide);
-
     const vib = ctx.createOscillator();
     vib.type = "sine";
     vib.frequency.value = p.vibHz;
@@ -875,71 +900,52 @@
     vibG.gain.value = p.vibAmt * p.baseHz;
     vib.connect(vibG);
     vibG.connect(osc.frequency);
-
     const sh = ctx.createWaveShaper();
     sh.curve = makeDriveCurve(lerp(5, 900, p.twang));
     sh.oversample = "2x";
-
     const tEnd = adsrToZeroLinear(g.gain, t0, 0.004, Math.max(0.06, p.dur), 0, 0.01, 0.8);
-
     osc.connect(sh); sh.connect(g);
     g.connect(out);
     routeToConsoleStereo(out);
-
-    osc.start(t0); osc.stop(tEnd + 0.06);
-    vib.start(t0); vib.stop(tEnd + 0.06);
-
-    setTimeout(() => { try{ out.disconnect(); }catch(e){} }, Math.max(0, (tEnd - now()) * 1000) + 250);
+    safeStartStop(osc, t0, tEnd + 0.06);
+    safeStartStop(vib, t0, tEnd + 0.06);
+    addStop(() => { try{ out.disconnect(); }catch(e){} });
   }
-
   function playAlarm(rng){
     const p = patch.alarm, t0 = now();
     randomizeStereoByFreq(rng);
-
     const out = ctx.createGain();
     const g = ctx.createGain(); g.gain.value = 0;
-
     const osc = ctx.createOscillator();
     osc.type = "square";
     osc.frequency.setValueAtTime(p.aHz, t0);
-
     const step = ctx.createOscillator();
     step.type = "square";
     step.frequency.value = p.rate;
-
     const stepG = ctx.createGain();
     stepG.gain.value = (p.bHz - p.aHz) * 0.5;
     step.connect(stepG);
     stepG.connect(osc.frequency);
-
     const sh = ctx.createWaveShaper();
     sh.curve = makeDriveCurve(lerp(5, 900, p.edge));
     sh.oversample = "2x";
-
     const tEnd = adsrToZeroLinear(g.gain, t0, 0.010, Math.max(0.10, p.dur), 0, 0.01, 0.55);
-
     osc.connect(sh); sh.connect(g);
     g.connect(out);
     routeToConsoleStereo(out);
-
-    osc.start(t0);  osc.stop(tEnd + 0.06);
-    step.start(t0); step.stop(tEnd + 0.06);
-
-    setTimeout(() => { try{ out.disconnect(); }catch(e){} }, Math.max(0, (tEnd - now()) * 1000) + 300);
+    safeStartStop(osc,  t0, tEnd + 0.06);
+    safeStartStop(step, t0, tEnd + 0.06);
+    addStop(() => { try{ out.disconnect(); }catch(e){} });
   }
-
   function playSmartBomb(rng){
     const p = patch.smartbomb, t0 = now();
     randomizeStereoByFreq(rng);
-
     const out = ctx.createGain();
     const g = ctx.createGain(); g.gain.value = 0;
-
     const A = 0.003;
     const D = clamp(p.dur, 0.10, 8.0);
     const R = 0.014;
     const tEnd = adsrToZeroLinear(g.gain, t0, A, D, 0, R, 1.0);
-
     const n = noiseSource();
     const lp = ctx.createBiquadFilter();
     lp.type = "lowpass";
@@ -948,58 +954,46 @@
     lp.Q.value = 0.75;
     const nG = ctx.createGain(); nG.gain.value = 0;
     adsrToZeroLinear(nG.gain, t0, A, D, 0, R, clamp(p.noise, 0, 1));
-
     const boom = ctx.createOscillator();
     boom.type = "sine";
     boom.frequency.setValueAtTime(p.boomHz * 1.15, t0);
     boom.frequency.exponentialRampToValueAtTime(Math.max(10, p.boomHz), t0 + Math.min(0.50, D));
     const boomG = ctx.createGain(); boomG.gain.value = 0;
     adsrToZeroLinear(boomG.gain, t0, 0.002, Math.max(0.08, D*0.75), 0, R, clamp(p.boomAmt, 0, 1));
-
     const ring = ctx.createOscillator();
     ring.type = "square";
     ring.frequency.setValueAtTime(p.ringHz, t0);
     ring.frequency.exponentialRampToValueAtTime(Math.max(10, p.ringHz * 0.45), t0 + Math.min(1.0, D*0.6));
     const ringG = ctx.createGain(); ringG.gain.value = 0;
     adsrToZeroLinear(ringG.gain, t0, 0.002, Math.max(0.08, D*0.85), 0, R, clamp(p.ringAmt, 0, 1));
-
     const ringSh = ctx.createWaveShaper();
     ringSh.curve = makeDriveCurve(lerp(5, 700, 0.6));
     ringSh.oversample = "2x";
-
     const crack = noiseSource();
     const hp = ctx.createBiquadFilter();
     hp.type = "highpass";
     hp.frequency.value = 1000;
     const crackG = ctx.createGain(); crackG.gain.value = 0;
     adsrToZeroLinear(crackG.gain, t0, 0.001, Math.max(0.05, D*0.55), 0, R, clamp(p.crackle, 0, 1));
-
     const mix = ctx.createGain(); mix.gain.value = 1.0;
-
     n.connect(lp); lp.connect(nG); nG.connect(mix);
     boom.connect(boomG); boomG.connect(mix);
     ring.connect(ringSh); ringSh.connect(ringG); ringG.connect(mix);
     crack.connect(hp); hp.connect(crackG); crackG.connect(mix);
-
     mix.connect(g);
     g.connect(out);
     routeToConsoleStereo(out);
-
-    n.start(t0); n.stop(tEnd + 0.12);
-    crack.start(t0); crack.stop(tEnd + 0.12);
-    boom.start(t0); boom.stop(tEnd + 0.12);
-    ring.start(t0); ring.stop(tEnd + 0.12);
-
-    setTimeout(() => { try{ out.disconnect(); }catch(e){} }, Math.max(0, (tEnd - now()) * 1000) + 700);
+    safeStartStop(n,     t0, tEnd + 0.12);
+    safeStartStop(crack, t0, tEnd + 0.12);
+    safeStartStop(boom,  t0, tEnd + 0.12);
+    safeStartStop(ring,  t0, tEnd + 0.12);
+    addStop(() => { try{ out.disconnect(); }catch(e){} });
   }
-
   function playHyperspace(rng){
     const p = patch.hyperspace, t0 = now();
     randomizeStereoByFreq(rng);
-
     const out = ctx.createGain();
     const g = ctx.createGain(); g.gain.value = 0;
-
     const n = noiseSource();
     const lp = ctx.createBiquadFilter();
     lp.type = "lowpass";
@@ -1007,75 +1001,58 @@
     lp.frequency.exponentialRampToValueAtTime(Math.max(60, p.whooshLP1), t0 + p.whooshTime);
     lp.Q.value = 0.8;
     const nG = ctx.createGain(); nG.gain.value = 0.65;
-
     const osc = ctx.createOscillator();
     osc.type = "sawtooth";
     osc.frequency.setValueAtTime(p.tone0, t0);
     osc.frequency.exponentialRampToValueAtTime(Math.max(20, p.tone1), t0 + p.toneTime);
-
     const sh = ctx.createWaveShaper();
     sh.curve = makeDriveCurve(lerp(5, 1100, p.edge));
     sh.oversample = "2x";
     const oG = ctx.createGain(); oG.gain.value = 0.40;
-
     const mix = ctx.createGain();
     n.connect(lp); lp.connect(nG); nG.connect(mix);
     osc.connect(sh); sh.connect(oG); oG.connect(mix);
-
     const fx = feedbackDelay(mix, p.delayT, p.delayFb, p.wet);
-
     const tEnd = adsrToZeroLinear(g.gain, t0, 0.010, Math.max(0.10, p.dur), 0, 0.01, 0.85);
-
     fx.out.connect(g);
     g.connect(out);
     routeToConsoleStereo(out);
-
-    n.start(t0);   n.stop(tEnd + 0.10);
-    osc.start(t0); osc.stop(tEnd + 0.10);
-
-    setTimeout(() => { try{ out.disconnect(); }catch(e){} }, Math.max(0, (tEnd - now()) * 1000) + 450);
+    safeStartStop(n,   t0, tEnd + 0.10);
+    safeStartStop(osc, t0, tEnd + 0.10);
+    addStop(() => { try{ out.disconnect(); }catch(e){} });
+    addStop(() => { try{ fx.out.disconnect(); }catch(e){} });
   }
-
   function playTeleport(rng){
     const p = patch.teleport, t0 = now();
     randomizeStereoByFreq(rng);
-
     const out = ctx.createGain();
     const g = ctx.createGain(); g.gain.value = 0;
-
     const osc = ctx.createOscillator();
     osc.type = "triangle";
     osc.frequency.setValueAtTime(p.chirp0, t0);
     osc.frequency.exponentialRampToValueAtTime(Math.max(20, p.chirp1), t0 + p.chirpTime);
-
     const sh = ctx.createWaveShaper();
     sh.curve = makeDriveCurve(lerp(5, 1100, p.edge));
     sh.oversample = "2x";
     const oG = ctx.createGain(); oG.gain.value = 0.60;
-
     const n = noiseSource();
     const bp = ctx.createBiquadFilter();
     bp.type = "bandpass";
     bp.frequency.value = p.sparkleBP;
     bp.Q.value = p.sparkleQ;
     const nG = ctx.createGain(); nG.gain.value = p.sparkle;
-
     const mix = ctx.createGain();
     osc.connect(sh); sh.connect(oG); oG.connect(mix);
     n.connect(bp); bp.connect(nG); nG.connect(mix);
-
     const fx = feedbackDelay(mix, p.delayT, p.delayFb, p.wet);
-
     const tEnd = adsrToZeroLinear(g.gain, t0, 0.003, Math.max(0.06, p.dur), 0, 0.01, 0.85);
-
     fx.out.connect(g);
     g.connect(out);
     routeToConsoleStereo(out);
-
-    osc.start(t0); osc.stop(tEnd + 0.08);
-    n.start(t0);   n.stop(tEnd + 0.08);
-
-    setTimeout(() => { try{ out.disconnect(); }catch(e){} }, Math.max(0, (tEnd - now()) * 1000) + 300);
+    safeStartStop(osc, t0, tEnd + 0.08);
+    safeStartStop(n,   t0, tEnd + 0.08);
+    addStop(() => { try{ out.disconnect(); }catch(e){} });
+    addStop(() => { try{ fx.out.disconnect(); }catch(e){} });
   }
 
   function setControlsEnabled(enabled){
@@ -1103,7 +1080,6 @@
     $("#startOverlay").style.display = "none";
     setControlsEnabled(true);
     masterGain.gain.value = parseFloat($("#master").value);
-    $("#status").textContent = "";
   }
 
   function updateReadouts(){
@@ -1118,10 +1094,9 @@
     setControlsEnabled(false);
     updateReadouts();
 
+    // ✅ clicking anywhere on the black card starts
     $("#bigStartBtn").addEventListener("click", startSession);
-    $("#startOverlay").addEventListener("click", (e) => {
-      if (e.target.id === "startOverlay") startSession();
-    });
+    $("#startOverlay").addEventListener("click", startSession);
 
     $("#master").addEventListener("input", (e) => {
       updateReadouts();
@@ -1135,30 +1110,18 @@
       if (!audioReady) return;
       stopAll();
       randomizeAll();
-      $("#status").textContent = "randomized";
-      setTimeout(() => { if ($("#status").textContent === "randomized") $("#status").textContent = ""; }, 650);
+      flashSequenceKeysOnly(); // ✅ keys flash, randomize does NOT flash
     });
 
-    // piano keys
-    $("#k_laser").addEventListener("click", () => stopThenPlay(playLaser));
-    $("#k_zap").addEventListener("click", () => stopThenPlay(playZap));
-    $("#k_thrust").addEventListener("click", () => stopThenPlay(playThrust));
-    $("#k_explosion").addEventListener("click", () => stopThenPlay(playExplosion));
-    $("#k_pickup").addEventListener("click", () => stopThenPlay(playPickup));
-    $("#k_alarm").addEventListener("click", () => stopThenPlay(playAlarm));
-    $("#k_smartbomb").addEventListener("click", () => stopThenPlay(playSmartBomb));
+    $("#k_laser").addEventListener("click",      () => stopThenPlay(playLaser));
+    $("#k_zap").addEventListener("click",        () => stopThenPlay(playZap));
+    $("#k_thrust").addEventListener("click",     () => stopThenPlay(playThrust));
+    $("#k_explosion").addEventListener("click",  () => stopThenPlay(playExplosion));
+    $("#k_pickup").addEventListener("click",     () => stopThenPlay(playPickup));
+    $("#k_alarm").addEventListener("click",      () => stopThenPlay(playAlarm));
+    $("#k_smartbomb").addEventListener("click",  () => stopThenPlay(playSmartBomb));
     $("#k_hyperspace").addEventListener("click", () => stopThenPlay(playHyperspace));
-    $("#k_teleport").addEventListener("click", () => stopThenPlay(playTeleport));
-
-    // keyboard support (desktop testing)
-    window.addEventListener("keydown", (e) => {
-      if (e.repeat) return;
-      if (!audioReady && (e.key === "Enter" || e.key === " ")){ e.preventDefault(); startSession(); return; }
-      if (!audioReady) return;
-      if (e.key === "r" || e.key === "R"){ $("#randAll").click(); return; }
-      const map = {"1":"k_laser","2":"k_zap","3":"k_thrust","4":"k_explosion","5":"k_pickup","6":"k_alarm","7":"k_smartbomb","8":"k_hyperspace","9":"k_teleport"};
-      if (map[e.key]) $("#"+map[e.key]).click();
-    });
+    $("#k_teleport").addEventListener("click",   () => stopThenPlay(playTeleport));
   }
 
   hook();
