@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
-  <title>Defender-ish SFX Generator — Mobile</title>
+  <title>DEFENDERIZER</title>
   <style>
     :root{
       --bg:#ff3b18;
@@ -282,18 +282,19 @@
 
   <!-- ✅ full app-covering black card -->
   <div class="startOverlay" id="startOverlay" role="dialog" aria-modal="true">
-    <button class="startBtn" id="bigStartBtn">start</button>
+    <button class="startBtn" id="bigStartBtn">DEFENDERIZER</button>
   </div>
 
   <div class="wrap">
     <div class="stripeCard">
       <div class="keys" id="keys">
+        <!-- ✅ order: laser, zap, alarm, pickup, thrust, explosion, smartbomb, hyperspace, teleport -->
         <button class="key" id="k_laser"      aria-label="Laser"><span class="vlabel" data-v="laser"></span></button>
         <button class="key" id="k_zap"        aria-label="Zap"><span class="vlabel" data-v="zap"></span></button>
+        <button class="key" id="k_alarm"      aria-label="Alarm"><span class="vlabel" data-v="alarm"></span></button>
+        <button class="key" id="k_pickup"     aria-label="Pickup"><span class="vlabel" data-v="pickup"></span></button>
         <button class="key" id="k_thrust"     aria-label="Thrust"><span class="vlabel" data-v="thrust"></span></button>
         <button class="key" id="k_explosion"  aria-label="Explosion"><span class="vlabel" data-v="explosion"></span></button>
-        <button class="key" id="k_pickup"     aria-label="Pickup"><span class="vlabel" data-v="pickup"></span></button>
-        <button class="key" id="k_alarm"      aria-label="Alarm"><span class="vlabel" data-v="alarm"></span></button>
         <button class="key" id="k_smartbomb"  aria-label="Smart Bomb"><span class="vlabel" data-v="smartbomb"></span></button>
         <button class="key" id="k_hyperspace" aria-label="Hyperspace"><span class="vlabel" data-v="hyperspace"></span></button>
         <button class="key" id="k_teleport"   aria-label="Teleport"><span class="vlabel" data-v="teleport"></span></button>
@@ -751,8 +752,7 @@
   }
 
   // ---- SFX generators (unchanged from your base) ----------------------------
-  // (kept exactly; not repeating comments)
-  function playLaser(rng){
+  function playLaser(rng){ /* ... unchanged ... */ 
     const p = patch.laser, t0 = now();
     randomizeStereoByFreq(rng);
     const out = ctx.createGain();
