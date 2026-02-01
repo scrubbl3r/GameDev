@@ -8,10 +8,10 @@
     :root{
       --bg:#ff3b18;
       --ink:#000;
-      --btnFill:#000;
-      --btnText:var(--bg);
 
-      /* ✅ sound button area half as tall */
+      --btnFill:#000;          /* default sound button fill */
+      --btnText:var(--bg);     /* default sound button text */
+
       --keyH: 28vh;
       --keyMinH: 180px;
 
@@ -23,13 +23,8 @@
       --sliderTrack:#000;
       --sliderKnob:#000;
 
-      /* ✅ flash color */
       --flash:#00ff05;  /* bright green */
       --flashInk:#000;
-
-      /* ✅ press color (sound buttons only) */
-      --press:#ff8a00;  /* orange */
-      --pressInk:#000;  /* black text */
     }
 
     html,body{height:100%;}
@@ -50,7 +45,7 @@
       padding:14px 12px calc(18px + env(safe-area-inset-bottom));
     }
 
-    /* ✅ FULLSCREEN BLACK CARD START OVERLAY */
+    /* FULLSCREEN START OVERLAY */
     .startOverlay{
       position:fixed; inset:0;
       display:flex; align-items:center; justify-content:center;
@@ -59,6 +54,7 @@
       padding:24px;
       cursor:pointer;
       user-select:none;
+      -webkit-tap-highlight-color: transparent;
     }
     .startOverlay::before{
       content:"";
@@ -82,6 +78,11 @@
       text-transform:uppercase;
       letter-spacing:1.4px;
       color:var(--btnText);
+      -webkit-appearance:none;
+      appearance:none;
+      border-radius:0;
+      box-shadow:none;
+      transform:none;
     }
     .startBtn:active{ transform:none; }
 
@@ -114,6 +115,14 @@
 
       outline: var(--accentStroke) solid var(--accent);
       outline-offset: calc(-1 * var(--accentStroke));
+
+      /* prevent any “press” shape weirdness */
+      -webkit-appearance:none;
+      appearance:none;
+      border-radius:0;
+      box-shadow:none;
+      transform:none;
+      filter:none;
     }
     .key:last-child{ border-right:0; }
 
@@ -135,33 +144,18 @@
       text-align:center;
     }
 
-    /* ✅ REMOVE THE LITTLE CIRCLES AT TOPS OF SOUND BUTTONS */
-    .key::after{ content:none; }
+    /* remove any decorative pseudo-elements (prevents the “little rectangle” artifact) */
+    .key::before,
+    .key::after{ content:none !important; }
 
-    .key::before{
-      content:"";
-      position:absolute;
-      left:0; top:0;
-      width:100%;
-      height:6px;
-      background:var(--btnText);
-      opacity:.85;
+    /* pressed state: fill turns ORANGE, text turns BLACK, shape unchanged */
+    .key.isDown{
+      background:var(--bg) !important;
+      outline-color:var(--bg) !important;
     }
-
-    /* ✅ pressed state: orange fill + black text (sound keys only) */
-    .key:active{
-      background:var(--press);
-      color:var(--pressInk);
-      outline-color:var(--press);
-      filter:none;
-    }
-    .key:active::before{
-      background:var(--pressInk);
-      opacity:1;
-    }
-    .key:active .vlabel{
-      color:var(--pressInk);
-      opacity:1;
+    .key.isDown .vlabel{
+      color:#000 !important;
+      opacity:1 !important;
     }
 
     .randLane{
@@ -182,18 +176,24 @@
       text-transform:uppercase;
       letter-spacing:1.1px;
       font-size:14px;
+
+      -webkit-appearance:none;
+      appearance:none;
+      border-radius:0;
+      box-shadow:none;
+      transform:none;
+      -webkit-tap-highlight-color: transparent;
     }
     .randBtn:active{ transform:none; }
     .randBtn:hover{ filter:brightness(1.12); }
     .randBtn:disabled{ opacity:.35; cursor:not-allowed; transform:none; }
 
-    /* FLASH STATE (sound keys only will receive this class) */
+    /* FLASH STATE (sound keys only) */
     .flash{
       background:var(--flash) !important;
       color:var(--flashInk) !important;
       outline-color:var(--flash) !important;
     }
-    .flash::before{ background:var(--flashInk) !important; opacity:1 !important; }
     .flash .vlabel{ color:var(--flashInk) !important; opacity:1 !important; }
 
     .panel{
@@ -297,7 +297,6 @@
 </head>
 <body>
 
-  <!-- ✅ full app-covering black card -->
   <div class="startOverlay" id="startOverlay" role="dialog" aria-modal="true">
     <button class="startBtn" id="bigStartBtn">DEFENDERIZE</button>
   </div>
@@ -305,7 +304,6 @@
   <div class="wrap">
     <div class="stripeCard">
       <div class="keys" id="keys">
-        <!-- ✅ order: laser, zap, alarm, pickup, thrust, explosion, smartbomb, hyperspace, teleport -->
         <button class="key" id="k_laser"      aria-label="Laser"><span class="vlabel" data-v="laser"></span></button>
         <button class="key" id="k_zap"        aria-label="Zap"><span class="vlabel" data-v="zap"></span></button>
         <button class="key" id="k_alarm"      aria-label="Alarm"><span class="vlabel" data-v="alarm"></span></button>
@@ -326,7 +324,6 @@
       <div class="stack">
         <div class="tile">
           <div class="tileHeader">
-            <!-- ✅ rename -->
             <div class="label">Bit Crush</div>
             <div class="value" id="crushVal">0.042</div>
           </div>
@@ -386,8 +383,7 @@
     return arr;
   }
 
-  // ✅ flash ONLY sound keys (no randomize button)
-  // whole run ~400ms
+  // flash ONLY sound keys (no randomize button)
   let flashRunId = 0;
   function flashSequenceKeysOnly(){
     flashRunId++;
@@ -692,7 +688,6 @@
     explosion:  { noise: 1.0,   lp0: 3800, lp1: 240, sweepTime: 0.32, boomHz: 62, boomAmt: 0.65, crackle: 0.25, dur: 0.95 },
     pickup:     { baseHz: 660,  upHz: 1320, glide: 0.12, vibHz: 10, vibAmt: 0.02, twang: 0.35, dur: 0.35 },
     alarm:      { aHz: 520,     bHz: 860,  rate: 9.0, edge: 0.6, dur: 0.95 },
-
     smartbomb:  { dur: 1.40, boomHz: 44, boomAmt: 0.9, sweep0: 5200, sweep1: 180, sweepTime: 0.75, ringHz: 220, ringAmt: 0.35, noise: 1.0, crackle: 0.35 },
     hyperspace: { dur: 1.20, whooshLP0: 4200, whooshLP1: 220, whooshTime: 0.75, tone0: 180, tone1: 1500, toneTime: 0.55, edge: 0.55, delayT: 0.075, delayFb: 0.45, wet: 0.35 },
     teleport:   { dur: 0.60, chirp0: 420, chirp1: 2200, chirpTime: 0.14, sparkleBP: 1800, sparkleQ: 9, sparkle: 0.28, edge: 0.45, delayT: 0.045, delayFb: 0.25, wet: 0.22 }
@@ -769,8 +764,8 @@
     addStop(() => { try{ src.stop(); }catch(e){} });
   }
 
-  // ---- SFX generators (unchanged from your base) ----------------------------
-  function playLaser(rng){ /* ... unchanged ... */ 
+  // ---- SOUND GENERATORS ----------------------------------------------------
+  function playLaser(rng){
     const p = patch.laser, t0 = now();
     randomizeStereoByFreq(rng);
     const out = ctx.createGain();
@@ -800,7 +795,7 @@
     safeStartStop(n,   t0, tEnd + 0.05);
     addStop(() => { try{ out.disconnect(); }catch(e){} });
   }
-  function playZap(rng){ /* unchanged */ 
+  function playZap(rng){
     const p = patch.zap, t0 = now();
     randomizeStereoByFreq(rng);
     const out = ctx.createGain();
@@ -834,7 +829,7 @@
     safeStartStop(n,   t0, tEnd + 0.05);
     addStop(() => { try{ out.disconnect(); }catch(e){} });
   }
-  function playThrust(rng){ /* unchanged */
+  function playThrust(rng){
     const p = patch.thrust, t0 = now();
     randomizeStereoByFreq(rng);
     const out = ctx.createGain();
@@ -861,7 +856,7 @@
     safeStartStop(lfo, t0, tEnd + 0.08);
     addStop(() => { try{ out.disconnect(); }catch(e){} });
   }
-  function playExplosion(rng){ /* unchanged */
+  function playExplosion(rng){
     const p = patch.explosion, t0 = now();
     randomizeStereoByFreq(rng);
     const out = ctx.createGain();
@@ -902,7 +897,7 @@
     safeStartStop(boom,  t0, tEnd + 0.12);
     addStop(() => { try{ out.disconnect(); }catch(e){} });
   }
-  function playPickup(rng){ /* unchanged */
+  function playPickup(rng){
     const p = patch.pickup, t0 = now();
     randomizeStereoByFreq(rng);
     const out = ctx.createGain();
@@ -929,7 +924,7 @@
     safeStartStop(vib, t0, tEnd + 0.06);
     addStop(() => { try{ out.disconnect(); }catch(e){} });
   }
-  function playAlarm(rng){ /* unchanged */
+  function playAlarm(rng){
     const p = patch.alarm, t0 = now();
     randomizeStereoByFreq(rng);
     const out = ctx.createGain();
@@ -955,7 +950,7 @@
     safeStartStop(step, t0, tEnd + 0.06);
     addStop(() => { try{ out.disconnect(); }catch(e){} });
   }
-  function playSmartBomb(rng){ /* unchanged */ 
+  function playSmartBomb(rng){
     const p = patch.smartbomb, t0 = now();
     randomizeStereoByFreq(rng);
     const out = ctx.createGain();
@@ -1007,7 +1002,7 @@
     safeStartStop(ring,  t0, tEnd + 0.12);
     addStop(() => { try{ out.disconnect(); }catch(e){} });
   }
-  function playHyperspace(rng){ /* unchanged */
+  function playHyperspace(rng){
     const p = patch.hyperspace, t0 = now();
     randomizeStereoByFreq(rng);
     const out = ctx.createGain();
@@ -1040,7 +1035,7 @@
     addStop(() => { try{ out.disconnect(); }catch(e){} });
     addStop(() => { try{ fx.out.disconnect(); }catch(e){} });
   }
-  function playTeleport(rng){ /* unchanged */
+  function playTeleport(rng){
     const p = patch.teleport, t0 = now();
     randomizeStereoByFreq(rng);
     const out = ctx.createGain();
@@ -1090,11 +1085,16 @@
     playFn(rng);
   }
 
+  let started = false;
   async function startSession(){
+    if (started) return;
+    started = true;
+
     ensureAudio();
     ensureCrusher();
     if (ctx.state !== "running") await ctx.resume();
     audioReady = true;
+
     $("#startOverlay").style.display = "none";
     setControlsEnabled(true);
     masterGain.gain.value = parseFloat($("#master").value);
@@ -1108,12 +1108,30 @@
     $("#modeVal").textContent = m.charAt(0).toUpperCase() + m.slice(1);
   }
 
+  // press visuals (sound keys only)
+  function hookPressVisuals(){
+    const keys = Array.from(document.querySelectorAll(".key"));
+    keys.forEach((k) => {
+      k.addEventListener("pointerdown", () => {
+        if (k.disabled) return;
+        k.classList.add("isDown");
+      });
+      const up = () => k.classList.remove("isDown");
+      k.addEventListener("pointerup", up);
+      k.addEventListener("pointercancel", up);
+      k.addEventListener("pointerleave", up);
+      k.addEventListener("lostpointercapture", up);
+    });
+  }
+
   function hook(){
     setControlsEnabled(false);
     updateReadouts();
+    hookPressVisuals();
 
-    $("#bigStartBtn").addEventListener("click", startSession);
-    $("#startOverlay").addEventListener("click", startSession);
+    // start overlay
+    $("#bigStartBtn").addEventListener("click", (e) => { e.preventDefault(); startSession(); });
+    $("#startOverlay").addEventListener("click", (e) => { e.preventDefault(); startSession(); });
 
     $("#master").addEventListener("input", (e) => {
       updateReadouts();
@@ -1130,6 +1148,7 @@
       flashSequenceKeysOnly();
     });
 
+    // button -> sound
     $("#k_laser").addEventListener("click",      () => stopThenPlay(playLaser));
     $("#k_zap").addEventListener("click",        () => stopThenPlay(playZap));
     $("#k_thrust").addEventListener("click",     () => stopThenPlay(playThrust));
