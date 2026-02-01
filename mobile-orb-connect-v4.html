@@ -233,7 +233,6 @@
       nextSendAtMs = now + SEND_MIN_MS;
 
       // ✅ SMALL base payload (what the game needs)
-      // IMPORTANT: do NOT spread ...payload, or you ship all the extra keys.
       const out = {
         room: payload.room,
 
@@ -257,7 +256,7 @@
         out.wFilt = roundN(payload.wFilt, 2);
         out.cap   = roundN(payload.cap, 2);
 
-        // ORBIT DEBUG
+        // ORBIT DEBUG (schema preserved; meaning updated below)
         out.o_r2      = roundN(payload.o_r2, 4);
         out.o_r3      = roundN(payload.o_r3, 4);
         out.o_gate    = roundN(payload.o_gate, 4);
@@ -291,26 +290,24 @@
     const JERK_LOOSE = 2600.0;
 
     // =========================================================================
-    // ✅ ORBIT — v3.0 (INDEPENDENT)
+    // ✅ ORBIT — v4.0 (DIRECTIONAL DIVERSITY, 1s window)
+    //
+    // New definition:
+    //   u_i are unit direction vectors of filtered rotation rate (omegaVec)
+    //   m = weighted mean(u_i) over last ORBIT_WINDOW_SEC
+    //   R = |m|  (0..1)
+    //   diversity = 1 - R  (0..1)  => more varied directions => higher orbit
+    //
+    // Keep the existing speed activity gate to prevent low-motion jitter.
     // =========================================================================
+    const ORBIT_WINDOW_SEC = 1.00;
+
+    // floor used only for energy bonus (preserved)
     const ORBIT_FLOOR = 0.18;
 
-    const ORBIT_BALANCE_POW = .90;
-
-    const ORBIT_COUPLE_GAIN = 1.0;
-    const ORBIT_COUPLE_POW  = 1.;
-
-    const ORBIT_AX2_MIN = 0.11;
-    const ORBIT_AX3_MIN = 0.03;
-
-    const ORBIT_AX2_POW = .50;
-    const ORBIT_AX3_POW = 1.0;
-
-    const ORBIT_GATE_POW = 1.0;
-    const ORBIT_GATE_FLOOR = 0.15;
-
-    // UI shaping for published orbit01
-    const ORBIT_UI_EXP = 0.10;
+    // UI shaping for published orbit01 (now applied to diversity)
+    // 1.0 = linear (clean). You can later shape without changing the definition.
+    const ORBIT_UI_EXP = 1.00;
 
     // ✅ low-motion / anti-jitter floor (based on speed01)
     const ORBIT_ACTIVITY_MIN01 = 0.06;  // below this, orbit is forced ~0
@@ -425,55 +422,6 @@
       return dbToGain(db);
     }
 
-    function eigenvaluesSym3(m00,m01,m02,m11,m12,m22) {
-      let a00=m00, a01=m01, a02=m02, a11=m11, a12=m12, a22=m22;
-
-      const iters = 10;
-      for (let k=0;k<iters;k++) {
-        let p=0,q=1;
-        let apq = Math.abs(a01);
-        const a02abs = Math.abs(a02);
-        const a12abs = Math.abs(a12);
-        if (a02abs > apq) { apq = a02abs; p=0; q=2; }
-        if (a12abs > apq) { apq = a12abs; p=1; q=2; }
-        if (apq < 1e-12) break;
-
-        let app, aqq, apqv;
-        if (p===0 && q===1) { app=a00; aqq=a11; apqv=a01; }
-        else if (p===0 && q===2) { app=a00; aqq=a22; apqv=a02; }
-        else { app=a11; aqq=a22; apqv=a12; }
-
-        const phi = 0.5 * Math.atan2(2*apqv, (aqq - app));
-        const c = Math.cos(phi);
-        const s = Math.sin(phi);
-
-        function rot(xp, xq) { return [c*xp - s*xq, s*xp + c*xq]; }
-
-        const appNew = c*c*app - 2*s*c*apqv + s*s*aqq;
-        const aqqNew = s*s*app + 2*s*c*apqv + c*c*aqq;
-
-        if (p===0 && q===1) {
-          const [a02n, a12n] = rot(a02, a12);
-          a02=a02n; a12=a12n;
-          a00=appNew; a11=aqqNew; a01=0;
-        } else if (p===0 && q===2) {
-          const [a01n, a12n] = rot(a01, a12);
-          a01=a01n; a12=a12n;
-          a00=appNew; a22=aqqNew; a02=0;
-        } else {
-          const [a01n, a02n] = rot(a01, a02);
-          a01=a01n; a02=a02n;
-          a11=appNew; a22=aqqNew; a12=0;
-        }
-      }
-
-      let l1=a00, l2=a11, l3=a22;
-      if (l1 < l2) [l1,l2]=[l2,l1];
-      if (l2 < l3) [l2,l3]=[l3,l2];
-      if (l1 < l2) [l1,l2]=[l2,l1];
-      return [l1,l2,l3];
-    }
-
     function autocorrPeak(signal, dt) {
       const n = signal.length;
       if (n < 24) return {peak: 0, lag: 0, hz: 0};
@@ -513,69 +461,6 @@
       return clamp01(t);
     }
 
-    // =========================================================================
-    // ORBIT helpers
-    // =========================================================================
-    function covOmega3(vecs) {
-      const n = vecs.length;
-      if (n < 10) return {xx:0,xy:0,xz:0,yy:0,yz:0,zz:0, trace:0};
-
-      let mx=0,my=0,mz=0;
-      for (const v of vecs) { mx+=v.x; my+=v.y; mz+=v.z; }
-      mx/=n; my/=n; mz/=n;
-
-      let xx=0,xy=0,xz=0,yy=0,yz=0,zz=0;
-      for (const v of vecs) {
-        const x=v.x-mx, y=v.y-my, z=v.z-mz;
-        xx += x*x; xy += x*y; xz += x*z;
-        yy += y*y; yz += y*z; zz += z*z;
-      }
-      const inv = 1/(n-1);
-      xx*=inv; xy*=inv; xz*=inv; yy*=inv; yz*=inv; zz*=inv;
-      return {xx,xy,xz,yy,yz,zz, trace:(xx+yy+zz)};
-    }
-
-    function orbitFromOmegaCov(cov) {
-      const eps = 1e-12;
-      const tr = cov.trace;
-      if (tr < 1e-12) {
-        return { core01: 0, r2:0, r3:0, planeGate:0, balance:0, couple:0 };
-      }
-
-      const [l1,l2,l3] = eigenvaluesSym3(cov.xx,cov.xy,cov.xz,cov.yy,cov.yz,cov.zz);
-      const s = (l1 + l2 + l3) + eps;
-
-      const r2 = clamp01(l2 / (l1 + eps));
-      const r3 = clamp01(l3 / (l1 + eps));
-
-      const g2 = Math.pow(
-        clamp01((r2 - ORBIT_AX2_MIN) / (1 - ORBIT_AX2_MIN)),
-        ORBIT_AX2_POW
-      );
-
-      const g3 = Math.pow(
-        clamp01((r3 - ORBIT_AX3_MIN) / (1 - ORBIT_AX3_MIN)),
-        ORBIT_AX3_POW
-      );
-
-      let planeGate = clamp01(g2 * g3);
-      planeGate = ORBIT_GATE_FLOOR + (1 - ORBIT_GATE_FLOOR) * planeGate;
-      planeGate = Math.pow(planeGate, ORBIT_GATE_POW);
-
-      const p1 = Math.max(eps, l1 / s);
-      const p2 = Math.max(eps, l2 / s);
-      const p3 = Math.max(eps, l3 / s);
-      const H  = -(p1*Math.log(p1) + p2*Math.log(p2) + p3*Math.log(p3));
-      const Hn = clamp01(H / Math.log(3));
-      const balance = Math.pow(Hn, ORBIT_BALANCE_POW);
-
-      const coupleRaw = (Math.abs(cov.xy) + Math.abs(cov.xz) + Math.abs(cov.yz)) / (tr + eps);
-      const couple = Math.pow(clamp01(coupleRaw * ORBIT_COUPLE_GAIN), ORBIT_COUPLE_POW);
-
-      const core01 = clamp01(balance * couple);
-      return { core01, r2, r3, planeGate, balance, couple };
-    }
-
     // ✅ only gate: low-motion floor to prevent jitter orbit
     function orbitActivityGate(speed01){
       const v = clamp01(speed01 || 0);
@@ -601,6 +486,59 @@
       while (dtBuf.length     > targetN) dtBuf.shift();
 
       return targetN;
+    }
+
+    // =========================================================================
+    // Orbit diversity window buffer (time-based, ~1000ms)
+    // =========================================================================
+    const orbitVecBuf = [];
+    const orbitDtBuf  = [];
+
+    function orbitBufPush(vec, dt){
+      const d = Math.max(1e-4, Number(dt) || 0);
+      orbitVecBuf.push(vec);
+      orbitDtBuf.push(d);
+
+      // Keep at most ~2.5s of history (memory cap, not behavior).
+      let acc = 0;
+      for (let i = orbitDtBuf.length - 1; i >= 0; i--){
+        acc += orbitDtBuf[i];
+        if (acc >= 2.5) {
+          orbitVecBuf.splice(0, i);
+          orbitDtBuf.splice(0, i);
+          break;
+        }
+      }
+    }
+
+    function orbitDiversityLastSec(windowSec){
+      const W = Math.max(0.2, Number(windowSec) || 1.0);
+
+      let sumW = 0;
+      let sx = 0, sy = 0, sz = 0;
+
+      for (let i = orbitVecBuf.length - 1; i >= 0; i--){
+        const dt = orbitDtBuf[i] || 0;
+        if (sumW >= W) break;
+
+        const w = Math.min(dt, W - sumW);
+        const v = orbitVecBuf[i];
+        if (v) {
+          sx += (v.x || 0) * w;
+          sy += (v.y || 0) * w;
+          sz += (v.z || 0) * w;
+        }
+        sumW += w;
+      }
+
+      if (sumW < 0.25) return { div01: 0, R: 1, n: orbitVecBuf.length };
+
+      const inv = 1 / sumW;
+      const mx = sx * inv, my = sy * inv, mz = sz * inv;
+      const R = clamp01(Math.sqrt(mx*mx + my*my + mz*mz));
+      const div01 = clamp01(1 - R);
+
+      return { div01, R, n: orbitVecBuf.length };
     }
 
     // =========================================================================
@@ -693,6 +631,9 @@
       omegaVec.splice(0, Math.max(0, omegaVec.length - keep));
       jerkBuf.splice(0, Math.max(0, jerkBuf.length - keep));
       dtBuf.splice(0, Math.max(0, dtBuf.length - keep));
+
+      orbitVecBuf.splice(0, Math.max(0, orbitVecBuf.length - keep));
+      orbitDtBuf.splice(0, Math.max(0, orbitDtBuf.length - keep));
     }
 
     function meterHoldOrFade(dt) {
@@ -869,7 +810,11 @@
         omegaNorm.push((mStability - emaMean) / rms);
 
         const invM = 1 / Math.max(1e-6, mStability);
-        omegaVec.push({ x: ox*invM, y: oy*invM, z: oz*invM });
+        const vUnit = { x: ox*invM, y: oy*invM, z: oz*invM };
+        omegaVec.push(vUnit);
+
+        // also push into orbit diversity buffer (time-based)
+        if (dtForFilter > 0) orbitBufPush(vUnit, dtForFilter);
 
         if (dt > 0) {
           const dtSafe = Math.max(dt, dtMean * 0.5, 1/120);
@@ -927,15 +872,16 @@
       const avgJerk = median(jerkWindow);
       const smoothScore = smoothnessFromJerk(avgJerk);
 
-      // ✅ ORBIT (independent): diversity metric + low-motion gate only
-      const omegaCov = covOmega3(omegaVec);
-      const oRaw = orbitFromOmegaCov(omegaCov);
-
+      // ✅ ORBIT (new): direction diversity in last ~1000ms
+      const oDiv = orbitDiversityLastSec(ORBIT_WINDOW_SEC);
       const actGate = orbitActivityGate(sv.speed);
-      const shapedCore = clamp01(oRaw.core01 * oRaw.planeGate * actGate);
+      const diversityGated = clamp01(oDiv.div01 * actGate);
 
-      const orbitBonus = ORBIT_FLOOR + (1 - ORBIT_FLOOR) * shapedCore;
-      const orbitUI = Math.pow(shapedCore, ORBIT_UI_EXP);
+      // Energy bonus keeps the same "floor" behavior (preserved)
+      const orbitBonus = ORBIT_FLOOR + (1 - ORBIT_FLOOR) * diversityGated;
+
+      // Published UI orbit01 (clean, linear by default)
+      const orbitUI = Math.pow(diversityGated, ORBIT_UI_EXP);
 
       meterHoldLeft = METER_HOLD_SEC;
       lastGrooveUI = lockStrength;
@@ -991,6 +937,11 @@
 
       const lockedNow = !!(lock || inGrace);
 
+      // Telemetry schema preserved; meanings updated:
+      //   o_r2 = R (mean direction length)
+      //   o_r3 = diversity (1-R)
+      //   o_gate = activity gate
+      //   o_balance / o_couple unused (0 for now)
       publishOrb({
         room,
         t: performance.now(),
@@ -1009,11 +960,11 @@
         locked: lockedNow,
         hz: grooveHz,
 
-        o_r2: oRaw.r2,
-        o_r3: oRaw.r3,
-        o_gate: clamp01(oRaw.planeGate * actGate),
-        o_balance: oRaw.balance,
-        o_couple: oRaw.couple
+        o_r2: oDiv.R,
+        o_r3: oDiv.div01,
+        o_gate: actGate,
+        o_balance: 0,
+        o_couple: 0
       }, dt);
 
       setBgFromEnergy(clamp01(energyUI));
@@ -1070,6 +1021,9 @@
         omegaVec.length  = 0;
         jerkBuf.length   = 0;
         dtBuf.length     = 0;
+
+        orbitVecBuf.length = 0;
+        orbitDtBuf.length  = 0;
 
         emaMean = 0;
         emaVar  = 1;
