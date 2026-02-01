@@ -9,8 +9,8 @@
       --bg:#ff3b18;
       --ink:#000;
 
-      --btnFill:#000;          /* default sound button fill */
-      --btnText:var(--bg);     /* default sound button text */
+      --btnFill:#000;          /* default button fill */
+      --btnText:var(--bg);     /* default button text */
 
       --keyH: 28vh;
       --keyMinH: 180px;
@@ -78,6 +78,7 @@
       text-transform:uppercase;
       letter-spacing:1.4px;
       color:var(--btnText);
+
       -webkit-appearance:none;
       appearance:none;
       border-radius:0;
@@ -116,7 +117,7 @@
       outline: var(--accentStroke) solid var(--accent);
       outline-offset: calc(-1 * var(--accentStroke));
 
-      /* prevent any “press” shape weirdness */
+      /* prevent press “shape” weirdness */
       -webkit-appearance:none;
       appearance:none;
       border-radius:0;
@@ -144,7 +145,7 @@
       text-align:center;
     }
 
-    /* remove any decorative pseudo-elements (prevents the “little rectangle” artifact) */
+    /* remove any decorative pseudo-elements (prevents the tiny rectangle artifact) */
     .key::before,
     .key::after{ content:none !important; }
 
@@ -162,10 +163,14 @@
       border-top:var(--stroke) solid #000;
       background:transparent;
     }
+
+    /* Randomize button baseline style */
     .randBtn{
       width:100%;
       height:64px;
-      display:block;
+      display:flex;
+      align-items:center;
+      justify-content:center;
 
       background:var(--btnFill);
       color:var(--btnText);
@@ -182,11 +187,22 @@
       border-radius:0;
       box-shadow:none;
       transform:none;
+      filter:none;
       -webkit-tap-highlight-color: transparent;
+
+      outline: var(--accentStroke) solid var(--accent);
+      outline-offset: calc(-1 * var(--accentStroke));
     }
-    .randBtn:active{ transform:none; }
     .randBtn:hover{ filter:brightness(1.12); }
     .randBtn:disabled{ opacity:.35; cursor:not-allowed; transform:none; }
+
+    /* Make rand button behave like sound buttons when pressed */
+    .randBtn.isDown{
+      background:var(--bg) !important;
+      color:#000 !important;
+      outline-color:var(--bg) !important;
+      filter:none !important;
+    }
 
     /* FLASH STATE (sound keys only) */
     .flash{
@@ -316,7 +332,7 @@
       </div>
 
       <div class="randLane">
-        <button class="randBtn" id="randAll">RANDOMIZE</button>
+        <button class="randBtn" id="randAll">DEFENDERIZE</button>
       </div>
     </div>
 
@@ -680,7 +696,6 @@
     return { out };
   }
 
-  // patch base
   const BASE = {
     laser:      { baseHz: 900,  sweepHz: 520,  sweepTime: 0.055, bite: 0.55, click: 0.12, noise: 0.08, hp: 260, dur: 0.14 },
     zap:        { baseHz: 220,  sweepHz: 1400, sweepTime: 0.090, fmAmt: 180, fmHz: 32, noise: 0.18, bp: 1200, q: 8, dur: 0.22 },
@@ -1108,20 +1123,23 @@
     $("#modeVal").textContent = m.charAt(0).toUpperCase() + m.slice(1);
   }
 
-  // press visuals (sound keys only)
+  // press visuals for keys + rand button
   function hookPressVisuals(){
-    const keys = Array.from(document.querySelectorAll(".key"));
-    keys.forEach((k) => {
-      k.addEventListener("pointerdown", () => {
-        if (k.disabled) return;
-        k.classList.add("isDown");
+    const pressify = (el) => {
+      if (!el) return;
+      el.addEventListener("pointerdown", () => {
+        if (el.disabled) return;
+        el.classList.add("isDown");
       });
-      const up = () => k.classList.remove("isDown");
-      k.addEventListener("pointerup", up);
-      k.addEventListener("pointercancel", up);
-      k.addEventListener("pointerleave", up);
-      k.addEventListener("lostpointercapture", up);
-    });
+      const up = () => el.classList.remove("isDown");
+      el.addEventListener("pointerup", up);
+      el.addEventListener("pointercancel", up);
+      el.addEventListener("pointerleave", up);
+      el.addEventListener("lostpointercapture", up);
+    };
+
+    document.querySelectorAll(".key").forEach(pressify);
+    pressify($("#randAll"));
   }
 
   function hook(){
@@ -1141,6 +1159,7 @@
     $("#mutAmt").addEventListener("input", updateReadouts);
     $("#mode").addEventListener("change", updateReadouts);
 
+    // DEFENDERIZE button = randomize + flash
     $("#randAll").addEventListener("click", () => {
       if (!audioReady) return;
       stopAll();
