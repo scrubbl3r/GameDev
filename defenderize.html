@@ -26,6 +26,10 @@
       /* ✅ flash color */
       --flash:#00ff05;  /* bright green */
       --flashInk:#000;
+
+      /* ✅ press color (sound buttons only) */
+      --press:#ff8a00;  /* orange */
+      --pressInk:#000;  /* black text */
     }
 
     html,body{height:100%;}
@@ -60,7 +64,7 @@
       content:"";
       position:absolute;
       inset:18px;
-      border:3px solid #000; /* keep it dead simple; border matches system */
+      border:3px solid #000;
       pointer-events:none;
     }
     .startBtn{
@@ -144,7 +148,21 @@
       opacity:.85;
     }
 
-    .key:active{ filter:brightness(1.18); }
+    /* ✅ pressed state: orange fill + black text (sound keys only) */
+    .key:active{
+      background:var(--press);
+      color:var(--pressInk);
+      outline-color:var(--press);
+      filter:none;
+    }
+    .key:active::before{
+      background:var(--pressInk);
+      opacity:1;
+    }
+    .key:active .vlabel{
+      color:var(--pressInk);
+      opacity:1;
+    }
 
     .randLane{
       border-top:var(--stroke) solid #000;
@@ -176,7 +194,6 @@
       outline-color:var(--flash) !important;
     }
     .flash::before{ background:var(--flashInk) !important; opacity:1 !important; }
-    /* .flash::after removed (we removed the circles) */
     .flash .vlabel{ color:var(--flashInk) !important; opacity:1 !important; }
 
     .panel{
@@ -309,7 +326,8 @@
       <div class="stack">
         <div class="tile">
           <div class="tileHeader">
-            <div class="label">Bit Range</div>
+            <!-- ✅ rename -->
+            <div class="label">Bit Crush</div>
             <div class="value" id="crushVal">0.042</div>
           </div>
           <input id="crush" type="range" min="0" max="1" step="0.001" value="0.042">
@@ -782,7 +800,7 @@
     safeStartStop(n,   t0, tEnd + 0.05);
     addStop(() => { try{ out.disconnect(); }catch(e){} });
   }
-  function playZap(rng){
+  function playZap(rng){ /* unchanged */ 
     const p = patch.zap, t0 = now();
     randomizeStereoByFreq(rng);
     const out = ctx.createGain();
@@ -816,7 +834,7 @@
     safeStartStop(n,   t0, tEnd + 0.05);
     addStop(() => { try{ out.disconnect(); }catch(e){} });
   }
-  function playThrust(rng){
+  function playThrust(rng){ /* unchanged */
     const p = patch.thrust, t0 = now();
     randomizeStereoByFreq(rng);
     const out = ctx.createGain();
@@ -843,7 +861,7 @@
     safeStartStop(lfo, t0, tEnd + 0.08);
     addStop(() => { try{ out.disconnect(); }catch(e){} });
   }
-  function playExplosion(rng){
+  function playExplosion(rng){ /* unchanged */
     const p = patch.explosion, t0 = now();
     randomizeStereoByFreq(rng);
     const out = ctx.createGain();
@@ -884,7 +902,7 @@
     safeStartStop(boom,  t0, tEnd + 0.12);
     addStop(() => { try{ out.disconnect(); }catch(e){} });
   }
-  function playPickup(rng){
+  function playPickup(rng){ /* unchanged */
     const p = patch.pickup, t0 = now();
     randomizeStereoByFreq(rng);
     const out = ctx.createGain();
@@ -911,7 +929,7 @@
     safeStartStop(vib, t0, tEnd + 0.06);
     addStop(() => { try{ out.disconnect(); }catch(e){} });
   }
-  function playAlarm(rng){
+  function playAlarm(rng){ /* unchanged */
     const p = patch.alarm, t0 = now();
     randomizeStereoByFreq(rng);
     const out = ctx.createGain();
@@ -937,7 +955,7 @@
     safeStartStop(step, t0, tEnd + 0.06);
     addStop(() => { try{ out.disconnect(); }catch(e){} });
   }
-  function playSmartBomb(rng){
+  function playSmartBomb(rng){ /* unchanged */ 
     const p = patch.smartbomb, t0 = now();
     randomizeStereoByFreq(rng);
     const out = ctx.createGain();
@@ -989,7 +1007,7 @@
     safeStartStop(ring,  t0, tEnd + 0.12);
     addStop(() => { try{ out.disconnect(); }catch(e){} });
   }
-  function playHyperspace(rng){
+  function playHyperspace(rng){ /* unchanged */
     const p = patch.hyperspace, t0 = now();
     randomizeStereoByFreq(rng);
     const out = ctx.createGain();
@@ -1022,7 +1040,7 @@
     addStop(() => { try{ out.disconnect(); }catch(e){} });
     addStop(() => { try{ fx.out.disconnect(); }catch(e){} });
   }
-  function playTeleport(rng){
+  function playTeleport(rng){ /* unchanged */
     const p = patch.teleport, t0 = now();
     randomizeStereoByFreq(rng);
     const out = ctx.createGain();
@@ -1094,7 +1112,6 @@
     setControlsEnabled(false);
     updateReadouts();
 
-    // ✅ clicking anywhere on the black card starts
     $("#bigStartBtn").addEventListener("click", startSession);
     $("#startOverlay").addEventListener("click", startSession);
 
@@ -1110,7 +1127,7 @@
       if (!audioReady) return;
       stopAll();
       randomizeAll();
-      flashSequenceKeysOnly(); // ✅ keys flash, randomize does NOT flash
+      flashSequenceKeysOnly();
     });
 
     $("#k_laser").addEventListener("click",      () => stopThenPlay(playLaser));
