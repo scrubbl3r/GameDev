@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Groove Orbit</title>
+  <title>Groove Dynamics</title>
   <style>
     :root { --green:#7dd35f; }
 
@@ -168,14 +168,19 @@
     })();
     const TELEMETRY_ON = TELEMETRY || TELEMETRY_URL;
 
+    // =========================================================================
+    // 1) FALL DRAG DEFAULT (requested)
+    // =========================================================================
+    const FALL_DRAG_DEFAULT = 1.0;
+
     const EPS = {
-      energy01: 0.006,
-      groove01: 0.008,
-      orbit01:  0.008,
-      smooth01: 0.008,
-      speed01:  0.008,
-      shake01:  0.015,
-      hz:       0.030,
+      energy01:    0.006,
+      groove01:    0.008,
+      dynamics01:  0.008,
+      smooth01:    0.008,
+      speed01:     0.008,
+      shake01:     0.015,
+      hz:          0.030,
     };
 
     let nextSendAtMs = 0;
@@ -190,15 +195,15 @@
 
     function buildSigFromPayload(p){
       return {
-        energy01: roundN(p.energy01, 4),
-        groove01: roundN(p.groove01, 4),
-        orbit01:  roundN(p.orbit01, 4),
-        smooth01: roundN(p.smooth01, 4),
-        speed01:  roundN(p.speed01, 4),
-        shake01:  roundN(p.shake01, 4),
-        locked:   !!p.locked,
-        shakeHit: !!p.shakeHit,
-        hz:       roundN(p.hz, 3),
+        energy01:    roundN(p.energy01, 4),
+        groove01:    roundN(p.groove01, 4),
+        dynamics01:  roundN(p.dynamics01, 4),
+        smooth01:    roundN(p.smooth01, 4),
+        speed01:     roundN(p.speed01, 4),
+        shake01:     roundN(p.shake01, 4),
+        locked:      !!p.locked,
+        shakeHit:    !!p.shakeHit,
+        hz:          roundN(p.hz, 3),
       };
     }
 
@@ -208,21 +213,21 @@
       if (sig.shakeHit && !lastSig.shakeHit) return true;
       if (sig.locked !== lastSig.locked) return true;
 
-      if (Math.abs(sig.energy01 - lastSig.energy01) > EPS.energy01) return true;
-      if (Math.abs(sig.groove01 - lastSig.groove01) > EPS.groove01) return true;
-      if (Math.abs(sig.orbit01  - lastSig.orbit01 ) > EPS.orbit01 ) return true;
-      if (Math.abs(sig.smooth01 - lastSig.smooth01) > EPS.smooth01) return true;
-      if (Math.abs(sig.speed01  - lastSig.speed01 ) > EPS.speed01 ) return true;
-      if (Math.abs(sig.shake01  - lastSig.shake01 ) > EPS.shake01 ) return true;
-      if (Math.abs(sig.hz       - lastSig.hz      ) > EPS.hz      ) return true;
+      if (Math.abs(sig.energy01   - lastSig.energy01)   > EPS.energy01) return true;
+      if (Math.abs(sig.groove01   - lastSig.groove01)   > EPS.groove01) return true;
+      if (Math.abs(sig.dynamics01 - lastSig.dynamics01) > EPS.dynamics01) return true;
+      if (Math.abs(sig.smooth01   - lastSig.smooth01)   > EPS.smooth01) return true;
+      if (Math.abs(sig.speed01    - lastSig.speed01)    > EPS.speed01) return true;
+      if (Math.abs(sig.shake01    - lastSig.shake01)    > EPS.shake01) return true;
+      if (Math.abs(sig.hz         - lastSig.hz)         > EPS.hz) return true;
 
       return false;
     }
 
     // =========================================================================
-    // ✅ publishOrb now truly trims payload when TELEMETRY_ON is false
+    // ✅ publishDynamics trims payload when TELEMETRY_ON is false
     // =========================================================================
-    function publishOrb(payload, dt, force=false) {
+    function publishDynamics(payload, dt, force=false) {
       if (!ablyChannel) return;
 
       const now = performance.now();
@@ -238,15 +243,18 @@
       const out = {
         room: payload.room,
 
-        energy01: sig.energy01,
-        groove01: sig.groove01,
-        orbit01:  sig.orbit01,
-        smooth01: sig.smooth01,
-        speed01:  sig.speed01,
-        shake01:  sig.shake01,
-        locked:   sig.locked,
-        shakeHit: sig.shakeHit,
-        hz:       sig.hz,
+        // fall drag default exposed for receiver (ignored if not used)
+        fallDrag: FALL_DRAG_DEFAULT,
+
+        energy01:   sig.energy01,
+        groove01:   sig.groove01,
+        dynamics01: sig.dynamics01,
+        smooth01:   sig.smooth01,
+        speed01:    sig.speed01,
+        shake01:    sig.shake01,
+        locked:     sig.locked,
+        shakeHit:   sig.shakeHit,
+        hz:         sig.hz,
       };
 
       if (TELEMETRY_ON) {
@@ -257,13 +265,15 @@
         out.wFilt = roundN(payload.wFilt, 2);
         out.cap   = roundN(payload.cap, 2);
 
-        out.o_r2      = roundN(payload.o_r2, 4);
-        out.o_r3      = roundN(payload.o_r3, 4);
-        out.o_gate    = roundN(payload.o_gate, 4);
-        out.o_balance = roundN(payload.o_balance, 4);
-        out.o_couple  = roundN(payload.o_couple, 4);
+        // DYNAMICS DEBUG (same meaning as old orbit debug)
+        out.d_r2      = roundN(payload.d_r2, 4);
+        out.d_r3      = roundN(payload.d_r3, 4);
+        out.d_gate    = roundN(payload.d_gate, 4);
+        out.d_balance = roundN(payload.d_balance, 4);
+        out.d_couple  = roundN(payload.d_couple, 4);
       }
 
+      // Event name kept as "orb" (project routing); payload uses dynamics naming.
       ablyChannel.publish("orb", out, (err) => {
         if (err) console.warn("[ably publish err]", err);
       });
@@ -292,17 +302,17 @@
     const JERK_LOOSE = 2600.0;
 
     // =========================================================================
-    // ✅ ORBIT — v4.0 (DIRECTIONAL DIVERSITY, 1s window)
+    // ✅ DYNAMICS — v4.0 (DIRECTIONAL DIVERSITY, 1s window) — functionally same
     // =========================================================================
-    const ORBIT_WINDOW_SEC = 1.00;
-    const ORBIT_FLOOR = 0.18;
+    const DYNAMICS_WINDOW_SEC = 1.00;
+    const DYNAMICS_FLOOR = 0.18;
 
-    // UI shaping for published orbit01 (applied to diversity)
-    const ORBIT_UI_EXP  = 1.;
-    const ORBIT_UI_GAIN = 3.5;
+    // UI shaping for published dynamics01 (applied to diversity)
+    const DYNAMICS_UI_EXP  = 1.0;
+    const DYNAMICS_UI_GAIN = 3.5;
 
-    const ORBIT_ACTIVITY_MIN01 = 0.06;
-    const ORBIT_ACTIVITY_POW   = 1.15;
+    const DYNAMICS_ACTIVITY_MIN01 = 0.06;
+    const DYNAMICS_ACTIVITY_POW   = 1.15;
 
     const ENERGY_GAIN_LOCKED = 1.25;
     const ENERGY_GAIN_FREE   = 0.65;
@@ -342,9 +352,9 @@
     // =========================================================================
     // SSOT MOBILE 2.0 — ENERGY MODEL
     // =========================================================================
-    const GROOVE_EXP = 0.70;
-    const SMOOTH_EXP = 0.70;
-    const ORBIT_EXP  = 1.00;
+    const GROOVE_EXP    = 0.70;
+    const SMOOTH_EXP    = 0.70;
+    const DYNAMICS_EXP  = 1.00;
 
     const EARN_SCALE = 1.00;
 
@@ -452,10 +462,10 @@
       return clamp01(t);
     }
 
-    function orbitActivityGate(speed01){
+    function dynamicsActivityGate(speed01){
       const v = clamp01(speed01 || 0);
-      const x = (v - ORBIT_ACTIVITY_MIN01) / (1 - ORBIT_ACTIVITY_MIN01);
-      return Math.pow(clamp01(x), ORBIT_ACTIVITY_POW);
+      const x = (v - DYNAMICS_ACTIVITY_MIN01) / (1 - DYNAMICS_ACTIVITY_MIN01);
+      return Math.pow(clamp01(x), DYNAMICS_ACTIVITY_POW);
     }
 
     function computeAvg(arr) {
@@ -479,40 +489,40 @@
     }
 
     // =========================================================================
-    // Orbit diversity window buffer (time-based, ~1000ms)
+    // Dynamics diversity window buffer (time-based, ~1000ms)
     // =========================================================================
-    const orbitVecBuf = [];
-    const orbitDtBuf  = [];
+    const dynamicsVecBuf = [];
+    const dynamicsDtBuf  = [];
 
-    function orbitBufPush(vec, dt){
+    function dynamicsBufPush(vec, dt){
       const d = Math.max(1e-4, Number(dt) || 0);
-      orbitVecBuf.push(vec);
-      orbitDtBuf.push(d);
+      dynamicsVecBuf.push(vec);
+      dynamicsDtBuf.push(d);
 
       // Keep at most ~2.5s of history (memory cap, not behavior).
       let acc = 0;
-      for (let i = orbitDtBuf.length - 1; i >= 0; i--){
-        acc += orbitDtBuf[i];
+      for (let i = dynamicsDtBuf.length - 1; i >= 0; i--){
+        acc += dynamicsDtBuf[i];
         if (acc >= 2.5) {
-          orbitVecBuf.splice(0, i);
-          orbitDtBuf.splice(0, i);
+          dynamicsVecBuf.splice(0, i);
+          dynamicsDtBuf.splice(0, i);
           break;
         }
       }
     }
 
-    function orbitDiversityLastSec(windowSec){
+    function dynamicsDiversityLastSec(windowSec){
       const W = Math.max(0.2, Number(windowSec) || 1.0);
 
       let sumW = 0;
       let sx = 0, sy = 0, sz = 0;
 
-      for (let i = orbitVecBuf.length - 1; i >= 0; i--){
-        const dt = orbitDtBuf[i] || 0;
+      for (let i = dynamicsVecBuf.length - 1; i >= 0; i--){
+        const dt = dynamicsDtBuf[i] || 0;
         if (sumW >= W) break;
 
         const w = Math.min(dt, W - sumW);
-        const v = orbitVecBuf[i];
+        const v = dynamicsVecBuf[i];
         if (v) {
           sx += (v.x || 0) * w;
           sy += (v.y || 0) * w;
@@ -521,14 +531,14 @@
         sumW += w;
       }
 
-      if (sumW < 0.25) return { div01: 0, R: 1, n: orbitVecBuf.length };
+      if (sumW < 0.25) return { div01: 0, R: 1, n: dynamicsVecBuf.length };
 
       const inv = 1 / sumW;
       const mx = sx * inv, my = sy * inv, mz = sz * inv;
       const R = clamp01(Math.sqrt(mx*mx + my*my + mz*mz));
       const div01 = clamp01(1 - R);
 
-      return { div01, R, n: orbitVecBuf.length };
+      return { div01, R, n: dynamicsVecBuf.length };
     }
 
     // =========================================================================
@@ -569,7 +579,7 @@
 
     let meterHoldLeft = 0;
     let lastGrooveUI = 0;
-    let lastOrbitUI  = 0;
+    let lastDynamicsUI  = 0;
     let lastSmoothUI = 0;
 
     let shake01 = 0;
@@ -622,8 +632,8 @@
       jerkBuf.splice(0, Math.max(0, jerkBuf.length - keep));
       dtBuf.splice(0, Math.max(0, dtBuf.length - keep));
 
-      orbitVecBuf.splice(0, Math.max(0, orbitVecBuf.length - keep));
-      orbitDtBuf.splice(0, Math.max(0, orbitDtBuf.length - keep));
+      dynamicsVecBuf.splice(0, Math.max(0, dynamicsVecBuf.length - keep));
+      dynamicsDtBuf.splice(0, Math.max(0, dynamicsDtBuf.length - keep));
     }
 
     function meterHoldOrFade(dt) {
@@ -633,15 +643,15 @@
       const aFade = alphaFromCutoff(dtFade, METER_FADE_HZ);
       const holding = meterHoldLeft > 0;
 
-      const grooveOut = holding ? lastGrooveUI : (1 - aFade) * lastGrooveUI;
-      const orbitOut  = holding ? lastOrbitUI  : (1 - aFade) * lastOrbitUI;
-      const smoothOut = holding ? lastSmoothUI : (1 - aFade) * lastSmoothUI;
+      const grooveOut   = holding ? lastGrooveUI   : (1 - aFade) * lastGrooveUI;
+      const dynamicsOut = holding ? lastDynamicsUI : (1 - aFade) * lastDynamicsUI;
+      const smoothOut   = holding ? lastSmoothUI   : (1 - aFade) * lastSmoothUI;
 
-      lastGrooveUI = grooveOut;
-      lastOrbitUI  = orbitOut;
-      lastSmoothUI = smoothOut;
+      lastGrooveUI   = grooveOut;
+      lastDynamicsUI = dynamicsOut;
+      lastSmoothUI   = smoothOut;
 
-      return { grooveOut, orbitOut, smoothOut };
+      return { grooveOut, dynamicsOut, smoothOut };
     }
 
     function updateSpeedV0(wRawDps, dt) {
@@ -744,7 +754,7 @@
 
           const held = meterHoldOrFade(dt);
 
-          publishOrb({
+          publishDynamics({
             room,
             t: performance.now(),
             dt: sv.dt,
@@ -754,14 +764,14 @@
             cap: sv.cap,
             energy01: energyUI,
             groove01: held.grooveOut,
-            orbit01: held.orbitOut,
+            dynamics01: held.dynamicsOut,
             smooth01: held.smoothOut,
             speed01: sv.speed,
             shake01: sh.shake01,
             shakeHit: sh.shakeHit,
             locked: false,
             hz: 0,
-            o_r2: 0, o_r3: 0, o_gate: 0, o_balance: 0, o_couple: 0
+            d_r2: 0, d_r3: 0, d_gate: 0, d_balance: 0, d_couple: 0
           }, dt);
 
           setBgFromEnergy(clamp01(energyUI));
@@ -804,7 +814,7 @@
           const vUnit = { x: ox*invM, y: oy*invM, z: oz*invM };
           omegaVec.push(vUnit);
 
-          if (dtForFilter > 0) orbitBufPush(vUnit, dtForFilter);
+          if (dtForFilter > 0) dynamicsBufPush(vUnit, dtForFilter);
 
           if (dt > 0) {
             const dtSafe = Math.max(dt, dtMean * 0.5, 1/120);
@@ -829,7 +839,7 @@
 
           const held = meterHoldOrFade(dt);
 
-          publishOrb({
+          publishDynamics({
             room,
             t: performance.now(),
             dt: sv.dt,
@@ -839,14 +849,14 @@
             cap: sv.cap,
             energy01: energyUI,
             groove01: held.grooveOut,
-            orbit01: held.orbitOut,
+            dynamics01: held.dynamicsOut,
             smooth01: held.smoothOut,
             speed01: sv.speed,
             shake01: sh.shake01,
             shakeHit: sh.shakeHit,
             locked: false,
             hz: 0,
-            o_r2: 0, o_r3: 0, o_gate: 0, o_balance: 0, o_couple: 0
+            d_r2: 0, d_r3: 0, d_gate: 0, d_balance: 0, d_couple: 0
           }, dt);
 
           setBgFromEnergy(clamp01(energyUI));
@@ -862,23 +872,22 @@
         const avgJerk = median(jerkWindow);
         const smoothScore = smoothnessFromJerk(avgJerk);
 
-        // ✅ ORBIT (new): direction diversity in last ~1000ms
-        const oDiv = orbitDiversityLastSec(ORBIT_WINDOW_SEC);
-        const actGate = orbitActivityGate(sv.speed);
-        const diversityGated = clamp01(oDiv.div01 * actGate);
+        // ✅ DYNAMICS (same as orbit): direction diversity in last ~1000ms
+        const dDiv = dynamicsDiversityLastSec(DYNAMICS_WINDOW_SEC);
+        const actGate = dynamicsActivityGate(sv.speed);
+        const diversityGated = clamp01(dDiv.div01 * actGate);
 
         // Energy bonus keeps the same "floor" behavior (preserved)
-        const orbitBonus = ORBIT_FLOOR + (1 - ORBIT_FLOOR) * diversityGated;
+        const dynamicsBonus = DYNAMICS_FLOOR + (1 - DYNAMICS_FLOOR) * diversityGated;
 
-        // ✅ FIX: "shapedCore" was undefined and was crashing the app.
-        // Preserve the curve: exp shapes diversity; gain scales it.
+        // Preserve curve: exp shapes diversity; gain scales it.
         const shapedCore = diversityGated;
-        const orbitUI = clamp01(ORBIT_UI_GAIN * Math.pow(shapedCore, ORBIT_UI_EXP));
+        const dynamicsUI = clamp01(DYNAMICS_UI_GAIN * Math.pow(shapedCore, DYNAMICS_UI_EXP));
 
         meterHoldLeft = METER_HOLD_SEC;
-        lastGrooveUI = lockStrength;
-        lastOrbitUI  = orbitUI;
-        lastSmoothUI = smoothScore;
+        lastGrooveUI   = lockStrength;
+        lastDynamicsUI = dynamicsUI;
+        lastSmoothUI   = smoothScore;
 
         if (!lock) {
           if (lockStrength > LOCK_ON) { lock = true; graceLeft = 0; }
@@ -902,12 +911,12 @@
         }
 
         if (dt > 0) {
-          const grooveTerm = Math.pow(clamp01(lockStrength), GROOVE_EXP);
-          const smoothTerm = Math.pow(clamp01(smoothScore), SMOOTH_EXP);
-          const orbitTerm  = Math.pow(clamp01(orbitBonus),  ORBIT_EXP);
+          const grooveTerm   = Math.pow(clamp01(lockStrength), GROOVE_EXP);
+          const smoothTerm   = Math.pow(clamp01(smoothScore), SMOOTH_EXP);
+          const dynamicsTerm = Math.pow(clamp01(dynamicsBonus), DYNAMICS_EXP);
 
           const qualityTerm = grooveTerm * smoothTerm;
-          const earnBase = EARN_SCALE * grooveTerm * smoothTerm * orbitTerm;
+          const earnBase = EARN_SCALE * grooveTerm * smoothTerm * dynamicsTerm;
 
           const effectivelyLocked = lock || inGrace;
           const gain = effectivelyLocked ? ENERGY_GAIN_LOCKED : ENERGY_GAIN_FREE;
@@ -929,7 +938,7 @@
 
         const lockedNow = !!(lock || inGrace);
 
-        publishOrb({
+        publishDynamics({
           room,
           t: performance.now(),
           dt: sv.dt,
@@ -939,7 +948,7 @@
           cap: sv.cap,
           energy01: energyUI,
           groove01: lockStrength,
-          orbit01: orbitUI,
+          dynamics01: dynamicsUI,
           smooth01: smoothScore,
           speed01: sv.speed,
           shake01: sh.shake01,
@@ -947,11 +956,11 @@
           locked: lockedNow,
           hz: grooveHz,
 
-          o_r2: oDiv.R,
-          o_r3: oDiv.div01,
-          o_gate: actGate,
-          o_balance: 0,
-          o_couple: 0
+          d_r2: dDiv.R,
+          d_r3: dDiv.div01,
+          d_gate: actGate,
+          d_balance: 0,
+          d_couple: 0
         }, dt);
 
         setBgFromEnergy(clamp01(energyUI));
@@ -1013,8 +1022,8 @@
         jerkBuf.length   = 0;
         dtBuf.length     = 0;
 
-        orbitVecBuf.length = 0;
-        orbitDtBuf.length  = 0;
+        dynamicsVecBuf.length = 0;
+        dynamicsDtBuf.length  = 0;
 
         emaMean = 0;
         emaVar  = 1;
@@ -1033,9 +1042,9 @@
         speedOut  = 0;
 
         meterHoldLeft = 0;
-        lastGrooveUI = 0;
-        lastOrbitUI  = 0;
-        lastSmoothUI = 0;
+        lastGrooveUI   = 0;
+        lastDynamicsUI = 0;
+        lastSmoothUI   = 0;
 
         shake01 = 0;
         accelBaseMag = 9.81;
