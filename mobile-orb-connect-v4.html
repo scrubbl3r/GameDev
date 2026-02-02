@@ -369,11 +369,12 @@
     const SMOOTH_KILL_UNLOCK     = true;
 
     // =========================================================================
-    // DISRUPTOR v2 — SHAKE (FAST HIT + SLOW METER)
-    // Strategy:
-    // - shakeHit: "impact cluster" detector (2 spikes / 300ms), immediate
-    // - shake01: separate intensity meter (doesn't gate the hit)
-    // - groove/locked: raises spike difficulty (not a hard ban)
+    // DISRUPTOR v3 — SHAKE (FAST HIT + SLOW METER) + LOW-SMOOTH BOOST
+    //
+    // Added:
+    // - smoothProxy biases shake INTENT acceptance:
+    //   low smooth => slightly lower spike threshold (still requires spike clustering)
+    // - optional "mega spike" single-hit (rare, intentional)
     // =========================================================================
     const SHAKE_BASELINE_HZ = 0.75;     // LPF for accel magnitude baseline
     const SHAKE_HP_DEAD_G   = 0.65;     // deadzone for high-pass accel mag (m/s^2-ish)
@@ -395,6 +396,17 @@
     // Meter (shake01) — purely descriptive intensity
     const SHAKE_METER_GAIN  = 2.10;
     const SHAKE_METER_DECAY = 2.60;
+
+    // ---- LOW-SMOOTH BOOST (NEW) ---------------------------------------------
+    // When smooth is low, we accept slightly smaller spikes as intentional.
+    // This does NOT create shake by itself — it only biases a spiky cluster.
+    const SHAKE_SMOOTH_BOOST_START   = 0.45; // smooth <= this starts boosting
+    const SHAKE_SMOOTH_THR_DROP_MAX  = 0.60; // max drop applied at smooth=0
+
+    // ---- MEGA SPIKE (NEW, optional but enabled) ------------------------------
+    // A single huge spike can count as a hit (still respects cooldown).
+    const SHAKE_MEGA_SPIKE_THR_FREE   = 3.80;
+    const SHAKE_MEGA_SPIKE_THR_LOCKED = 4.60;
 
     // =========================================================================
     // AUDIO MAPPING (preserved)
@@ -597,7 +609,7 @@
     let lastDynamicsUI  = 0;
     let lastSmoothUI = 0;
 
-    // SHAKE v2 state
+    // SHAKE v3 state
     let shake01 = 0;
 
     let accelBaseMag = 9.81;
@@ -705,9 +717,9 @@
     }
 
     // =========================================================================
-    // SHAKE v2 — fast hit + slow meter
+    // SHAKE v3 — fast hit + slow meter + low-smooth threshold bias
     // =========================================================================
-    function updateShake(e, t, dt, groove01=0, locked=false){
+    function updateShake(e, t, dt, groove01=0, locked=false, smooth01=1){
       const acc = e.accelerationIncludingGravity || e.acceleration;
       const dtSafe = Math.max(1e-3, dt || 1/60);
 
@@ -751,13 +763,25 @@
       // intensity meter (not gating the hit)
       shake01 = clamp01(shake01 + SHAKE_METER_GAIN * spike * dtSafe - SHAKE_METER_DECAY * dtSafe);
 
+      // --- smooth bias --------------------------------------------------------
+      const s = clamp01(smooth01 || 0);
+      const boost = (s < SHAKE_SMOOTH_BOOST_START)
+        ? clamp01((SHAKE_SMOOTH_BOOST_START - s) / Math.max(1e-6, SHAKE_SMOOTH_BOOST_START))
+        : 0;
+      const thrDrop = boost * SHAKE_SMOOTH_THR_DROP_MAX;
+
       // cluster detector (fast hit)
       const g = clamp01(groove01 || 0);
       const lockedLike = !!locked;
 
       const reqSpikes = lockedLike ? SHAKE_REQ_SPIKES_LOCKED : SHAKE_REQ_SPIKES_FREE;
       const thrBase = lockedLike ? SHAKE_SPIKE_THR_LOCKED : SHAKE_SPIKE_THR_FREE;
-      const thr = thrBase + 0.35 * g; // soft bump when groove is high
+
+      // groove makes it slightly harder; LOW smooth makes it slightly easier
+      const thr = Math.max(0.15, (thrBase + 0.35 * g) - thrDrop);
+
+      // mega spike emergency trigger (rare, intentional)
+      const megaThr = lockedLike ? SHAKE_MEGA_SPIKE_THR_LOCKED : SHAKE_MEGA_SPIKE_THR_FREE;
 
       // prune old spikes
       if (shakeSpikeTimes.length){
@@ -775,13 +799,21 @@
 
       let shakeHit = false;
 
-      if (shakeCooldownLeft <= 0 && shakeSpikeTimes.length >= reqSpikes) {
-        shakeHit = true;
-        shakeCooldownLeft = SHAKE_COOLDOWN_SEC;
-        shakeSpikeTimes.length = 0;
-
-        // small meter drop so it doesn't "stick"
-        shake01 = Math.max(0, shake01 - 0.25);
+      if (shakeCooldownLeft <= 0) {
+        // 1) mega spike: instant hit
+        if (spike >= megaThr) {
+          shakeHit = true;
+          shakeCooldownLeft = SHAKE_COOLDOWN_SEC;
+          shakeSpikeTimes.length = 0;
+          shake01 = Math.max(0, shake01 - 0.30);
+        }
+        // 2) otherwise, spike cluster
+        else if (shakeSpikeTimes.length >= reqSpikes) {
+          shakeHit = true;
+          shakeCooldownLeft = SHAKE_COOLDOWN_SEC;
+          shakeSpikeTimes.length = 0;
+          shake01 = Math.max(0, shake01 - 0.25);
+        }
       }
 
       return { shake01, shakeHit, spike, amag, jerk };
@@ -801,7 +833,10 @@
         const lockedProxy = !!(lock || graceLeft > 0);
         const grooveProxy = clamp01(lockStrength || lastGrooveUI || 0);
 
-        const sh = updateShake(e, t, dt, grooveProxy, lockedProxy);
+        // Use last-known smoothness as proxy for low-smooth boost.
+        const smoothProxy = clamp01(lastSmoothUI || 0);
+
+        const sh = updateShake(e, t, dt, grooveProxy, lockedProxy, smoothProxy);
         const rr = e.rotationRate;
 
         if (!rr) {
@@ -1108,7 +1143,7 @@
         lastDynamicsUI = 0;
         lastSmoothUI   = 0;
 
-        // SHAKE v2 reset
+        // SHAKE v3 reset
         shake01 = 0;
         accelBaseMag = 9.81;
 
