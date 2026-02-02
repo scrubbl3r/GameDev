@@ -24,9 +24,13 @@
       --stream: rgba(140, 130, 255, 0.95);
       --streamGlow: rgba(140, 130, 255, 0.32);
 
-      /* shake lamp */
-      --lamp: rgba(255, 212, 0, 1.0);
-      --lampGlow: rgba(255, 212, 0, 0.50);
+      /* shake lamp (✅ changed to red) */
+      --lamp: rgba(255, 60, 60, 1.0);
+      --lampGlow: rgba(255, 60, 60, 0.50);
+
+      /* ✅ dynamics lamp (bright blue) */
+      --dynLamp: rgba(80, 160, 255, 1.0);
+      --dynLampGlow: rgba(80, 160, 255, 0.55);
 
       /* background RGB (set by JS) */
       --bg-r: 0;
@@ -207,14 +211,17 @@
 
     .groupGap{ height:10px; }
 
+    /* ✅ meters with end-indicator */
     .meterRow{
       display:flex;
       align-items:center;
       gap:10px;
+      width:100%;
     }
+    /* ✅ bar grows to fill all remaining space */
     .barShort{
       flex:1 1 auto;
-      max-width: 430px;
+      max-width:none;         /* was 430px */
       margin:8px 0 10px;
     }
 
@@ -227,12 +234,22 @@
       box-shadow: inset 0 0 0 1px rgba(0,0,0,.25);
       flex:0 0 auto;
     }
+    /* ✅ shake lamp now red */
     .lamp.on{
-      border-color: rgba(255,212,0,0.85);
+      border-color: rgba(255,60,60,0.88);
       background: var(--lamp);
       box-shadow:
         0 0 12px var(--lampGlow),
-        0 0 28px rgba(255,212,0,0.26);
+        0 0 28px rgba(255,60,60,0.26);
+    }
+
+    /* ✅ dynamics lamp (bright blue) */
+    .lamp.dyn.on{
+      border-color: rgba(80,160,255,0.90);
+      background: var(--dynLamp);
+      box-shadow:
+        0 0 12px var(--dynLampGlow),
+        0 0 28px rgba(80,160,255,0.30);
     }
 
     /* RIGHT WINDOW: PHYSICS TEST STAGE */
@@ -486,8 +503,12 @@
           <div class="barLabel"><div>Speed</div><span id="vSpeed">0</span></div>
           <div class="bar"><div id="bSpeed" class="fill"></div></div>
 
+          <!-- ✅ Dynamics row now has an indicator at the end -->
           <div class="barLabel"><div>Dynamics</div><span id="vDynamics">0</span></div>
-          <div class="bar"><div id="bDynamics" class="fill"></div></div>
+          <div class="meterRow">
+            <div class="bar barShort"><div id="bDynamics" class="fill"></div></div>
+            <div id="dynLamp" class="lamp dyn" aria-label="Dynamics trigger lamp"></div>
+          </div>
 
           <div class="barLabel"><div>Energy</div><span id="vEnergy">0</span></div>
           <div class="bar"><div id="bEnergy" class="fill"></div></div>
@@ -497,6 +518,7 @@
           <div class="barLabel"><div>Shake</div><span id="vShake">0</span></div>
           <div class="meterRow">
             <div class="bar barShort"><div id="bShake" class="fill"></div></div>
+            <!-- ✅ shake lamp is now at END of row -->
             <div id="shakeLamp" class="lamp" aria-label="Shake trigger lamp"></div>
           </div>
         </div>
@@ -527,7 +549,6 @@
             <span>Fall Drag</span>
             <strong><span id="dVal">1.00</span></strong>
           </div>
-          <!-- ✅ default now 1.00 -->
           <input id="dSlider" type="range" min="0" max="6" value="1.00" step="0.01" />
         </div>
       </div>
@@ -607,6 +628,9 @@
       bDynamics:  $("bDynamics"),
       bEnergy: $("bEnergy"),
       bShake:  $("bShake"),
+
+      /* ✅ new dynamics lamp */
+      dynLamp: $("dynLamp"),
 
       shakeLamp: $("shakeLamp"),
       fatal: $("fatal"),
@@ -795,17 +819,23 @@
     });
 
     // =========================================================================
-    // SHAKE LAMP (500ms strobe)
+    // LAMPS (shake + dynamics) — 500ms strobe
     // =========================================================================
     let lampTO = null;
-    function flashShakeLamp(ms = 500){
-      els.shakeLamp.classList.add("on");
+    function flashLamp(el, ms = 500){
+      if (!el) return;
+      el.classList.add("on");
+      if (el === els.shakeLamp){
+        // shared timer is fine (keeps behavior identical)
+      }
       if (lampTO) clearTimeout(lampTO);
       lampTO = setTimeout(() => {
-        els.shakeLamp.classList.remove("on");
+        el.classList.remove("on");
         lampTO = null;
       }, ms);
     }
+    function flashShakeLamp(ms = 500){ flashLamp(els.shakeLamp, ms); }
+    function flashDynLamp(ms = 500){ flashLamp(els.dynLamp, ms); }
 
     // =========================================================================
     // PAIR MODAL (QR popup)
@@ -942,7 +972,7 @@
 
       const energy   = telePick01(d, "energy01", "energy");
       const groove   = telePick01(d, "groove01", "groove");
-      const dynamics = telePick01(d, "dynamics01", "orbit01"); // ✅ new + back-compat
+      const dynamics = telePick01(d, "dynamics01", "orbit01");
       const smooth   = telePick01(d, "smooth01", "smooth");
       const speed    = telePick01(d, "speed01", "speed");
       const shake    = telePick01(d, "shake01", "shake");
@@ -950,7 +980,6 @@
       const locked = !!d.locked;
       const hz = (d.hz != null && isFinite(Number(d.hz))) ? Number(d.hz) : 0;
 
-      // ✅ new + back-compat telemetry keys
       const d_r2      = (d.d_r2 != null) ? telePickNum(d, "d_r2") : telePickNum(d, "o_r2");
       const d_r3      = (d.d_r3 != null) ? telePickNum(d, "d_r3") : telePickNum(d, "o_r3");
       const d_gate    = (d.d_gate != null) ? telePickNum(d, "d_gate") : telePickNum(d, "o_gate");
@@ -1002,7 +1031,7 @@
       thrustMax: 3000,
 
       upDrag:   2.6,
-      downDrag: 1.0, // ✅ default now 1.0 (will be overridden by slider init below)
+      downDrag: 1.0,
 
       bounce: 0.35,
       maxUpSpeed: 2200,
@@ -1063,7 +1092,6 @@
       PHYS.downDrag = clamp(Number(v) || 0, 0, 10);
       els.dVal.textContent = PHYS.downDrag.toFixed(2);
     }
-    // ✅ slider default is 1.00 now
     setDownDrag(els.dSlider.value);
     els.dSlider.addEventListener("input", (e) => setDownDrag(e.target.value));
 
@@ -1077,19 +1105,18 @@
       ],
     };
 
-    // ✅ Galaxy-derived palette (from the uploaded Hubble/Webb cluster image)
-    // Only used to color stars — motion/behavior unchanged.
+    // Galaxy-derived palette
     const STAR_COLORS = [
-      [240,240,243], // near-white
-      [245,231,214], // warm white
-      [236,194,133], // pale gold
-      [219,150, 85], // orange glow
-      [192,132, 74], // amber
-      [185, 41,  7], // red ember
-      [ 73,124,154], // blue
-      [ 40, 83,134], // deep blue
-      [ 90, 68,106], // violet
-      [120, 59, 87], // magenta-dust
+      [240,240,243],
+      [245,231,214],
+      [236,194,133],
+      [219,150, 85],
+      [192,132, 74],
+      [185, 41,  7],
+      [ 73,124,154],
+      [ 40, 83,134],
+      [ 90, 68,106],
+      [120, 59, 87],
     ];
 
     let starCtx = null;
@@ -1105,17 +1132,14 @@
     }
 
     function pickStarRGB(layerIndex){
-      // slightly bias the near layer toward brighter / cooler accents
       const n = STAR_COLORS.length;
       if (layerIndex === 0){
-        // far layer: prefer warm/neutral more often
         const warmBias = (r01() < 0.72);
         if (warmBias){
           const idx = [0,1,2,3,4][(Math.random()*5)|0];
           return STAR_COLORS[idx];
         }
       }
-      // near layer or fallback: full palette
       return STAR_COLORS[(Math.random()*n)|0];
     }
 
@@ -1150,11 +1174,7 @@
             yW: rIn(0, WORLD_H),
             r: rIn(L.rMin, L.rMax),
             a: rIn(L.aMin, L.aMax),
-
-            // ✅ per-star color (only change)
-            cr: rgb[0],
-            cg: rgb[1],
-            cb: rgb[2],
+            cr: rgb[0], cg: rgb[1], cb: rgb[2],
           });
         }
         return { cfg: L, stars: arr };
@@ -1176,7 +1196,6 @@
           const x = s.x;
           const y = wrap((s.yW - camTop), h);
 
-          // ✅ colored stars (only change)
           ctx.fillStyle = `rgba(${s.cr},${s.cg},${s.cb},${s.a})`;
           ctx.beginPath();
           ctx.arc(x, y, s.r, 0, Math.PI*2);
@@ -1337,7 +1356,7 @@
 
       const energy   = pick01NewOrOld("energy01", "energy");
       const groove   = pick01NewOrOld("groove01", "groove");
-      const dynamics = pick01NewOrOld("dynamics01", "orbit01"); // ✅ new + back-compat
+      const dynamics = pick01NewOrOld("dynamics01", "orbit01");
       const smooth   = pick01NewOrOld("smooth01", "smooth");
       const speed    = pick01NewOrOld("speed01", "speed");
       const shake    = pick01NewOrOld("shake01", "shake");
@@ -1382,6 +1401,7 @@
       els.vEnergy.classList.toggle("over", over);
       els.bEnergy.classList.toggle("over", over);
 
+      // ✅ existing shake trigger -> red lamp
       const shakeHit =
         d.shakeHit === true ||
         d.shakeEvent === true ||
@@ -1389,8 +1409,20 @@
         (d.verb === "shake") ||
         (d.action === "shock") ||
         (d.kind === "shock");
-
       if (shakeHit) flashShakeLamp(500);
+
+      // ✅ NEW: dynamics trigger (lights bright blue)
+      // Uses "dynHit"/"dynamicsHit"/"dynEvent" OR a strong dynamics spike
+      const dynHit =
+        d.dynHit === true ||
+        d.dynamicsHit === true ||
+        d.dynEvent === true ||
+        (typeof d.dynEvent === "string" && d.dynEvent) ||
+        (Number(d.dynamicsHit01) > 0.5) ||
+        (Number(d.dyn01) > 0.5);
+
+      const dynSpike = (clamp01(dynamics) >= 0.86);
+      if (dynHit || dynSpike) flashDynLamp(420);
 
       setAudio(energy, groove, locked);
     }
