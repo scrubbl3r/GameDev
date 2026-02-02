@@ -13,26 +13,18 @@
       --panel: rgba(0,0,0,.55);
       --border: rgba(50,255,117,.18);
       --bad:#ff5a5a;
-
-      /* overcharge */
       --over:#ffd400;
-
-      /* charge-driven (0..1) */
       --charge: 0;
 
-      /* message stream color (bright indigo, readable) */
       --stream: rgba(140, 130, 255, 0.95);
       --streamGlow: rgba(140, 130, 255, 0.32);
 
-      /* shake lamp (red) */
       --lamp: rgba(255, 60, 60, 1.0);
       --lampGlow: rgba(255, 60, 60, 0.50);
 
-      /* dynamics lamp (bright blue) */
       --dynLamp: rgba(80, 160, 255, 1.0);
       --dynLampGlow: rgba(80, 160, 255, 0.55);
 
-      /* background RGB (set by JS) */
       --bg-r: 0;
       --bg-g: 0;
       --bg-b: 0;
@@ -78,7 +70,6 @@
       overflow:hidden;
     }
 
-    /* both windows 800px tall */
     .cardTall{
       height:800px;
       display:flex;
@@ -211,7 +202,6 @@
 
     .groupGap{ height:10px; }
 
-    /* meters with end-indicator */
     .meterRow{
       display:flex;
       align-items:center;
@@ -286,22 +276,22 @@
     }
 
     .orb{
-        position:absolute;
-        width:95px;
-        height:95px;
-        border-radius:999px;
-        border:2px solid var(--g);
-        left:50%;
-        transform: translate(-50%, 0px);
-        will-change: transform;
-        background: rgba(var(--bg-r), var(--bg-g), var(--bg-b), 0.38);
-        box-shadow:
+      position:absolute;
+      width:95px;
+      height:95px;
+      border-radius:999px;
+      border:2px solid var(--g);
+      left:50%;
+      transform: translate(-50%, 0px);
+      will-change: transform;
+      background: rgba(var(--bg-r), var(--bg-g), var(--bg-b), 0.38);
+      box-shadow:
         0 0 18px rgba(50,255,117,.10),
         0 0 34px rgba(var(--bg-r), var(--bg-g), var(--bg-b), 0.22),
         0 0 60px rgba(var(--bg-r), var(--bg-g), var(--bg-b), calc(0.12 + 0.36 * var(--charge))),
         0 0 120px rgba(var(--bg-r), var(--bg-g), var(--bg-b), calc(0.05 + 0.24 * var(--charge))),
         inset 0 0 0 1px rgba(0,0,0,.30);
-        z-index:3;
+      z-index:3;
     }
 
     .physControls{
@@ -324,20 +314,9 @@
       accent-color: var(--g);
     }
 
-    .modal{
-      position:fixed;
-      inset:0;
-      display:none;
-      align-items:center;
-      justify-content:center;
-      z-index:999;
-    }
+    .modal{ position:fixed; inset:0; display:none; align-items:center; justify-content:center; z-index:999; }
     .modal.on{ display:flex; }
-    .backdrop{
-      position:absolute; inset:0;
-      background: rgba(0,0,0,.72);
-      backdrop-filter: blur(6px);
-    }
+    .backdrop{ position:absolute; inset:0; background: rgba(0,0,0,.72); backdrop-filter: blur(6px); }
     .modalCard{
       position:relative;
       width: min(420px, 92vw);
@@ -348,17 +327,8 @@
       padding:14px 14px 14px;
       z-index:1;
     }
-    .modalTop{
-      display:flex;
-      align-items:center;
-      justify-content:space-between;
-      gap:10px;
-      margin-bottom:10px;
-    }
-    .modalTitle{
-      font-weight: 1000;
-      letter-spacing:.3px;
-    }
+    .modalTop{ display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:10px; }
+    .modalTitle{ font-weight: 1000; letter-spacing:.3px; }
     .xBtn{
       padding:8px 10px;
       border-radius:12px;
@@ -378,12 +348,7 @@
       overflow:hidden;
       margin: 0 auto;
     }
-    .urlRow{
-      margin-top:10px;
-      display:flex;
-      gap:10px;
-      align-items:center;
-    }
+    .urlRow{ margin-top:10px; display:flex; gap:10px; align-items:center; }
     .urlRow code{
       flex:1 1 auto;
       padding:8px 10px;
@@ -407,20 +372,9 @@
     }
 
     .teleCard{ width: min(760px, 94vw); }
-    .teleTop{
-      display:flex;
-      align-items:center;
-      justify-content:space-between;
-      gap:10px;
-      margin-bottom:10px;
-    }
+    .teleTop{ display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:10px; }
     .teleBtns{ display:flex; gap:10px; align-items:center; }
-    .teleHint{
-      font-size: 11px;
-      opacity: .78;
-      margin: 2px 0 10px;
-      line-height: 1.35;
-    }
+    .teleHint{ font-size: 11px; opacity: .78; margin: 2px 0 10px; line-height: 1.35; }
     .teleOut{
       border: 1px solid rgba(50,255,117,.18);
       border-radius: 12px;
@@ -702,7 +656,6 @@
 
       document.body.style.backgroundColor = `rgb(${r},${g},${b})`;
       document.documentElement.style.setProperty("--charge", String(t));
-
       document.documentElement.style.setProperty("--bg-r", String(r));
       document.documentElement.style.setProperty("--bg-g", String(g));
       document.documentElement.style.setProperty("--bg-b", String(b));
@@ -710,7 +663,7 @@
     setBgFromEnergy(0);
 
     // =========================================================================
-    // AUDIO (optional)
+    // AUDIO (optional) — unchanged
     // =========================================================================
     let audioEnabled = false;
     let audioCtx = null, osc = null, gainNode = null;
@@ -795,7 +748,7 @@
     });
 
     // =========================================================================
-    // LAMPS (shake + dynamics) — independent timers (no cross-cancel)
+    // LAMPS (shake + dynamics) — FIXED: independent timers (no shared cancel)
     // =========================================================================
     let shakeLampTO = null;
     let dynLampTO = null;
@@ -819,75 +772,66 @@
     }
 
     // =========================================================================
-    // SHAKE DOUBLE-BANG (Option B)
+    // SHAKE DOUBLE-BANG (Option B) — FIXED HIT DETECTION
+    //
+    // - "Hit" = shake >= 1.0 AND debounced by time (no need to dip below)
     // - WINDOW_MS default 400
     // - COOLDOWN_MS default 500
-    // - Hit events are rising-edge-ish with hysteresis to avoid “held-at-1.0” spam
     // =========================================================================
-    const SHAKE_WINDOW_MS = 400;
+    const SHAKE_WINDOW_MS   = 400;
     const SHAKE_COOLDOWN_MS = 500;
 
-    // Treat “100%” as very near 1.0 (since upstream clamps to 1.0)
+    // Count a hit when the UI meter is pegged "100%+" (shake01 ~ 1.0+)
     const SHAKE_HIT_THR = 0.995;
 
-    // Must dip below this to re-arm the next hit (prevents constant retrigger from a held peg)
-    const SHAKE_REARM_THR = 0.85;
+    // Prevent "held at 1.0" from becoming infinite hits:
+    // must be at least this many ms between recognized hits
+    const SHAKE_HIT_DEBOUNCE_MS = 120;
 
-    // Extra safety in case of jittery crossings (optional)
-    const SHAKE_MIN_HIT_GAP_MS = 80;
-
-    let shakeHigh = false;          // hysteresis latch
-    let shakeLastHitAt = -1e9;      // ms
     let shakeFirstHitAt = 0;        // ms (0 = not armed)
+    let shakeLastHitAt  = -1e9;     // ms
     let shakeCooldownUntil = 0;     // ms
 
-    function shakeResetArmer(){
-      shakeFirstHitAt = 0;
-    }
-
-    function processShakeDoubleBang(shakeVal01, nowMs){
-      const v = Number(shakeVal01);
-      if (!isFinite(v)) return;
-
-      // update hysteresis state
-      if (shakeHigh) {
-        if (v <= SHAKE_REARM_THR) shakeHigh = false;
-        return;
-      }
-
-      // not high yet: look for a “hit” crossing into high region
-      if (v < SHAKE_HIT_THR) return;
-
-      // we just entered hit region
-      if ((nowMs - shakeLastHitAt) < SHAKE_MIN_HIT_GAP_MS) {
-        shakeHigh = true;
-        return;
-      }
-
-      shakeLastHitAt = nowMs;
-      shakeHigh = true;
-
-      // cooldown: ignore ALL hit events (no baton updates)
+    function registerShakeHit(nowMs){
+      // cooldown: ignore hits completely (no baton update)
       if (nowMs < shakeCooldownUntil) return;
 
-      // Option B baton logic
-      if (!shakeFirstHitAt) {
-        // first hit arms
+      if (!shakeFirstHitAt){
+        // first hit arms the window
         shakeFirstHitAt = nowMs;
         return;
       }
 
       const dt = nowMs - shakeFirstHitAt;
 
-      if (dt <= SHAKE_WINDOW_MS) {
-        // success -> blast + cooldown + clear baton
+      if (dt <= SHAKE_WINDOW_MS){
+        // success -> lamp blast + cooldown + clear baton
         flashShakeLamp(400);
         shakeCooldownUntil = nowMs + SHAKE_COOLDOWN_MS;
-        shakeResetArmer();
+        shakeFirstHitAt = 0;
       } else {
-        // too late -> carry baton with this hit as new “first”
+        // too late -> carry baton
         shakeFirstHitAt = nowMs;
       }
+    }
+
+    function processShakeDoubleBang(shakeVal01, nowMs){
+      const v = Number(shakeVal01);
+      if (!isFinite(v)) return;
+
+      if (v < SHAKE_HIT_THR) return;
+
+      // time debounce: only count a hit every N ms at most
+      if ((nowMs - shakeLastHitAt) < SHAKE_HIT_DEBOUNCE_MS) return;
+
+      shakeLastHitAt = nowMs;
+      registerShakeHit(nowMs);
+    }
+
+    function resetShakeDetector(){
+      shakeFirstHitAt = 0;
+      shakeLastHitAt = -1e9;
+      shakeCooldownUntil = 0;
     }
 
     // =========================================================================
@@ -906,13 +850,7 @@
     els.pairBtn.addEventListener("click", async () => {
       currentRoomChannel = "orb:" + randCode(6);
       await connect({ auto:false });
-
-      // reset shake detector when pairing (fresh state)
-      shakeHigh = false;
-      shakeLastHitAt = -1e9;
-      shakeFirstHitAt = 0;
-      shakeCooldownUntil = 0;
-
+      resetShakeDetector();
       openPairModal();
     });
 
@@ -958,7 +896,7 @@
     }
 
     // =========================================================================
-    // TELEMETRY MODAL
+    // TELEMETRY MODAL — unchanged (kept for your workflow)
     // =========================================================================
     let teleRecording = false;
     let teleT0 = 0;
@@ -1078,7 +1016,7 @@
     let currentRoomChannel = normalizeRoom(readUrlRoomOrNull() || "orb:test");
 
     // =========================================================================
-    // PHYSICS (WORLD HEIGHT = 2500px)
+    // PHYSICS + STARFIELD — unchanged from your previous working build
     // =========================================================================
     const WORLD_H = 2500;
 
@@ -1155,9 +1093,6 @@
     setDownDrag(els.dSlider.value);
     els.dSlider.addEventListener("input", (e) => setDownDrag(e.target.value));
 
-    // =========================================================================
-    // STARFIELD — STRICTLY VERTICAL (no horizontal drift)
-    // =========================================================================
     const STAR = {
       layers: [
         { count: 110, rMin: 0.6, rMax: 1.6, aMin: 0.25, aMax: 0.75 },
@@ -1325,7 +1260,7 @@
     requestAnimationFrame(physicsStep);
 
     // =========================================================================
-    // ABLY RECEIVER (AUTO-CONNECT)
+    // ABLY RECEIVER — unchanged plumbing
     // =========================================================================
     let realtime = null;
     let channel = null;
@@ -1354,14 +1289,11 @@
 
     function idleDisconnect(reason){
       idleClearTimers();
-
       try { if (channel) channel.unsubscribe(); } catch(_) {}
       try { if (channel) channel.detach(); } catch(_) {}
       try { if (realtime) realtime.close(); } catch(_) {}
-
       channel = null;
       realtime = null;
-
       setStatus(reason, "bad");
     }
 
@@ -1460,12 +1392,10 @@
       els.vEnergy.classList.toggle("over", over);
       els.bEnergy.classList.toggle("over", over);
 
-      // ✅ SHAKE TRIGGER NOW PURELY RECEIVER-SIDE:
-      // Two hit-events (shake >= ~1.0) within 400ms -> lamp blast (400ms),
-      // then cooldown 500ms (ignore hits), then re-arm.
+      // ✅ SHAKE DOUBLE-BANG (receiver-side)
       processShakeDoubleBang(shake, performance.now());
 
-      // ✅ dynamics trigger lamp
+      // dynamics lamp (unchanged behavior)
       const dynHit =
         d.dynHit === true ||
         d.dynamicsHit === true ||
@@ -1544,15 +1474,10 @@
       connecting = false;
     }
 
+    // DEV button forces room=test always + launches QR
     els.newRoom.addEventListener("click", async () => {
       currentRoomChannel = "orb:test";
-
-      // reset shake detector when switching rooms
-      shakeHigh = false;
-      shakeLastHitAt = -1e9;
-      shakeFirstHitAt = 0;
-      shakeCooldownUntil = 0;
-
+      resetShakeDetector();
       await connect({ auto:false });
       openPairModal();
     });
