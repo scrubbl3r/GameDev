@@ -24,11 +24,11 @@
       --stream: rgba(140, 130, 255, 0.95);
       --streamGlow: rgba(140, 130, 255, 0.32);
 
-      /* shake lamp (✅ red) */
+      /* shake lamp (red) */
       --lamp: rgba(255, 60, 60, 1.0);
       --lampGlow: rgba(255, 60, 60, 0.50);
 
-      /* ✅ dynamics lamp (bright blue) */
+      /* dynamics lamp (bright blue) */
       --dynLamp: rgba(80, 160, 255, 1.0);
       --dynLampGlow: rgba(80, 160, 255, 0.55);
 
@@ -211,14 +211,13 @@
 
     .groupGap{ height:10px; }
 
-    /* ✅ meters with end-indicator */
+    /* meters with end-indicator */
     .meterRow{
       display:flex;
       align-items:center;
       gap:10px;
       width:100%;
     }
-    /* ✅ bar grows to fill all remaining space */
     .barShort{
       flex:1 1 auto;
       max-width:none;
@@ -234,7 +233,6 @@
       box-shadow: inset 0 0 0 1px rgba(0,0,0,.25);
       flex:0 0 auto;
     }
-    /* ✅ shake lamp now red */
     .lamp.on{
       border-color: rgba(255,60,60,0.88);
       background: var(--lamp);
@@ -243,7 +241,6 @@
         0 0 28px rgba(255,60,60,0.26);
     }
 
-    /* ✅ dynamics lamp (bright blue) */
     .lamp.dyn.on{
       border-color: rgba(80,160,255,0.90);
       background: var(--dynLamp);
@@ -501,7 +498,7 @@
           <div class="barLabel"><div>Speed</div><span id="vSpeed">0</span></div>
           <div class="bar"><div id="bSpeed" class="fill"></div></div>
 
-          <!-- ✅ Dynamics row now has an indicator at the end -->
+          <!-- Dynamics row has an indicator at the end -->
           <div class="barLabel"><div>Dynamics</div><span id="vDynamics">0</span></div>
           <div class="meterRow">
             <div class="bar barShort"><div id="bDynamics" class="fill"></div></div>
@@ -628,6 +625,7 @@
 
       dynLamp: $("dynLamp"),
       shakeLamp: $("shakeLamp"),
+
       fatal: $("fatal"),
 
       // physics
@@ -814,51 +812,37 @@
     });
 
     // =========================================================================
-    // LAMPS (shake + dynamics) — strobe helper
+    // LAMPS (shake + dynamics)
+    // - Per-lamp timer so no lamp can "stick on"
+    // - Shake has a 500ms cooldown after a successful double-bang
     // =========================================================================
-    let lampTO = null;
+    const SHAKE_BANG_THR        = 1.0;   // meter >= 1.0 counts as a bang
+    const SHAKE_BANG_WINDOW_MS  = 400;   // need 2 bangs within this window
+    const SHAKE_COOLDOWN_MS     = 500;   // ignore triggers after a win (rearm after)
+    const SHAKE_FLASH_MS        = 400;   // lamp on-time
+
+    let shakeBangTimesMs = [];           // timestamps (ms) of up-crossings
+    let shakeWasAbove = false;           // edge detector
+    let shakeCooldownUntilMs = 0;        // cooldown gate (rearm when now >= this)
+
     function flashLamp(el, ms = 500){
       if (!el) return;
+
+      // ✅ per-element timer: cannot interfere with other lamps
+      if (el.__lampTO) {
+        clearTimeout(el.__lampTO);
+        el.__lampTO = null;
+      }
+
       el.classList.add("on");
-      if (lampTO) clearTimeout(lampTO);
-      lampTO = setTimeout(() => {
+      el.__lampTO = setTimeout(() => {
         el.classList.remove("on");
-        lampTO = null;
+        el.__lampTO = null;
       }, ms);
     }
-    function flashShakeLamp(ms = 400){ flashLamp(els.shakeLamp, ms); } // ✅ 400ms flash
+
+    function flashShakeLamp(ms = SHAKE_FLASH_MS){ flashLamp(els.shakeLamp, ms); }
     function flashDynLamp(ms = 420){ flashLamp(els.dynLamp, ms); }
-
-    // =========================================================================
-    // ✅ SHAKE WIN DETECTOR (RECEIVER-SIDE)
-    // Rule: if shake meter reaches >= 1.0 TWO TIMES within 400ms => lamp flash.
-    // We count "times" as UP-CROSSES into >= 1.0 (no plateau spam).
-    // =========================================================================
-    const SHAKE_WIN_MS = 400;
-    let shakePrevAbove = false;
-    let shakeHitTimesMs = []; // perf.now() timestamps of up-cross hits
-
-    function shakeWinUpdate(shakeRaw){
-      const now = performance.now();
-      const above = (Number(shakeRaw) >= 1.0);
-
-      // count only UP-crosses into >= 1.0
-      if (above && !shakePrevAbove) {
-        shakeHitTimesMs.push(now);
-      }
-      shakePrevAbove = above;
-
-      // prune old hits outside window
-      while (shakeHitTimesMs.length && (now - shakeHitTimesMs[0]) > SHAKE_WIN_MS) {
-        shakeHitTimesMs.shift();
-      }
-
-      // win condition: 2 hits inside window
-      if (shakeHitTimesMs.length >= 2) {
-        flashShakeLamp(400);
-        shakeHitTimesMs.length = 0; // reset so it requires a new pair
-      }
-    }
 
     // =========================================================================
     // PAIR MODAL (QR popup)
@@ -1423,10 +1407,42 @@
       els.vEnergy.classList.toggle("over", over);
       els.bEnergy.classList.toggle("over", over);
 
-      // ✅ SHAKE WIN (receiver-side): 2 up-cross hits >= 1.0 within 400ms
-      shakeWinUpdate(shake);
+      // ✅ SHAKE DOUBLE-BANG DETECTOR (receiver-side)
+      // - counts rising edges where shake crosses >= 1.0
+      // - needs 2 such edges within 400ms
+      // - after firing: lamp flashes 400ms, then cooldown 500ms (rearm)
+      {
+        const nowMs = performance.now();
+        const above = (Number(shake) >= SHAKE_BANG_THR);
 
-      // ✅ dynamics trigger (lights bright blue)
+        // cooldown gate (armed when now >= shakeCooldownUntilMs)
+        const armed = (nowMs >= shakeCooldownUntilMs);
+
+        // rising edge = one "bang"
+        if (above && !shakeWasAbove) {
+          if (armed) {
+            shakeBangTimesMs.push(nowMs);
+
+            // prune old bangs outside the window
+            const cutoff = nowMs - SHAKE_BANG_WINDOW_MS;
+            while (shakeBangTimesMs.length && shakeBangTimesMs[0] < cutoff) shakeBangTimesMs.shift();
+
+            if (shakeBangTimesMs.length >= 2) {
+              flashShakeLamp(SHAKE_FLASH_MS);
+              shakeCooldownUntilMs = nowMs + SHAKE_COOLDOWN_MS; // ✅ cool off + rearm
+              shakeBangTimesMs.length = 0; // require a fresh pair
+            }
+          }
+        }
+
+        // keep the edge detector honest
+        shakeWasAbove = above;
+
+        // (optional) if we’re in cooldown, keep history empty so we don’t auto-fire on rearm
+        if (!armed) shakeBangTimesMs.length = 0;
+      }
+
+      // ✅ dynamics trigger (blue lamp) — same as before
       const dynHit =
         d.dynHit === true ||
         d.dynamicsHit === true ||
@@ -1509,11 +1525,6 @@
     els.newRoom.addEventListener("click", async () => {
       currentRoomChannel = "orb:test";
       await connect({ auto:false });
-
-      // reset shake detector when swapping rooms (avoids stale half-hit)
-      shakePrevAbove = false;
-      shakeHitTimesMs.length = 0;
-
       openPairModal();
     });
 
