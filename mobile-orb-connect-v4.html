@@ -124,6 +124,7 @@
         "?room=" + encodeURIComponent(roomCode) +
         "&clientId=" + encodeURIComponent("phone-" + Math.random().toString(16).slice(2,6));
 
+      // Quick preflight (kept)
       try {
         const r = await fetch(authUrl, { method: "GET", cache: "no-store" });
         const j = await r.json();
@@ -134,7 +135,12 @@
 
       ably = new Ably.Realtime({ authUrl, autoConnect: true });
       ablyChannel = ably.channels.get(room);
-      ablyChannel.attach(() => {});
+
+      // ✅ Await attach so we don’t publish into a not-yet-attached channel.
+      await new Promise((resolve) => {
+        ablyChannel.attach(() => resolve());
+      });
+
       return true;
     }
 
@@ -152,10 +158,6 @@
 
     // =========================================================================
     // ✅ TELEMETRY SIZE SWITCH
-    // false = send only core meters needed by game (small payload)
-    // true  = include debug-ish / orbit internals (big payload)
-    //
-    // Optional URL override: add ?telemetry=1 to force telemetry on
     // =========================================================================
     const TELEMETRY = false;
     const TELEMETRY_URL = (() => {
@@ -247,7 +249,6 @@
         hz:       sig.hz,
       };
 
-      // ✅ Optional telemetry / debug payload
       if (TELEMETRY_ON) {
         out.t     = roundN(payload.t, 1);
         out.dt    = roundN(payload.dt, 4);
@@ -256,7 +257,6 @@
         out.wFilt = roundN(payload.wFilt, 2);
         out.cap   = roundN(payload.cap, 2);
 
-        // ORBIT DEBUG (schema preserved; meaning updated below)
         out.o_r2      = roundN(payload.o_r2, 4);
         out.o_r3      = roundN(payload.o_r3, 4);
         out.o_gate    = roundN(payload.o_gate, 4);
@@ -264,7 +264,9 @@
         out.o_couple  = roundN(payload.o_couple, 4);
       }
 
-      ablyChannel.publish("orb", out, () => {});
+      ablyChannel.publish("orb", out, (err) => {
+        if (err) console.warn("[ably publish err]", err);
+      });
     }
 
     // =========================================================================
@@ -291,29 +293,16 @@
 
     // =========================================================================
     // ✅ ORBIT — v4.0 (DIRECTIONAL DIVERSITY, 1s window)
-    //
-    // New definition:
-    //   u_i are unit direction vectors of filtered rotation rate (omegaVec)
-    //   m = weighted mean(u_i) over last ORBIT_WINDOW_SEC
-    //   R = |m|  (0..1)
-    //   diversity = 1 - R  (0..1)  => more varied directions => higher orbit
-    //
-    // Keep the existing speed activity gate to prevent low-motion jitter.
     // =========================================================================
     const ORBIT_WINDOW_SEC = 1.00;
-
-    // floor used only for energy bonus (preserved)
     const ORBIT_FLOOR = 0.18;
 
-    // UI shaping for published orbit01 (now applied to diversity)
-    // 1.0 = linear (clean). You can later shape without changing the definition.
-    const ORBIT_UI_EXP = 2.0;
+    // UI shaping for published orbit01 (applied to diversity)
+    const ORBIT_UI_EXP  = 2.0;
     const ORBIT_UI_GAIN = 1.5;
-    
 
-    // ✅ low-motion / anti-jitter floor (based on speed01)
-    const ORBIT_ACTIVITY_MIN01 = 0.06;  // below this, orbit is forced ~0
-    const ORBIT_ACTIVITY_POW   = 1.15;  // curve feel
+    const ORBIT_ACTIVITY_MIN01 = 0.06;
+    const ORBIT_ACTIVITY_POW   = 1.15;
 
     const ENERGY_GAIN_LOCKED = 1.25;
     const ENERGY_GAIN_FREE   = 0.65;
@@ -463,7 +452,6 @@
       return clamp01(t);
     }
 
-    // ✅ only gate: low-motion floor to prevent jitter orbit
     function orbitActivityGate(speed01){
       const v = clamp01(speed01 || 0);
       const x = (v - ORBIT_ACTIVITY_MIN01) / (1 - ORBIT_ACTIVITY_MIN01);
@@ -734,26 +722,212 @@
     function onMotion(e) {
       if (!running) return;
 
-      const t = performance.now() / 1000;
-      const dt = (lastT == null) ? 0 : (t - lastT);
-      lastT = t;
+      try {
+        const t = performance.now() / 1000;
+        const dt = (lastT == null) ? 0 : (t - lastT);
+        lastT = t;
 
-      if (dt > 0) dtBuf.push(dt);
+        if (dt > 0) dtBuf.push(dt);
 
-      const sh = updateShake(e, t, dt);
-      const rr = e.rotationRate;
+        const sh = updateShake(e, t, dt);
+        const rr = e.rotationRate;
 
-      if (!rr) {
-        const dtMean = Math.max(1e-3, computeAvg(dtBuf.slice(-50)) || 1/60);
+        if (!rr) {
+          const dtMean = Math.max(1e-3, computeAvg(dtBuf.slice(-50)) || 1/60);
+          const dtForFilter = (dt > 0) ? dt : dtMean;
+          const sv = updateSpeedV0(0, dtForFilter);
+
+          if (dt > 0) {
+            energy = Math.max(0, energy - ENERGY_DECAY * dt);
+            energyUI = lerp(energyUI, energy, UI_SMOOTH);
+          }
+
+          const held = meterHoldOrFade(dt);
+
+          publishOrb({
+            room,
+            t: performance.now(),
+            dt: sv.dt,
+            wRaw: sv.wRaw,
+            wCap: sv.wCap,
+            wFilt: sv.wFilt,
+            cap: sv.cap,
+            energy01: energyUI,
+            groove01: held.grooveOut,
+            orbit01: held.orbitOut,
+            smooth01: held.smoothOut,
+            speed01: sv.speed,
+            shake01: sh.shake01,
+            shakeHit: sh.shakeHit,
+            locked: false,
+            hz: 0,
+            o_r2: 0, o_r3: 0, o_gate: 0, o_balance: 0, o_couple: 0
+          }, dt);
+
+          setBgFromEnergy(clamp01(energyUI));
+          setAudio(energyUI, held.grooveOut, false);
+          return;
+        }
+
+        const x = rr.beta ?? 0;
+        const y = rr.gamma ?? 0;
+        const z = rr.alpha ?? 0;
+
+        const prevOx=ox, prevOy=oy, prevOz=oz;
+
+        ox = lerp(ox, x, OMEGA_LPF);
+        oy = lerp(oy, y, OMEGA_LPF);
+        oz = lerp(oz, z, OMEGA_LPF);
+
+        const mStability = mag3(ox,oy,oz);
+        const dtMean = Math.max(1e-3, computeAvg(dtBuf.slice(-50)));
         const dtForFilter = (dt > 0) ? dt : dtMean;
-        const sv = updateSpeedV0(0, dtForFilter);
+
+        const wRaw = mag3(x, y, z);
+        const sv = updateSpeedV0(wRaw, dtForFilter);
+
+        if (dt > 0) graceLeft = Math.max(0, graceLeft - dt);
+
+        if (mStability > MIN_OMEGA) {
+          omegaMag.push(mStability);
+
+          const d0 = mStability - emaMean;
+          emaMean = emaMean + NORM_ALPHA * d0;
+
+          const d2 = (mStability - emaMean);
+          emaVar = emaVar + NORM_ALPHA * (d2*d2 - emaVar);
+
+          const rms = Math.sqrt(Math.max(1e-6, emaVar));
+          omegaNorm.push((mStability - emaMean) / rms);
+
+          const invM = 1 / Math.max(1e-6, mStability);
+          const vUnit = { x: ox*invM, y: oy*invM, z: oz*invM };
+          omegaVec.push(vUnit);
+
+          if (dtForFilter > 0) orbitBufPush(vUnit, dtForFilter);
+
+          if (dt > 0) {
+            const dtSafe = Math.max(dt, dtMean * 0.5, 1/120);
+            jerkBuf.push(mag3(ox-prevOx, oy-prevOy, oz-prevOz) / dtSafe);
+          }
+        } else {
+          if (omegaMag.length) omegaMag.shift();
+          if (omegaNorm.length) omegaNorm.shift();
+          if (omegaVec.length) omegaVec.shift();
+          if (jerkBuf.length)  jerkBuf.shift();
+        }
+
+        const inStableMode = lock || graceLeft > 0;
+        const windowSec = inStableMode ? STABLE_WINDOW_SEC : HUNT_WINDOW_SEC;
+        const nTarget = trimToWindow(dtMean, windowSec, omegaMag, omegaNorm, omegaVec, jerkBuf, dtBuf);
+
+        if (omegaNorm.length < Math.min(MIN_WINDOW_SAMPLES, nTarget)) {
+          if (dt > 0) {
+            energy = Math.max(0, energy - ENERGY_DECAY * dt);
+            energyUI = lerp(energyUI, energy, UI_SMOOTH);
+          }
+
+          const held = meterHoldOrFade(dt);
+
+          publishOrb({
+            room,
+            t: performance.now(),
+            dt: sv.dt,
+            wRaw: sv.wRaw,
+            wCap: sv.wCap,
+            wFilt: sv.wFilt,
+            cap: sv.cap,
+            energy01: energyUI,
+            groove01: held.grooveOut,
+            orbit01: held.orbitOut,
+            smooth01: held.smoothOut,
+            speed01: sv.speed,
+            shake01: sh.shake01,
+            shakeHit: sh.shakeHit,
+            locked: false,
+            hz: 0,
+            o_r2: 0, o_r3: 0, o_gate: 0, o_balance: 0, o_couple: 0
+          }, dt);
+
+          setBgFromEnergy(clamp01(energyUI));
+          setAudio(energyUI, held.grooveOut, false);
+          return;
+        }
+
+        const ac = autocorrPeak(omegaNorm, dtMean);
+        lockStrength = lerp(lockStrength, ac.peak, LOCK_SMOOTH);
+        grooveHz = ac.hz;
+
+        const jerkWindow = jerkBuf.slice(-Math.min(jerkBuf.length, 70));
+        const avgJerk = median(jerkWindow);
+        const smoothScore = smoothnessFromJerk(avgJerk);
+
+        // ✅ ORBIT (new): direction diversity in last ~1000ms
+        const oDiv = orbitDiversityLastSec(ORBIT_WINDOW_SEC);
+        const actGate = orbitActivityGate(sv.speed);
+        const diversityGated = clamp01(oDiv.div01 * actGate);
+
+        // Energy bonus keeps the same "floor" behavior (preserved)
+        const orbitBonus = ORBIT_FLOOR + (1 - ORBIT_FLOOR) * diversityGated;
+
+        // ✅ FIX: "shapedCore" was undefined and was crashing the app.
+        // Preserve the curve: exp shapes diversity; gain scales it.
+        const shapedCore = diversityGated;
+        const orbitUI = clamp01(ORBIT_UI_GAIN * Math.pow(shapedCore, ORBIT_UI_EXP));
+
+        meterHoldLeft = METER_HOLD_SEC;
+        lastGrooveUI = lockStrength;
+        lastOrbitUI  = orbitUI;
+        lastSmoothUI = smoothScore;
+
+        if (!lock) {
+          if (lockStrength > LOCK_ON) { lock = true; graceLeft = 0; }
+        } else {
+          if (lockStrength < LOCK_OFF) { lock = false; graceLeft = GRACE_SEC; }
+        }
+
+        const inGrace = (!lock && graceLeft > 0);
+        if (inGrace && lockStrength > LOCK_ON) { lock = true; graceLeft = 0; }
 
         if (dt > 0) {
-          energy = Math.max(0, energy - ENERGY_DECAY * dt);
+          const badGroove = lockStrength <= RECENTER_GROOVE_MAX;
+          const notLockedNow = !lock;
+          if (badGroove && notLockedNow) recenterBadTime += dt;
+          else recenterBadTime = Math.max(0, recenterBadTime - 1.5*dt);
+
+          if (recenterBadTime >= RECENTER_SEC) {
+            flushHistorySoft();
+            recenterBadTime = 0;
+          }
+        }
+
+        if (dt > 0) {
+          const grooveTerm = Math.pow(clamp01(lockStrength), GROOVE_EXP);
+          const smoothTerm = Math.pow(clamp01(smoothScore), SMOOTH_EXP);
+          const orbitTerm  = Math.pow(clamp01(orbitBonus),  ORBIT_EXP);
+
+          const qualityTerm = grooveTerm * smoothTerm;
+          const earnBase = EARN_SCALE * grooveTerm * smoothTerm * orbitTerm;
+
+          const effectivelyLocked = lock || inGrace;
+          const gain = effectivelyLocked ? ENERGY_GAIN_LOCKED : ENERGY_GAIN_FREE;
+
+          const smoothKill = (smoothScore < SMOOTH_KILL_THRESH);
+          const earn = smoothKill ? 0 : (gain * earnBase);
+
+          let decay = ENERGY_DECAY;
+          if (qualityTerm >= COAST_QUALITY_MIN) decay *= COAST_DECAY_MULT;
+
+          if (smoothKill) {
+            decay *= SMOOTH_KILL_DECAY_MULT;
+            if (SMOOTH_KILL_UNLOCK) { lock = false; graceLeft = 0; }
+          }
+
+          energy = Math.max(0, energy + (earn - decay) * dt);
           energyUI = lerp(energyUI, energy, UI_SMOOTH);
         }
 
-        const held = meterHoldOrFade(dt);
+        const lockedNow = !!(lock || inGrace);
 
         publishOrb({
           room,
@@ -764,213 +938,28 @@
           wFilt: sv.wFilt,
           cap: sv.cap,
           energy01: energyUI,
-          groove01: held.grooveOut,
-          orbit01: held.orbitOut,
-          smooth01: held.smoothOut,
+          groove01: lockStrength,
+          orbit01: orbitUI,
+          smooth01: smoothScore,
           speed01: sv.speed,
           shake01: sh.shake01,
           shakeHit: sh.shakeHit,
-          locked: false,
-          hz: 0,
-          o_r2: 0, o_r3: 0, o_gate: 0, o_balance: 0, o_couple: 0
+          locked: lockedNow,
+          hz: grooveHz,
+
+          o_r2: oDiv.R,
+          o_r3: oDiv.div01,
+          o_gate: actGate,
+          o_balance: 0,
+          o_couple: 0
         }, dt);
 
         setBgFromEnergy(clamp01(energyUI));
-        setAudio(energyUI, held.grooveOut, false);
-        return;
+        setAudio(energyUI, lockStrength, lockedNow);
+
+      } catch (err) {
+        console.error("[onMotion crash]", err);
       }
-
-      const x = rr.beta ?? 0;
-      const y = rr.gamma ?? 0;
-      const z = rr.alpha ?? 0;
-
-      const prevOx=ox, prevOy=oy, prevOz=oz;
-
-      ox = lerp(ox, x, OMEGA_LPF);
-      oy = lerp(oy, y, OMEGA_LPF);
-      oz = lerp(oz, z, OMEGA_LPF);
-
-      const mStability = mag3(ox,oy,oz);
-      const dtMean = Math.max(1e-3, computeAvg(dtBuf.slice(-50)));
-      const dtForFilter = (dt > 0) ? dt : dtMean;
-
-      const wRaw = mag3(x, y, z);
-      const sv = updateSpeedV0(wRaw, dtForFilter);
-
-      if (dt > 0) graceLeft = Math.max(0, graceLeft - dt);
-
-      if (mStability > MIN_OMEGA) {
-        omegaMag.push(mStability);
-
-        const d0 = mStability - emaMean;
-        emaMean = emaMean + NORM_ALPHA * d0;
-
-        const d2 = (mStability - emaMean);
-        emaVar = emaVar + NORM_ALPHA * (d2*d2 - emaVar);
-
-        const rms = Math.sqrt(Math.max(1e-6, emaVar));
-        omegaNorm.push((mStability - emaMean) / rms);
-
-        const invM = 1 / Math.max(1e-6, mStability);
-        const vUnit = { x: ox*invM, y: oy*invM, z: oz*invM };
-        omegaVec.push(vUnit);
-
-        // also push into orbit diversity buffer (time-based)
-        if (dtForFilter > 0) orbitBufPush(vUnit, dtForFilter);
-
-        if (dt > 0) {
-          const dtSafe = Math.max(dt, dtMean * 0.5, 1/120);
-          jerkBuf.push(mag3(ox-prevOx, oy-prevOy, oz-prevOz) / dtSafe);
-        }
-      } else {
-        if (omegaMag.length) omegaMag.shift();
-        if (omegaNorm.length) omegaNorm.shift();
-        if (omegaVec.length) omegaVec.shift();
-        if (jerkBuf.length)  jerkBuf.shift();
-      }
-
-      const inStableMode = lock || graceLeft > 0;
-      const windowSec = inStableMode ? STABLE_WINDOW_SEC : HUNT_WINDOW_SEC;
-      const nTarget = trimToWindow(dtMean, windowSec, omegaMag, omegaNorm, omegaVec, jerkBuf, dtBuf);
-
-      if (omegaNorm.length < Math.min(MIN_WINDOW_SAMPLES, nTarget)) {
-        if (dt > 0) {
-          energy = Math.max(0, energy - ENERGY_DECAY * dt);
-          energyUI = lerp(energyUI, energy, UI_SMOOTH);
-        }
-
-        const held = meterHoldOrFade(dt);
-
-        publishOrb({
-          room,
-          t: performance.now(),
-          dt: sv.dt,
-          wRaw: sv.wRaw,
-          wCap: sv.wCap,
-          wFilt: sv.wFilt,
-          cap: sv.cap,
-          energy01: energyUI,
-          groove01: held.grooveOut,
-          orbit01: held.orbitOut,
-          smooth01: held.smoothOut,
-          speed01: sv.speed,
-          shake01: sh.shake01,
-          shakeHit: sh.shakeHit,
-          locked: false,
-          hz: 0,
-          o_r2: 0, o_r3: 0, o_gate: 0, o_balance: 0, o_couple: 0
-        }, dt);
-
-        setBgFromEnergy(clamp01(energyUI));
-        setAudio(energyUI, held.grooveOut, false);
-        return;
-      }
-
-      const ac = autocorrPeak(omegaNorm, dtMean);
-      lockStrength = lerp(lockStrength, ac.peak, LOCK_SMOOTH);
-      grooveHz = ac.hz;
-
-      const jerkWindow = jerkBuf.slice(-Math.min(jerkBuf.length, 70));
-      const avgJerk = median(jerkWindow);
-      const smoothScore = smoothnessFromJerk(avgJerk);
-
-      // ✅ ORBIT (new): direction diversity in last ~1000ms
-      const oDiv = orbitDiversityLastSec(ORBIT_WINDOW_SEC);
-      const actGate = orbitActivityGate(sv.speed);
-      const diversityGated = clamp01(oDiv.div01 * actGate);
-
-      // Energy bonus keeps the same "floor" behavior (preserved)
-      const orbitBonus = ORBIT_FLOOR + (1 - ORBIT_FLOOR) * diversityGated;
-
-      // Published UI orbit01 (clean, linear by default)
-      const orbitUI = clamp01(ORBIT_UI_GAIN * Math.pow(shapedCore, ORBIT_UI_EXP));
-
-      meterHoldLeft = METER_HOLD_SEC;
-      lastGrooveUI = lockStrength;
-      lastOrbitUI  = orbitUI;
-      lastSmoothUI = smoothScore;
-
-      if (!lock) {
-        if (lockStrength > LOCK_ON) { lock = true; graceLeft = 0; }
-      } else {
-        if (lockStrength < LOCK_OFF) { lock = false; graceLeft = GRACE_SEC; }
-      }
-
-      const inGrace = (!lock && graceLeft > 0);
-      if (inGrace && lockStrength > LOCK_ON) { lock = true; graceLeft = 0; }
-
-      if (dt > 0) {
-        const badGroove = lockStrength <= RECENTER_GROOVE_MAX;
-        const notLockedNow = !lock;
-        if (badGroove && notLockedNow) recenterBadTime += dt;
-        else recenterBadTime = Math.max(0, recenterBadTime - 1.5*dt);
-
-        if (recenterBadTime >= RECENTER_SEC) {
-          flushHistorySoft();
-          recenterBadTime = 0;
-        }
-      }
-
-      if (dt > 0) {
-        const grooveTerm = Math.pow(clamp01(lockStrength), GROOVE_EXP);
-        const smoothTerm = Math.pow(clamp01(smoothScore), SMOOTH_EXP);
-        const orbitTerm  = Math.pow(clamp01(orbitBonus),  ORBIT_EXP);
-
-        const qualityTerm = grooveTerm * smoothTerm;
-        const earnBase = EARN_SCALE * grooveTerm * smoothTerm * orbitTerm;
-
-        const effectivelyLocked = lock || inGrace;
-        const gain = effectivelyLocked ? ENERGY_GAIN_LOCKED : ENERGY_GAIN_FREE;
-
-        const smoothKill = (smoothScore < SMOOTH_KILL_THRESH);
-        const earn = smoothKill ? 0 : (gain * earnBase);
-
-        let decay = ENERGY_DECAY;
-        if (qualityTerm >= COAST_QUALITY_MIN) decay *= COAST_DECAY_MULT;
-
-        if (smoothKill) {
-          decay *= SMOOTH_KILL_DECAY_MULT;
-          if (SMOOTH_KILL_UNLOCK) { lock = false; graceLeft = 0; }
-        }
-
-        energy = Math.max(0, energy + (earn - decay) * dt);
-        energyUI = lerp(energyUI, energy, UI_SMOOTH);
-      }
-
-      const lockedNow = !!(lock || inGrace);
-
-      // Telemetry schema preserved; meanings updated:
-      //   o_r2 = R (mean direction length)
-      //   o_r3 = diversity (1-R)
-      //   o_gate = activity gate
-      //   o_balance / o_couple unused (0 for now)
-      publishOrb({
-        room,
-        t: performance.now(),
-        dt: sv.dt,
-        wRaw: sv.wRaw,
-        wCap: sv.wCap,
-        wFilt: sv.wFilt,
-        cap: sv.cap,
-        energy01: energyUI,
-        groove01: lockStrength,
-        orbit01: orbitUI,
-        smooth01: smoothScore,
-        speed01: sv.speed,
-        shake01: sh.shake01,
-        shakeHit: sh.shakeHit,
-        locked: lockedNow,
-        hz: grooveHz,
-
-        o_r2: oDiv.R,
-        o_r3: oDiv.div01,
-        o_gate: actGate,
-        o_balance: 0,
-        o_couple: 0
-      }, dt);
-
-      setBgFromEnergy(clamp01(energyUI));
-      setAudio(energyUI, lockStrength, lockedNow);
     }
 
     // =========================================================================
