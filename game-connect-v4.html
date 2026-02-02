@@ -24,7 +24,7 @@
       --stream: rgba(140, 130, 255, 0.95);
       --streamGlow: rgba(140, 130, 255, 0.32);
 
-      /* shake lamp (✅ changed to red) */
+      /* shake lamp (✅ red) */
       --lamp: rgba(255, 60, 60, 1.0);
       --lampGlow: rgba(255, 60, 60, 0.50);
 
@@ -263,7 +263,7 @@
       flex:1 1 auto;
       border:1px solid rgba(50,255,117,.22);
       border-radius:14px;
-      background:#000; /* opaque */
+      background:#000;
       overflow:hidden;
       box-shadow: inset 0 0 0 1px rgba(0,0,0,.25);
     }
@@ -273,7 +273,7 @@
       inset:0;
       width:100%;
       height:100%;
-      background:#000; /* opaque */
+      background:#000;
       z-index:0;
       pointer-events:none;
     }
@@ -300,10 +300,8 @@
         transform: translate(-50%, 0px);
         will-change: transform;
 
-        /* ✅ NO internal gradient anymore */
         background: rgba(var(--bg-r), var(--bg-g), var(--bg-b), 0.38);
 
-        /* ✅ warm/orange fill glow like the background */
         box-shadow:
         0 0 18px rgba(50,255,117,.10),
         0 0 34px rgba(var(--bg-r), var(--bg-g), var(--bg-b), 0.22),
@@ -518,7 +516,6 @@
           <div class="barLabel"><div>Shake</div><span id="vShake">0</span></div>
           <div class="meterRow">
             <div class="bar barShort"><div id="bShake" class="fill"></div></div>
-            <!-- ✅ shake lamp is now at END of row -->
             <div id="shakeLamp" class="lamp" aria-label="Shake trigger lamp"></div>
           </div>
         </div>
@@ -629,9 +626,7 @@
       bEnergy: $("bEnergy"),
       bShake:  $("bShake"),
 
-      /* ✅ new dynamics lamp */
       dynLamp: $("dynLamp"),
-
       shakeLamp: $("shakeLamp"),
       fatal: $("fatal"),
 
@@ -819,31 +814,50 @@
     });
 
     // =========================================================================
-    // LAMPS (shake + dynamics) — independent 500ms strobes (no canceling)
+    // LAMPS (shake + dynamics) — strobe helper
     // =========================================================================
-    let shakeLampTO = null;
-    let dynLampTO = null;
-
-    function flashShakeLamp(ms = 500){
-      const el = els.shakeLamp;
+    let lampTO = null;
+    function flashLamp(el, ms = 500){
       if (!el) return;
       el.classList.add("on");
-      if (shakeLampTO) clearTimeout(shakeLampTO);
-      shakeLampTO = setTimeout(() => {
+      if (lampTO) clearTimeout(lampTO);
+      lampTO = setTimeout(() => {
         el.classList.remove("on");
-        shakeLampTO = null;
+        lampTO = null;
       }, ms);
     }
+    function flashShakeLamp(ms = 400){ flashLamp(els.shakeLamp, ms); } // ✅ 400ms flash
+    function flashDynLamp(ms = 420){ flashLamp(els.dynLamp, ms); }
 
-    function flashDynLamp(ms = 420){
-      const el = els.dynLamp;
-      if (!el) return;
-      el.classList.add("on");
-      if (dynLampTO) clearTimeout(dynLampTO);
-      dynLampTO = setTimeout(() => {
-        el.classList.remove("on");
-        dynLampTO = null;
-      }, ms);
+    // =========================================================================
+    // ✅ SHAKE WIN DETECTOR (RECEIVER-SIDE)
+    // Rule: if shake meter reaches >= 1.0 TWO TIMES within 400ms => lamp flash.
+    // We count "times" as UP-CROSSES into >= 1.0 (no plateau spam).
+    // =========================================================================
+    const SHAKE_WIN_MS = 400;
+    let shakePrevAbove = false;
+    let shakeHitTimesMs = []; // perf.now() timestamps of up-cross hits
+
+    function shakeWinUpdate(shakeRaw){
+      const now = performance.now();
+      const above = (Number(shakeRaw) >= 1.0);
+
+      // count only UP-crosses into >= 1.0
+      if (above && !shakePrevAbove) {
+        shakeHitTimesMs.push(now);
+      }
+      shakePrevAbove = above;
+
+      // prune old hits outside window
+      while (shakeHitTimesMs.length && (now - shakeHitTimesMs[0]) > SHAKE_WIN_MS) {
+        shakeHitTimesMs.shift();
+      }
+
+      // win condition: 2 hits inside window
+      if (shakeHitTimesMs.length >= 2) {
+        flashShakeLamp(400);
+        shakeHitTimesMs.length = 0; // reset so it requires a new pair
+      }
     }
 
     // =========================================================================
@@ -1051,16 +1065,6 @@
       return WORLD_H - (PHYS.groundFromBottomPx + PHYS.groundLinePx + PHYS.orbRadiusPx);
     }
 
-    // ✅ cached stage size (avoids per-frame layout reads → reduces jitter)
-    let stageW = 0, stageH = 0;
-
-    function updateStageMetrics(){
-      const rect = els.physStage.getBoundingClientRect();
-      stageW = Math.max(1, Math.floor(rect.width));
-      stageH = Math.max(1, Math.floor(rect.height));
-      return { stageW, stageH };
-    }
-
     let physState = {
       yW: 0,
       v:  0,
@@ -1070,18 +1074,21 @@
       lift01: 0,
       energy01: 0,
       dynamics01: 0,
-
-      camTop: 0,
     };
 
-    function cameraTopFor(yW, viewH){
-      const maxCam = Math.max(0, WORLD_H - viewH);
-      const target = yW - viewH * 0.5;
+    function stageRect(){
+      return els.physStage.getBoundingClientRect();
+    }
+
+    function cameraTopFor(yW, stageH){
+      const maxCam = Math.max(0, WORLD_H - stageH);
+      const target = yW - stageH * 0.5;
       return clamp(target, 0, maxCam);
     }
 
     function orbScreenY(){
-      const camTop = physState.camTop || 0;
+      const h = stageRect().height;
+      const camTop = cameraTopFor(physState.yW, h);
       return physState.yW - camTop;
     }
 
@@ -1094,7 +1101,6 @@
     function resetOrbToGround(){
       physState.yW = groundCenterWorld();
       physState.v = 0;
-      physState.camTop = cameraTopFor(physState.yW, stageH || 1);
       applyOrbTransform();
     }
 
@@ -1105,19 +1111,12 @@
     setGravityMul(els.gSlider.value);
     els.gSlider.addEventListener("input", (e) => setGravityMul(e.target.value));
 
-    // ✅ allow phone to suggest a default fallDrag (only until user touches slider)
-    let downDragUserSet = false;
-
     function setDownDrag(v){
       PHYS.downDrag = clamp(Number(v) || 0, 0, 10);
       els.dVal.textContent = PHYS.downDrag.toFixed(2);
     }
     setDownDrag(els.dSlider.value);
-
-    els.dSlider.addEventListener("input", (e) => {
-      downDragUserSet = true;
-      setDownDrag(e.target.value);
-    });
+    els.dSlider.addEventListener("input", (e) => setDownDrag(e.target.value));
 
     // =========================================================================
     // STARFIELD — STRICTLY VERTICAL (no horizontal drift)
@@ -1129,7 +1128,6 @@
       ],
     };
 
-    // Galaxy-derived palette
     const STAR_COLORS = [
       [240,240,243],
       [245,231,214],
@@ -1171,8 +1169,9 @@
       const c = els.stars;
       if (!c) return;
 
-      const w = stageW || 1;
-      const h = stageH || 1;
+      const rect = stageRect();
+      const w = Math.max(1, Math.floor(rect.width));
+      const h = Math.max(1, Math.floor(rect.height));
 
       const dpr = Math.max(1, Math.min(2.5, window.devicePixelRatio || 1));
 
@@ -1212,11 +1211,11 @@
       ctx.fillStyle = "#000";
       ctx.fillRect(0,0,w,h);
 
-      const camTop = physState.camTop || 0;
+      const camTop = cameraTopFor(physState.yW, h);
 
       for (const layer of starLayers){
         for (const s of layer.stars){
-          const x = s.x;                 // ✅ fixed X => no horizontal drift ever
+          const x = s.x;
           const y = wrap((s.yW - camTop), h);
 
           ctx.fillStyle = `rgba(${s.cr},${s.cg},${s.cb},${s.a})`;
@@ -1233,23 +1232,15 @@
       ctx.fillRect(0,0,w,h);
     }
 
-    function refreshStageAndStars(regenStars=true){
-      updateStageMetrics();
-      starResize(!!regenStars);
-      physState.camTop = cameraTopFor(physState.yW, stageH || 1);
-      drawStars();
-      applyOrbTransform();
-    }
-
     requestAnimationFrame(() => {
-      refreshStageAndStars(true);
       resetOrbToGround();
+      starResize(true);
       drawStars();
     });
 
     window.addEventListener("resize", () => {
-      refreshStageAndStars(true);
       resetOrbToGround();
+      starResize(true);
       drawStars();
     });
 
@@ -1263,9 +1254,6 @@
       physState.lastTs = ts;
 
       dt = clamp(dt, 0, 0.05);
-
-      // ensure stage metrics exist (covers first frame timing)
-      if (!stageH || !stageW) updateStageMetrics();
 
       const g = PHYS.gBase * physState.gravityMul;
       const thrust = liftToThrustAccel(physState.lift01);
@@ -1292,9 +1280,6 @@
         physState.yW = yCeil;
         if (physState.v < 0) physState.v = -physState.v * PHYS.bounce;
       }
-
-      // ✅ compute camera once per frame for both stars + orb (prevents micro-mismatch)
-      physState.camTop = cameraTopFor(physState.yW, stageH || 1);
 
       drawStars();
       applyOrbTransform();
@@ -1399,13 +1384,6 @@
       const shake    = pick01NewOrOld("shake01", "shake");
       const locked   = !!d.locked;
 
-      // ✅ accept phone-sent default fallDrag once (until user touches slider)
-      if (!downDragUserSet && d.fallDrag != null && isFinite(Number(d.fallDrag))) {
-        const v = clamp(Number(d.fallDrag), 0, 6);
-        els.dSlider.value = v.toFixed(2);
-        setDownDrag(v);
-      }
-
       const lift = computeLift01(groove, smooth, speed);
 
       physState.lift01 = lift;
@@ -1445,17 +1423,10 @@
       els.vEnergy.classList.toggle("over", over);
       els.bEnergy.classList.toggle("over", over);
 
-      // ✅ existing shake trigger -> red lamp
-      const shakeHit =
-        d.shakeHit === true ||
-        d.shakeEvent === true ||
-        (typeof d.shakeEvent === "string" && d.shakeEvent) ||
-        (d.verb === "shake") ||
-        (d.action === "shock") ||
-        (d.kind === "shock");
-      if (shakeHit) flashShakeLamp(500);
+      // ✅ SHAKE WIN (receiver-side): 2 up-cross hits >= 1.0 within 400ms
+      shakeWinUpdate(shake);
 
-      // ✅ dynamics trigger (bright blue)
+      // ✅ dynamics trigger (lights bright blue)
       const dynHit =
         d.dynHit === true ||
         d.dynamicsHit === true ||
@@ -1538,6 +1509,11 @@
     els.newRoom.addEventListener("click", async () => {
       currentRoomChannel = "orb:test";
       await connect({ auto:false });
+
+      // reset shake detector when swapping rooms (avoids stale half-hit)
+      shakePrevAbove = false;
+      shakeHitTimesMs.length = 0;
+
       openPairModal();
     });
 
