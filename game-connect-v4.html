@@ -221,7 +221,7 @@
     /* ✅ bar grows to fill all remaining space */
     .barShort{
       flex:1 1 auto;
-      max-width:none;         /* was 430px */
+      max-width:none;
       margin:8px 0 10px;
     }
 
@@ -819,23 +819,32 @@
     });
 
     // =========================================================================
-    // LAMPS (shake + dynamics) — 500ms strobe
+    // LAMPS (shake + dynamics) — independent 500ms strobes (no canceling)
     // =========================================================================
-    let lampTO = null;
-    function flashLamp(el, ms = 500){
+    let shakeLampTO = null;
+    let dynLampTO = null;
+
+    function flashShakeLamp(ms = 500){
+      const el = els.shakeLamp;
       if (!el) return;
       el.classList.add("on");
-      if (el === els.shakeLamp){
-        // shared timer is fine (keeps behavior identical)
-      }
-      if (lampTO) clearTimeout(lampTO);
-      lampTO = setTimeout(() => {
+      if (shakeLampTO) clearTimeout(shakeLampTO);
+      shakeLampTO = setTimeout(() => {
         el.classList.remove("on");
-        lampTO = null;
+        shakeLampTO = null;
       }, ms);
     }
-    function flashShakeLamp(ms = 500){ flashLamp(els.shakeLamp, ms); }
-    function flashDynLamp(ms = 500){ flashLamp(els.dynLamp, ms); }
+
+    function flashDynLamp(ms = 420){
+      const el = els.dynLamp;
+      if (!el) return;
+      el.classList.add("on");
+      if (dynLampTO) clearTimeout(dynLampTO);
+      dynLampTO = setTimeout(() => {
+        el.classList.remove("on");
+        dynLampTO = null;
+      }, ms);
+    }
 
     // =========================================================================
     // PAIR MODAL (QR popup)
@@ -1042,6 +1051,16 @@
       return WORLD_H - (PHYS.groundFromBottomPx + PHYS.groundLinePx + PHYS.orbRadiusPx);
     }
 
+    // ✅ cached stage size (avoids per-frame layout reads → reduces jitter)
+    let stageW = 0, stageH = 0;
+
+    function updateStageMetrics(){
+      const rect = els.physStage.getBoundingClientRect();
+      stageW = Math.max(1, Math.floor(rect.width));
+      stageH = Math.max(1, Math.floor(rect.height));
+      return { stageW, stageH };
+    }
+
     let physState = {
       yW: 0,
       v:  0,
@@ -1051,21 +1070,18 @@
       lift01: 0,
       energy01: 0,
       dynamics01: 0,
+
+      camTop: 0,
     };
 
-    function stageRect(){
-      return els.physStage.getBoundingClientRect();
-    }
-
-    function cameraTopFor(yW, stageH){
-      const maxCam = Math.max(0, WORLD_H - stageH);
-      const target = yW - stageH * 0.5;
+    function cameraTopFor(yW, viewH){
+      const maxCam = Math.max(0, WORLD_H - viewH);
+      const target = yW - viewH * 0.5;
       return clamp(target, 0, maxCam);
     }
 
     function orbScreenY(){
-      const h = stageRect().height;
-      const camTop = cameraTopFor(physState.yW, h);
+      const camTop = physState.camTop || 0;
       return physState.yW - camTop;
     }
 
@@ -1078,6 +1094,7 @@
     function resetOrbToGround(){
       physState.yW = groundCenterWorld();
       physState.v = 0;
+      physState.camTop = cameraTopFor(physState.yW, stageH || 1);
       applyOrbTransform();
     }
 
@@ -1088,12 +1105,19 @@
     setGravityMul(els.gSlider.value);
     els.gSlider.addEventListener("input", (e) => setGravityMul(e.target.value));
 
+    // ✅ allow phone to suggest a default fallDrag (only until user touches slider)
+    let downDragUserSet = false;
+
     function setDownDrag(v){
       PHYS.downDrag = clamp(Number(v) || 0, 0, 10);
       els.dVal.textContent = PHYS.downDrag.toFixed(2);
     }
     setDownDrag(els.dSlider.value);
-    els.dSlider.addEventListener("input", (e) => setDownDrag(e.target.value));
+
+    els.dSlider.addEventListener("input", (e) => {
+      downDragUserSet = true;
+      setDownDrag(e.target.value);
+    });
 
     // =========================================================================
     // STARFIELD — STRICTLY VERTICAL (no horizontal drift)
@@ -1147,9 +1171,8 @@
       const c = els.stars;
       if (!c) return;
 
-      const rect = stageRect();
-      const w = Math.max(1, Math.floor(rect.width));
-      const h = Math.max(1, Math.floor(rect.height));
+      const w = stageW || 1;
+      const h = stageH || 1;
 
       const dpr = Math.max(1, Math.min(2.5, window.devicePixelRatio || 1));
 
@@ -1189,11 +1212,11 @@
       ctx.fillStyle = "#000";
       ctx.fillRect(0,0,w,h);
 
-      const camTop = cameraTopFor(physState.yW, h);
+      const camTop = physState.camTop || 0;
 
       for (const layer of starLayers){
         for (const s of layer.stars){
-          const x = s.x;
+          const x = s.x;                 // ✅ fixed X => no horizontal drift ever
           const y = wrap((s.yW - camTop), h);
 
           ctx.fillStyle = `rgba(${s.cr},${s.cg},${s.cb},${s.a})`;
@@ -1210,15 +1233,23 @@
       ctx.fillRect(0,0,w,h);
     }
 
+    function refreshStageAndStars(regenStars=true){
+      updateStageMetrics();
+      starResize(!!regenStars);
+      physState.camTop = cameraTopFor(physState.yW, stageH || 1);
+      drawStars();
+      applyOrbTransform();
+    }
+
     requestAnimationFrame(() => {
+      refreshStageAndStars(true);
       resetOrbToGround();
-      starResize(true);
       drawStars();
     });
 
     window.addEventListener("resize", () => {
+      refreshStageAndStars(true);
       resetOrbToGround();
-      starResize(true);
       drawStars();
     });
 
@@ -1232,6 +1263,9 @@
       physState.lastTs = ts;
 
       dt = clamp(dt, 0, 0.05);
+
+      // ensure stage metrics exist (covers first frame timing)
+      if (!stageH || !stageW) updateStageMetrics();
 
       const g = PHYS.gBase * physState.gravityMul;
       const thrust = liftToThrustAccel(physState.lift01);
@@ -1258,6 +1292,9 @@
         physState.yW = yCeil;
         if (physState.v < 0) physState.v = -physState.v * PHYS.bounce;
       }
+
+      // ✅ compute camera once per frame for both stars + orb (prevents micro-mismatch)
+      physState.camTop = cameraTopFor(physState.yW, stageH || 1);
 
       drawStars();
       applyOrbTransform();
@@ -1362,6 +1399,13 @@
       const shake    = pick01NewOrOld("shake01", "shake");
       const locked   = !!d.locked;
 
+      // ✅ accept phone-sent default fallDrag once (until user touches slider)
+      if (!downDragUserSet && d.fallDrag != null && isFinite(Number(d.fallDrag))) {
+        const v = clamp(Number(d.fallDrag), 0, 6);
+        els.dSlider.value = v.toFixed(2);
+        setDownDrag(v);
+      }
+
       const lift = computeLift01(groove, smooth, speed);
 
       physState.lift01 = lift;
@@ -1411,8 +1455,7 @@
         (d.kind === "shock");
       if (shakeHit) flashShakeLamp(500);
 
-      // ✅ NEW: dynamics trigger (lights bright blue)
-      // Uses "dynHit"/"dynamicsHit"/"dynEvent" OR a strong dynamics spike
+      // ✅ dynamics trigger (bright blue)
       const dynHit =
         d.dynHit === true ||
         d.dynamicsHit === true ||
