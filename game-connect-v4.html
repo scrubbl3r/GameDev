@@ -486,8 +486,8 @@
           <div class="barLabel"><div>Speed</div><span id="vSpeed">0</span></div>
           <div class="bar"><div id="bSpeed" class="fill"></div></div>
 
-          <div class="barLabel"><div>Orbit</div><span id="vOrbit">0</span></div>
-          <div class="bar"><div id="bOrbit" class="fill"></div></div>
+          <div class="barLabel"><div>Dynamics</div><span id="vDynamics">0</span></div>
+          <div class="bar"><div id="bDynamics" class="fill"></div></div>
 
           <div class="barLabel"><div>Energy</div><span id="vEnergy">0</span></div>
           <div class="bar"><div id="bEnergy" class="fill"></div></div>
@@ -525,9 +525,10 @@
 
           <div class="sliderRow">
             <span>Fall Drag</span>
-            <strong><span id="dVal">1.80</span></strong>
+            <strong><span id="dVal">1.00</span></strong>
           </div>
-          <input id="dSlider" type="range" min="0" max="6" value="1.80" step="0.01" />
+          <!-- ✅ default now 1.00 -->
+          <input id="dSlider" type="range" min="0" max="6" value="1.00" step="0.01" />
         </div>
       </div>
     </div>
@@ -569,7 +570,7 @@
       <div class="teleHint">
         Click <b>Record</b> to clear + capture a clean sample while you lock into a rhythm.
         Click again (Stop) to end. Then copy/paste the output into chat.
-        <span class="dim">(TSV: ms, dms, speed01, energy01, groove01, orbit01, smooth01, shake01, locked, hz, o_r2, o_r3, o_gate, o_balance, o_couple)</span>
+        <span class="dim">(TSV: ms, dms, speed01, energy01, groove01, dynamics01, smooth01, shake01, locked, hz, d_r2, d_r3, d_gate, d_balance, d_couple)</span>
       </div>
 
       <div id="teleOut" class="teleOut">(not recording)</div>
@@ -595,7 +596,7 @@
       vGroove: $("vGroove"),
       vSmooth: $("vSmooth"),
       vSpeed:  $("vSpeed"),
-      vOrbit:  $("vOrbit"),
+      vDynamics:  $("vDynamics"),
       vEnergy: $("vEnergy"),
       vShake:  $("vShake"),
 
@@ -603,7 +604,7 @@
       bGroove: $("bGroove"),
       bSmooth: $("bSmooth"),
       bSpeed:  $("bSpeed"),
-      bOrbit:  $("bOrbit"),
+      bDynamics:  $("bDynamics"),
       bEnergy: $("bEnergy"),
       bShake:  $("bShake"),
 
@@ -896,7 +897,7 @@
       teleLines = 0;
 
       els.teleOut.textContent =
-        "ms\tdms\tspeed01\tenergy01\tgroove01\torbit01\tsmooth01\tshake01\tlocked\thz\to_r2\to_r3\to_gate\to_balance\to_couple\n";
+        "ms\tdms\tspeed01\tenergy01\tgroove01\tdynamics01\tsmooth01\tshake01\tlocked\thz\td_r2\td_r3\td_gate\td_balance\td_couple\n";
       els.teleRecBtn.textContent = "Stop";
       els.teleRecBtn.classList.add("recOn");
     }
@@ -939,27 +940,28 @@
       const dms = Math.max(0, now - teleLast);
       teleLast = now;
 
-      const energy = telePick01(d, "energy01", "energy");
-      const groove = telePick01(d, "groove01", "groove");
-      const orbit  = telePick01(d, "orbit01",  "orbit");
-      const smooth = telePick01(d, "smooth01", "smooth");
-      const speed  = telePick01(d, "speed01",  "speed");
-      const shake  = telePick01(d, "shake01",  "shake");
+      const energy   = telePick01(d, "energy01", "energy");
+      const groove   = telePick01(d, "groove01", "groove");
+      const dynamics = telePick01(d, "dynamics01", "orbit01"); // ✅ new + back-compat
+      const smooth   = telePick01(d, "smooth01", "smooth");
+      const speed    = telePick01(d, "speed01", "speed");
+      const shake    = telePick01(d, "shake01", "shake");
 
       const locked = !!d.locked;
       const hz = (d.hz != null && isFinite(Number(d.hz))) ? Number(d.hz) : 0;
 
-      const o_r2      = telePickNum(d, "o_r2");
-      const o_r3      = telePickNum(d, "o_r3");
-      const o_gate    = telePickNum(d, "o_gate");
-      const o_balance = telePickNum(d, "o_balance");
-      const o_couple  = telePickNum(d, "o_couple");
+      // ✅ new + back-compat telemetry keys
+      const d_r2      = (d.d_r2 != null) ? telePickNum(d, "d_r2") : telePickNum(d, "o_r2");
+      const d_r3      = (d.d_r3 != null) ? telePickNum(d, "d_r3") : telePickNum(d, "o_r3");
+      const d_gate    = (d.d_gate != null) ? telePickNum(d, "d_gate") : telePickNum(d, "o_gate");
+      const d_balance = (d.d_balance != null) ? telePickNum(d, "d_balance") : telePickNum(d, "o_balance");
+      const d_couple  = (d.d_couple != null) ? telePickNum(d, "d_couple") : telePickNum(d, "o_couple");
 
       const line =
         `${ms.toFixed(1)}\t${dms.toFixed(1)}\t` +
-        `${speed.toFixed(4)}\t${energy.toFixed(4)}\t${groove.toFixed(4)}\t${orbit.toFixed(4)}\t${smooth.toFixed(4)}\t${shake.toFixed(4)}\t` +
+        `${speed.toFixed(4)}\t${energy.toFixed(4)}\t${groove.toFixed(4)}\t${dynamics.toFixed(4)}\t${smooth.toFixed(4)}\t${shake.toFixed(4)}\t` +
         `${locked ? 1 : 0}\t${hz.toFixed(3)}\t` +
-        `${o_r2.toFixed(4)}\t${o_r3.toFixed(4)}\t${o_gate.toFixed(4)}\t${o_balance.toFixed(4)}\t${o_couple.toFixed(4)}\n`;
+        `${d_r2.toFixed(4)}\t${d_r3.toFixed(4)}\t${d_gate.toFixed(4)}\t${d_balance.toFixed(4)}\t${d_couple.toFixed(4)}\n`;
 
       els.teleOut.textContent += line;
       teleLines++;
@@ -989,7 +991,7 @@
     // =========================================================================
     // PHYSICS (WORLD HEIGHT = 2500px)
     // =========================================================================
-    const WORLD_H = 2500; // ✅ requested travel height
+    const WORLD_H = 2500;
 
     const PHYS = {
       groundFromBottomPx: 15,
@@ -1000,20 +1002,18 @@
       thrustMax: 3000,
 
       upDrag:   2.6,
-      downDrag: 1.8,
+      downDrag: 1.0, // ✅ default now 1.0 (will be overridden by slider init below)
 
       bounce: 0.35,
       maxUpSpeed: 2200,
       maxDownSpeed: 2800,
     };
 
-    // ✅ ground in WORLD coords (center of orb when resting on the ground line)
     function groundCenterWorld(){
       return WORLD_H - (PHYS.groundFromBottomPx + PHYS.groundLinePx + PHYS.orbRadiusPx);
     }
 
     let physState = {
-      // world-space (px), down-positive
       yW: 0,
       v:  0,
       lastTs: null,
@@ -1021,14 +1021,13 @@
 
       lift01: 0,
       energy01: 0,
-      orbit01: 0, // (still received, but no longer used by stars)
+      dynamics01: 0,
     };
 
     function stageRect(){
       return els.physStage.getBoundingClientRect();
     }
 
-    // camera follows orb in world-space so it stays visible while traveling 2500px
     function cameraTopFor(yW, stageH){
       const maxCam = Math.max(0, WORLD_H - stageH);
       const target = yW - stageH * 0.5;
@@ -1064,6 +1063,7 @@
       PHYS.downDrag = clamp(Number(v) || 0, 0, 10);
       els.dVal.textContent = PHYS.downDrag.toFixed(2);
     }
+    // ✅ slider default is 1.00 now
     setDownDrag(els.dSlider.value);
     els.dSlider.addEventListener("input", (e) => setDownDrag(e.target.value));
 
@@ -1111,7 +1111,6 @@
       starCtx = c.getContext("2d", { alpha: false });
       if (starCtx) starCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-      // seed stars in WORLD-space vertically
       starLayers = STAR.layers.map(L => {
         const arr = [];
         for (let i=0;i<L.count;i++){
@@ -1131,7 +1130,6 @@
       const ctx = starCtx;
       const w = starW, h = starH;
 
-      // opaque black clear
       ctx.fillStyle = "#000";
       ctx.fillRect(0,0,w,h);
 
@@ -1139,9 +1137,7 @@
 
       for (const layer of starLayers){
         for (const s of layer.stars){
-          const x = s.x; // ✅ fixed x: no horizontal drift
-
-          // world-space y -> screen y (tile so it’s continuous)
+          const x = s.x;
           const y = wrap((s.yW - camTop), h);
 
           ctx.fillStyle = `rgba(210,255,235,${s.a})`;
@@ -1151,7 +1147,6 @@
         }
       }
 
-      // vignette (same vibe)
       const vg = ctx.createRadialGradient(w*0.5, h*0.42, Math.min(w,h)*0.10, w*0.5, h*0.42, Math.max(w,h)*0.75);
       vg.addColorStop(0, "rgba(0,0,0,0.0)");
       vg.addColorStop(1, "rgba(0,0,0,0.55)");
@@ -1185,7 +1180,6 @@
       const g = PHYS.gBase * physState.gravityMul;
       const thrust = liftToThrustAccel(physState.lift01);
 
-      // positive is down
       let a = g - thrust;
 
       const drag = (physState.v >= 0) ? PHYS.downDrag : PHYS.upDrag;
@@ -1196,7 +1190,6 @@
 
       physState.yW += physState.v * dt;
 
-      // world bounds
       const yFloor = groundCenterWorld();
       const yCeil  = PHYS.orbRadiusPx;
 
@@ -1305,19 +1298,19 @@
         return (n > 1.5) ? (n / 100) : n;
       }
 
-      const energy = pick01NewOrOld("energy01", "energy");
-      const groove = pick01NewOrOld("groove01", "groove");
-      const orbit  = pick01NewOrOld("orbit01",  "orbit");
-      const smooth = pick01NewOrOld("smooth01", "smooth");
-      const speed  = pick01NewOrOld("speed01",  "speed");
-      const shake  = pick01NewOrOld("shake01",  "shake");
-      const locked = !!d.locked;
+      const energy   = pick01NewOrOld("energy01", "energy");
+      const groove   = pick01NewOrOld("groove01", "groove");
+      const dynamics = pick01NewOrOld("dynamics01", "orbit01"); // ✅ new + back-compat
+      const smooth   = pick01NewOrOld("smooth01", "smooth");
+      const speed    = pick01NewOrOld("speed01", "speed");
+      const shake    = pick01NewOrOld("shake01", "shake");
+      const locked   = !!d.locked;
 
       const lift = computeLift01(groove, smooth, speed);
 
       physState.lift01 = lift;
       physState.energy01 = Math.max(0, Number(energy) || 0);
-      physState.orbit01 = orbit; // still tracked, just not used for star drift
+      physState.dynamics01 = dynamics;
 
       setBgFromEnergy(energy);
 
@@ -1329,22 +1322,22 @@
       const gP = toPct01(groove);
       const sP = toPct01(smooth);
       const sp = toPct01(speed);
-      const oP = toPct01(orbit);
+      const dP = toPct01(dynamics);
       const sh = toPct01(shake);
 
-      els.vLift.textContent   = `${liftP}%`;
-      els.vGroove.textContent = `${gP}%${locked ? " (locked)" : ""}`;
-      els.vSmooth.textContent = `${sP}%`;
-      els.vSpeed.textContent  = `${sp}%`;
-      els.vOrbit.textContent  = `${oP}%`;
-      els.vEnergy.textContent = `${isFinite(eText) ? eText : 0}%`;
-      els.vShake.textContent  = `${sh}%`;
+      els.vLift.textContent     = `${liftP}%`;
+      els.vGroove.textContent   = `${gP}%${locked ? " (locked)" : ""}`;
+      els.vSmooth.textContent   = `${sP}%`;
+      els.vSpeed.textContent    = `${sp}%`;
+      els.vDynamics.textContent = `${dP}%`;
+      els.vEnergy.textContent   = `${isFinite(eText) ? eText : 0}%`;
+      els.vShake.textContent    = `${sh}%`;
 
       setBar(els.bLift,  lift);
       setBar(els.bGroove, groove);
       setBar(els.bSmooth, smooth);
       setBar(els.bSpeed,  speed);
-      setBar(els.bOrbit,  orbit);
+      setBar(els.bDynamics, dynamics);
       setBar(els.bEnergy, energy);
       setBar(els.bShake,  shake);
 
