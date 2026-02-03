@@ -843,13 +843,10 @@
 
     // =========================================================================
     // ENERGY BANK (receiver-side battery)
-    // - cap = 200 points
-    // - phone energy drives CHARGE RATE (points/sec)
-    // - spending (shake) subtracts 100 points
     // =========================================================================
     const ENERGY_BANK_CAP = 200;
     const ENERGY_SHAKE_COST = 100;
-    const ENERGY_CHARGE_RATE_PPS = 160; // points/sec at energy01=1.0 (tweakable feel)
+    const ENERGY_CHARGE_RATE_PPS = 160;
 
     let energyBankPts = 0;
     let energyBankLastMs = 0;
@@ -860,39 +857,30 @@
     }
 
     function updateEnergyBankFromPhone(energyFromPhone01, nowMs){
-      const e = Math.max(0, Number(energyFromPhone01) || 0); // allow >1
+      const e = Math.max(0, Number(energyFromPhone01) || 0);
       if (!energyBankLastMs) energyBankLastMs = nowMs;
       let dt = (nowMs - energyBankLastMs) / 1000;
       energyBankLastMs = nowMs;
       dt = clamp(dt, 0, 0.25);
 
-      // integrate charge; no passive drain (drain happens via spending)
       energyBankPts = clamp(energyBankPts + (e * ENERGY_CHARGE_RATE_PPS * dt), 0, ENERGY_BANK_CAP);
     }
 
-    function canSpendShake(){
-      return energyBankPts >= ENERGY_SHAKE_COST;
-    }
-
-    function spendShake(){
-      energyBankPts = clamp(energyBankPts - ENERGY_SHAKE_COST, 0, ENERGY_BANK_CAP);
-    }
+    function canSpendShake(){ return energyBankPts >= ENERGY_SHAKE_COST; }
+    function spendShake(){ energyBankPts = clamp(energyBankPts - ENERGY_SHAKE_COST, 0, ENERGY_BANK_CAP); }
 
     // =========================================================================
-    // SHAKE DOUBLE-BANG (Option B) + energy-gated detonation
-    // - DOUBLEBANG_MS default 400
-    // - COOLDOWN_MS default 2000
-    // - "forgiving": if energy too low -> no lamp, no cooldown, rearm normally
+    // SHAKE DOUBLE-BANG + energy-gated detonation
     // =========================================================================
     const DOUBLEBANG_MS    = 400;
     const SHAKE_COOLDOWN_MS = 2000;
 
-    const SHAKE_HIT_THR = 0.995;         // meter pegged 100%+
-    const SHAKE_HIT_DEBOUNCE_MS = 120;   // prevent held-peg spam hits
+    const SHAKE_HIT_THR = 0.995;
+    const SHAKE_HIT_DEBOUNCE_MS = 120;
 
-    let shakeFirstHitAt = 0;        // ms (0 = not armed)
-    let shakeLastHitAt  = -1e9;     // ms
-    let shakeCooldownUntil = 0;     // ms
+    let shakeFirstHitAt = 0;
+    let shakeLastHitAt  = -1e9;
+    let shakeCooldownUntil = 0;
 
     function resetShakeDetector(){
       shakeFirstHitAt = 0;
@@ -902,34 +890,26 @@
     }
 
     function registerShakeHit(nowMs){
-      // cooldown: ignore hits completely (and keep lamp blank)
       if (nowMs < shakeCooldownUntil) return;
 
       if (!shakeFirstHitAt){
-        shakeFirstHitAt = nowMs; // arm
+        shakeFirstHitAt = nowMs;
         return;
       }
 
       const dt = nowMs - shakeFirstHitAt;
 
       if (dt <= DOUBLEBANG_MS){
-        // attempt detonation
         if (canSpendShake()){
           spendShake();
           flashShakeLamp(400);
 
-          // cooldown applies ONLY on successful detonation
           shakeCooldownUntil = nowMs + SHAKE_COOLDOWN_MS;
           shakeFirstHitAt = 0;
-
-          // ensure lamp is blanked during cooldown (only the flash shows)
-          // (future hits won't retrigger anyway, but this prevents weird overlaps)
         } else {
-          // forgiving failure: no lamp, no cooldown, rearm normally
           shakeFirstHitAt = 0;
         }
       } else {
-        // too late -> carry baton
         shakeFirstHitAt = nowMs;
       }
     }
@@ -938,12 +918,9 @@
       const v = Number(shakeVal01);
       if (!isFinite(v)) return;
 
-      // force lamp off during cooldown interval (visual contract)
       if (nowMs < shakeCooldownUntil) forceShakeLampOff();
-
       if (v < SHAKE_HIT_THR) return;
 
-      // time debounce: only count a hit every N ms at most
       if ((nowMs - shakeLastHitAt) < SHAKE_HIT_DEBOUNCE_MS) return;
 
       shakeLastHitAt = nowMs;
@@ -951,27 +928,33 @@
     }
 
     // =========================================================================
-    // STABILITY (new power-up) — sustain-based, no cooldown
-    // - Rolling avg over 250ms
-    // - Turns ON after a short sustain
-    // - Stays ON as long as avg stays low
-    // - OFF immediately when it leaves range
+    // STABILITY (power-up) — sustain-based, no cooldown
     // =========================================================================
     const STABILITY_AVG_MS   = 250;
     const STABILITY_ARM_MS   = 180;
     const STABILITY_ON_THR   = 0.15;
-    const STABILITY_OFF_THR  = 0.17; // tiny hysteresis to stop boundary chatter
+    const STABILITY_OFF_THR  = 0.17;
 
-    let dynSamples = [];     // {t, v}
+    let dynSamples = [];
     let stabilityOn = false;
     let stabilityHoldMs = 0;
     let stabilityLastMs = 0;
 
+    // --- NEW: visual gating (grounded OR speed<2% => NO lamp, NO bubble) -----
+    const STABILITY_SPEED_MIN = 0.02; // 2%
+    let stabilityVisualGate = true;
+
+    function applyStabilityVisuals(){
+      const show = !!stabilityOn && !!stabilityVisualGate;
+      els.dynLampStable.classList.toggle("on", show);
+      if (els.shield) els.shield.classList.toggle("on", show);
+    }
+
     function setStability(on){
       stabilityOn = !!on;
-      els.dynLampStable.classList.toggle("on", stabilityOn);
-      if (els.shield) els.shield.classList.toggle("on", stabilityOn);
+      applyStabilityVisuals();
     }
+    // ------------------------------------------------------------------------
 
     function resetStability(){
       dynSamples = [];
@@ -1011,7 +994,6 @@
         if (!stabilityOn && stabilityHoldMs >= STABILITY_ARM_MS){
           setStability(true);
         }
-        // if already on, it stays on (no gating)
       } else {
         stabilityHoldMs = 0;
         if (stabilityOn) setStability(false);
@@ -1202,7 +1184,7 @@
     let currentRoomChannel = normalizeRoom(readUrlRoomOrNull() || "orb:test");
 
     // =========================================================================
-    // PHYSICS + STARFIELD — unchanged
+    // PHYSICS + STARFIELD — unchanged (with tiny grounded flag)
     // =========================================================================
     const WORLD_H = 2500;
 
@@ -1235,6 +1217,9 @@
       lift01: 0,
       energy01: 0,
       dynamics01: 0,
+
+      // NEW: grounded flag (used only for stability visuals)
+      onGround: false,
     };
 
     function stageRect(){
@@ -1262,6 +1247,7 @@
     function resetOrbToGround(){
       physState.yW = groundCenterWorld();
       physState.v = 0;
+      physState.onGround = true; // NEW
       applyOrbTransform();
     }
 
@@ -1429,9 +1415,13 @@
       const yFloor = groundCenterWorld();
       const yCeil  = PHYS.orbRadiusPx;
 
+      // NEW: default to not grounded; set true only if clamped to floor
+      physState.onGround = false;
+
       if (physState.yW > yFloor) {
         physState.yW = yFloor;
         if (physState.v > 0) physState.v = 0;
+        physState.onGround = true; // NEW
       }
 
       if (physState.yW < yCeil) {
@@ -1544,7 +1534,7 @@
       // receiver energy bank updates first (so UI + gating use bank)
       updateEnergyBankFromPhone(energyFromPhone, nowMs);
 
-      const energyUI01 = energyBankPts / 100; // 0..2 (cap=2.00)
+      const energyUI01 = energyBankPts / 100;
 
       const lift = computeLift01(groove, smooth, speed);
 
@@ -1561,7 +1551,7 @@
       const sp = Math.round(clamp01(speed) * 100);
       const dP = Math.round(clamp01(dynamics) * 100);
       const sh = Math.round(Math.max(0, Number(shake) || 0) * 100);
-      const ePts = Math.round(energyBankPts); // 0..200
+      const ePts = Math.round(energyBankPts);
 
       els.vLift.textContent     = `${liftP}%`;
       els.vGroove.textContent   = `${gP}%${locked ? " (locked)" : ""}`;
@@ -1577,12 +1567,16 @@
       setBar(els.bSmooth, smooth);
       setBar(els.bSpeed,  speed);
       setBar(els.bDynamics, dynamics);
-      setBar(els.bEnergy, energyUI01); // clamped to 100% width, over shown via class
+      setBar(els.bEnergy, energyUI01);
       setBar(els.bShake,  shake);
 
       const over = (energyUI01 > 1);
       els.vEnergy.classList.toggle("over", over);
       els.bEnergy.classList.toggle("over", over);
+
+      // NEW: stability visuals ONLY when NOT grounded AND speed >= 2%
+      stabilityVisualGate = (!physState.onGround) && (clamp01(speed) >= STABILITY_SPEED_MIN);
+      applyStabilityVisuals(); // ensures immediate hide/show without touching stability logic
 
       // ✅ STABILITY (sustained low dynamics)
       updateStability(dynamics, nowMs);
