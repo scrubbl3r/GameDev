@@ -932,8 +932,8 @@
     // =========================================================================
     const STABILITY_AVG_MS   = 250;
     const STABILITY_ARM_MS   = 180;
-    const STABILITY_ON_THR   = 0.15;
-    const STABILITY_OFF_THR  = 0.17;
+    const STABILITY_ON_THR   = 0.10;
+    const STABILITY_OFF_THR  = 0.12;
 
     let dynSamples = [];
     let stabilityOn = false;
@@ -941,7 +941,7 @@
     let stabilityLastMs = 0;
 
     // --- NEW: visual gating (grounded OR speed<2% => NO lamp, NO bubble) -----
-    const STABILITY_SPEED_MIN = 0.04; // 2%
+    const STABILITY_SPEED_MIN = 0.02; // 2%
     let stabilityVisualGate = true;
 
     function applyStabilityVisuals(){
