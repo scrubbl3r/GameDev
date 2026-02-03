@@ -25,6 +25,9 @@
       --dynLamp: rgba(80, 160, 255, 1.0);
       --dynLampGlow: rgba(80, 160, 255, 0.55);
 
+      --shield: rgba(120, 210, 255, 0.90);
+      --shieldGlow: rgba(120, 210, 255, 0.22);
+
       --bg-r: 0;
       --bg-g: 0;
       --bg-b: 0;
@@ -99,24 +102,10 @@
     .over{ color: var(--over) !important; }
     .fill.over{ background: var(--over) !important; }
 
-    .big{
-      font-size:58px;
-      font-weight:1000;
-      margin:12px 0 8px;
-      letter-spacing:-0.04em;
-      line-height:0.92;
-      text-align:left;
-      text-shadow:
-        0 0 calc(10px + 40px * var(--charge)) rgba(50,255,117, calc(0.12 + 0.38 * var(--charge))),
-        0 0 calc(2px + 18px * var(--charge)) rgba(50,255,117, calc(0.10 + 0.25 * var(--charge)));
-    }
-    .big.over{
-      text-shadow:
-        0 0 calc(10px + 40px * var(--charge)) rgba(255,212,0, calc(0.14 + 0.42 * var(--charge))),
-        0 0 calc(2px + 18px * var(--charge)) rgba(255,212,0, calc(0.10 + 0.28 * var(--charge)));
-    }
+    /* (big lift number removed; we keep the same "mediumish" numbers everywhere) */
 
     .bars{margin-top:10px;}
+
     .barLabel{
       display:flex;
       align-items:baseline;
@@ -126,8 +115,9 @@
       opacity:.92;
     }
 
+    /* thicker bars (+50% vs old 14px) */
     .bar{
-      height:14px;
+      height:21px;
       border-radius:999px;
       border:1px solid rgba(50,255,117,.35);
       background:rgba(50,255,117,.08);
@@ -139,6 +129,36 @@
       width:0%;
       background: rgba(50,255,117,.85);
       transition: width 80ms linear;
+    }
+
+    .meterRow{
+      display:flex;
+      align-items:center;
+      gap:12px;
+      width:100%;
+    }
+
+    .barShort{
+      flex:1 1 auto;
+      max-width:none;
+      margin:8px 0 10px;
+    }
+
+    /* medium-ish numbers (same size for all meters) */
+    .meterVal{
+      flex:0 0 auto;
+      min-width:64px;
+      text-align:right;
+      font-size:18px;
+      font-weight:1000;
+      letter-spacing:-0.02em;
+      line-height:1;
+      opacity:0.98;
+      color: rgba(50,255,117,.95);
+    }
+    .meterVal.over{
+      color: var(--over);
+      text-shadow: 0 0 10px rgba(255,212,0,0.18);
     }
 
     .logLine{
@@ -202,21 +222,10 @@
 
     .groupGap{ height:10px; }
 
-    .meterRow{
-      display:flex;
-      align-items:center;
-      gap:10px;
-      width:100%;
-    }
-    .barShort{
-      flex:1 1 auto;
-      max-width:none;
-      margin:8px 0 10px;
-    }
-
+    /* lamps scale with thicker bars */
     .lamp{
-      width:16px;
-      height:16px;
+      width:24px;
+      height:24px;
       border-radius:999px;
       border:1px solid rgba(50,255,117,.35);
       background: rgba(0,0,0,.30);
@@ -275,15 +284,22 @@
       z-index:2;
     }
 
-    .orb{
+    .orbWrap{
       position:absolute;
+      left:50%;
       width:95px;
       height:95px;
-      border-radius:999px;
-      border:2px solid var(--g);
-      left:50%;
       transform: translate(-50%, 0px);
       will-change: transform;
+      z-index:3;
+      pointer-events:none;
+    }
+
+    .orb{
+      position:absolute;
+      inset:0;
+      border-radius:999px;
+      border:2px solid var(--g);
       background: rgba(var(--bg-r), var(--bg-g), var(--bg-b), 0.38);
       box-shadow:
         0 0 18px rgba(50,255,117,.10),
@@ -291,32 +307,32 @@
         0 0 60px rgba(var(--bg-r), var(--bg-g), var(--bg-b), calc(0.12 + 0.36 * var(--charge))),
         0 0 120px rgba(var(--bg-r), var(--bg-g), var(--bg-b), calc(0.05 + 0.24 * var(--charge))),
         inset 0 0 0 1px rgba(0,0,0,.30);
-      z-index:3;
     }
 
-    /* =========================
-       STABILITY SHIELD (bubble)
-       ========================= */
+    /* bubble shield (stability power-up) */
     .shield{
       position:absolute;
-      left:50%;
-      width:132px;
-      height:132px;
+      inset:-10px;
       border-radius:999px;
-      pointer-events:none;
       opacity:0;
-      transform: translate(-50%, 0px);
-      transition: opacity 120ms linear;
-      z-index:2;
-
-      border: 2px solid rgba(80,160,255,0.62);
-      background: rgba(80,160,255,0.10);
-      box-shadow:
-        0 0 14px rgba(80,160,255,0.35),
-        0 0 34px rgba(80,160,255,0.22),
-        inset 0 0 20px rgba(80,160,255,0.16);
+      transform: scale(0.96);
+      transition: opacity 120ms linear, transform 120ms ease-out;
+      border:2px solid rgba(120,210,255,0.0);
+      box-shadow: 0 0 0 rgba(120,210,255,0.0);
+      background: radial-gradient(circle at 45% 35%,
+        rgba(120,210,255,0.14) 0%,
+        rgba(120,210,255,0.06) 35%,
+        rgba(120,210,255,0.00) 70%);
+      mix-blend-mode: screen;
     }
-    .shield.on{ opacity:1; }
+    .shield.on{
+      opacity:1;
+      transform: scale(1.02);
+      border-color: rgba(120,210,255,0.72);
+      box-shadow:
+        0 0 16px rgba(120,210,255,0.24),
+        0 0 42px rgba(120,210,255,0.14);
+    }
 
     .physControls{
       margin-top:12px;
@@ -421,7 +437,6 @@
 
     @media (max-width: 900px){
       .grid{grid-template-columns:1fr;}
-      .big{font-size:52px;}
       .qrBox{width: 240px; height:240px;}
     }
   </style>
@@ -452,39 +467,59 @@
           <span id="last" class="lastText">(none yet)</span>
         </div>
 
-        <div id="bigCharge" class="big"><span id="pct">0</span>%</div>
-
         <div class="bars">
-          <div class="barLabel"><div>Lift</div><span id="vLift">0</span></div>
-          <div class="bar"><div id="bLift" class="fill"></div></div>
-
-          <div class="barLabel"><div>Groove</div><span id="vGroove">0</span></div>
-          <div class="bar"><div id="bGroove" class="fill"></div></div>
-
-          <div class="barLabel"><div>Smooth</div><span id="vSmooth">0</span></div>
-          <div class="bar"><div id="bSmooth" class="fill"></div></div>
-
-          <div class="barLabel"><div>Speed</div><span id="vSpeed">0</span></div>
-          <div class="bar"><div id="bSpeed" class="fill"></div></div>
-
-          <div class="barLabel"><div>Dynamics</div><span id="vDynamics">0</span></div>
+          <!-- Lift -->
+          <div class="barLabel"><div>Lift</div><span class="dim"> </span></div>
           <div class="meterRow">
-            <div class="bar barShort"><div id="bDynamics" class="fill"></div></div>
-            <!-- Lamp #1 = STABILITY (latched) -->
-            <div id="dynLamp" class="lamp dyn" aria-label="Dynamics stability lamp"></div>
-            <!-- Lamp #2 = EVENT (flash) -->
-            <div id="dynLamp2" class="lamp dyn" aria-label="Dynamics event lamp"></div>
+            <div class="bar barShort"><div id="bLift" class="fill"></div></div>
+            <div id="vLift" class="meterVal">0%</div>
           </div>
 
-          <div class="barLabel"><div>Energy</div><span id="vEnergy">0</span></div>
-          <div class="bar"><div id="bEnergy" class="fill"></div></div>
+          <!-- Groove -->
+          <div class="barLabel"><div>Groove</div><span class="dim"> </span></div>
+          <div class="meterRow">
+            <div class="bar barShort"><div id="bGroove" class="fill"></div></div>
+            <div id="vGroove" class="meterVal">0%</div>
+          </div>
+
+          <!-- Smooth -->
+          <div class="barLabel"><div>Smooth</div><span class="dim"> </span></div>
+          <div class="meterRow">
+            <div class="bar barShort"><div id="bSmooth" class="fill"></div></div>
+            <div id="vSmooth" class="meterVal">0%</div>
+          </div>
+
+          <!-- Speed -->
+          <div class="barLabel"><div>Speed</div><span class="dim"> </span></div>
+          <div class="meterRow">
+            <div class="bar barShort"><div id="bSpeed" class="fill"></div></div>
+            <div id="vSpeed" class="meterVal">0%</div>
+          </div>
+
+          <!-- Dynamics (two lamps: stability + hit) -->
+          <div class="barLabel"><div>Dynamics</div><span class="dim"> </span></div>
+          <div class="meterRow">
+            <div class="bar barShort"><div id="bDynamics" class="fill"></div></div>
+            <div id="dynLampStable" class="lamp dyn" aria-label="Stability lamp"></div>
+            <div id="dynLampHit" class="lamp dyn" aria-label="Dynamics hit lamp"></div>
+            <div id="vDynamics" class="meterVal">0%</div>
+          </div>
+
+          <!-- Energy -->
+          <div class="barLabel"><div>Energy</div><span class="dim"> </span></div>
+          <div class="meterRow">
+            <div class="bar barShort"><div id="bEnergy" class="fill"></div></div>
+            <div id="vEnergy" class="meterVal">0%</div>
+          </div>
 
           <div class="groupGap"></div>
 
-          <div class="barLabel"><div>Shake</div><span id="vShake">0</span></div>
+          <!-- Shake -->
+          <div class="barLabel"><div>Shake</div><span class="dim"> </span></div>
           <div class="meterRow">
             <div class="bar barShort"><div id="bShake" class="fill"></div></div>
             <div id="shakeLamp" class="lamp" aria-label="Shake trigger lamp"></div>
+            <div id="vShake" class="meterVal">0%</div>
           </div>
         </div>
 
@@ -498,10 +533,10 @@
           <canvas id="stars" class="starCanvas" aria-hidden="true"></canvas>
           <div class="groundLine" aria-label="Ground"></div>
 
-          <!-- STABILITY bubble shield (behind orb) -->
-          <div id="shield" class="shield" aria-hidden="true"></div>
-
-          <div id="orb" class="orb" aria-label="Orb"></div>
+          <div id="orbWrap" class="orbWrap" aria-hidden="true">
+            <div id="shield" class="shield" aria-label="Stability shield"></div>
+            <div id="orb" class="orb" aria-label="Orb"></div>
+          </div>
         </div>
 
         <div class="physControls">
@@ -576,9 +611,6 @@
       status: $("status"),
       last: $("last"),
 
-      bigCharge: $("bigCharge"),
-      pct: $("pct"),
-
       vLift:  $("vLift"),
       vGroove: $("vGroove"),
       vSmooth: $("vSmooth"),
@@ -595,11 +627,12 @@
       bEnergy: $("bEnergy"),
       bShake:  $("bShake"),
 
-      dynLamp: $("dynLamp"),     // Lamp #1 = stability latch
-      dynLamp2: $("dynLamp2"),   // Lamp #2 = event flash
+      dynLampStable: $("dynLampStable"),
+      dynLampHit: $("dynLampHit"),
       shakeLamp: $("shakeLamp"),
       fatal: $("fatal"),
 
+      orbWrap: $("orbWrap"),
       orb: $("orb"),
       shield: $("shield"),
 
@@ -627,8 +660,6 @@
     const WORKER_BASE = "https://orb-token.mrgarthwilliams.workers.dev";
 
     function clamp01(x){ x = Number(x); return Math.max(0, Math.min(1, isFinite(x) ? x : 0)); }
-    const toPct01  = (x01) => Math.round(clamp01(x01) * 100);
-    const toPctRaw = (x)   => Math.round(Math.max(0, Number(x) || 0) * 100);
     function clamp(v, lo, hi){ return Math.max(lo, Math.min(hi, v)); }
 
     function setBar(el, v01){
@@ -678,12 +709,12 @@
     }
 
     // =========================================================================
-    // BACKGROUND
+    // BACKGROUND (driven by receiver energy bank UI)
     // =========================================================================
     const BG0 = { r: 0,   g: 0,  b: 0  };
     const BG1 = { r: 255, g: 42, b: 0  };
     function setBgFromEnergy(e01) {
-      const t = clamp01(e01);
+      const t = clamp01(e01); // visual charge is 0..1
       const r = Math.round(BG0.r + (BG1.r - BG0.r) * t);
       const g = Math.round(BG0.g + (BG1.g - BG0.g) * t);
       const b = Math.round(BG0.b + (BG1.b - BG0.b) * t);
@@ -697,7 +728,7 @@
     setBgFromEnergy(0);
 
     // =========================================================================
-    // AUDIO (optional)
+    // AUDIO (optional) — unchanged behavior, but driven by energy bank UI
     // =========================================================================
     let audioEnabled = false;
     let audioCtx = null, osc = null, gainNode = null;
@@ -782,15 +813,10 @@
     });
 
     // =========================================================================
-    // LAMPS
+    // LAMPS — independent timers
     // =========================================================================
     let shakeLampTO = null;
-    let dynLamp2TO = null;
-
-    function hardOffShakeLamp(){
-      els.shakeLamp.classList.remove("on");
-      if (shakeLampTO) { clearTimeout(shakeLampTO); shakeLampTO = null; }
-    }
+    let dynLampHitTO = null;
 
     function flashShakeLamp(ms = 400){
       els.shakeLamp.classList.add("on");
@@ -801,101 +827,109 @@
       }, ms);
     }
 
-    // Dynamics lamp #2 is the “event flash” lamp
-    function flashDynLamp(ms = 420){
-      const lamp = els.dynLamp2 || els.dynLamp;
-      if (!lamp) return;
-      lamp.classList.add("on");
-      if (dynLamp2TO) clearTimeout(dynLamp2TO);
-      dynLamp2TO = setTimeout(() => {
-        lamp.classList.remove("on");
-        dynLamp2TO = null;
+    function forceShakeLampOff(){
+      if (shakeLampTO) { clearTimeout(shakeLampTO); shakeLampTO = null; }
+      els.shakeLamp.classList.remove("on");
+    }
+
+    function flashDynHitLamp(ms = 420){
+      els.dynLampHit.classList.add("on");
+      if (dynLampHitTO) clearTimeout(dynLampHitTO);
+      dynLampHitTO = setTimeout(() => {
+        els.dynLampHit.classList.remove("on");
+        dynLampHitTO = null;
       }, ms);
     }
 
     // =========================================================================
-    // ENERGY BANK (receiver-side)
-    // - Cap: 200 points
-    // - Spend: 100 points per successful shake detonation
-    //
-    // Model: “capacitor”
-    // - incoming energy01 is treated as a charging *potential*
-    // - bank only rises to match that potential (up to cap)
-    // - bank falls only when spent
+    // ENERGY BANK (receiver-side battery)
+    // - cap = 200 points
+    // - phone energy drives CHARGE RATE (points/sec)
+    // - spending (shake) subtracts 100 points
     // =========================================================================
-    const ENERGY_BANK_CAP_POINTS   = 200;
-    const SHAKE_COST_POINTS        = 100;
+    const ENERGY_BANK_CAP = 200;
+    const ENERGY_SHAKE_COST = 100;
+    const ENERGY_CHARGE_RATE_PPS = 160; // points/sec at energy01=1.0 (tweakable feel)
 
-    let energyBankPoints = 0; // 0..200
+    let energyBankPts = 0;
+    let energyBankLastMs = 0;
 
-    function energyPotentialPointsFromIncoming(eIncoming01){
-      // allow overcharge (e>1) to translate into >100 potential
-      const e = Math.max(0, Number(eIncoming01) || 0);
-      return Math.round(e * 100);
+    function resetEnergyBank(){
+      energyBankPts = 0;
+      energyBankLastMs = 0;
     }
 
-    function chargeEnergyBankFromIncoming(eIncoming01){
-      const pot = energyPotentialPointsFromIncoming(eIncoming01);
-      // “capacitor”: bank rises to match potential (but never forced down)
-      energyBankPoints = Math.max(energyBankPoints, Math.min(ENERGY_BANK_CAP_POINTS, pot));
+    function updateEnergyBankFromPhone(energyFromPhone01, nowMs){
+      const e = Math.max(0, Number(energyFromPhone01) || 0); // allow >1
+      if (!energyBankLastMs) energyBankLastMs = nowMs;
+      let dt = (nowMs - energyBankLastMs) / 1000;
+      energyBankLastMs = nowMs;
+      dt = clamp(dt, 0, 0.25);
+
+      // integrate charge; no passive drain (drain happens via spending)
+      energyBankPts = clamp(energyBankPts + (e * ENERGY_CHARGE_RATE_PPS * dt), 0, ENERGY_BANK_CAP);
     }
 
-    function spendEnergy(points){
-      energyBankPoints = clamp(energyBankPoints - (Number(points) || 0), 0, ENERGY_BANK_CAP_POINTS);
+    function canSpendShake(){
+      return energyBankPts >= ENERGY_SHAKE_COST;
     }
 
-    function energyBank01(){
-      return energyBankPoints / 100;
+    function spendShake(){
+      energyBankPts = clamp(energyBankPts - ENERGY_SHAKE_COST, 0, ENERGY_BANK_CAP);
     }
 
     // =========================================================================
-    // SHAKE DOUBLE-BANG (Option B) + bank spending + cooldown blanking
-    //
-    // - Hit #2 ≥ 1.0 within DOUBLEBANG_MS attempts detonation
-    // - If energy < 100, attempt “fails” (no lamp), and you re-arm normally next hit
-    // - Cooldown blanks the lamp until rearm window ends
+    // SHAKE DOUBLE-BANG (Option B) + energy-gated detonation
+    // - DOUBLEBANG_MS default 400
+    // - COOLDOWN_MS default 2000
+    // - "forgiving": if energy too low -> no lamp, no cooldown, rearm normally
     // =========================================================================
-    const DOUBLEBANG_MS  = 400;
-    const COOLDOWN_MS    = 2000;
+    const DOUBLEBANG_MS    = 400;
+    const SHAKE_COOLDOWN_MS = 2000;
 
-    const SHAKE_HIT_THR = 0.995;
-    const SHAKE_HIT_DEBOUNCE_MS = 120;
+    const SHAKE_HIT_THR = 0.995;         // meter pegged 100%+
+    const SHAKE_HIT_DEBOUNCE_MS = 120;   // prevent held-peg spam hits
 
-    let shakeFirstHitAt = 0;
-    let shakeLastHitAt  = -1e9;
-    let shakeCooldownUntil = 0;
+    let shakeFirstHitAt = 0;        // ms (0 = not armed)
+    let shakeLastHitAt  = -1e9;     // ms
+    let shakeCooldownUntil = 0;     // ms
+
+    function resetShakeDetector(){
+      shakeFirstHitAt = 0;
+      shakeLastHitAt = -1e9;
+      shakeCooldownUntil = 0;
+      forceShakeLampOff();
+    }
 
     function registerShakeHit(nowMs){
-      // Cooldown: ignore hits and keep lamp off
-      if (nowMs < shakeCooldownUntil) {
-        hardOffShakeLamp();
-        return;
-      }
+      // cooldown: ignore hits completely (and keep lamp blank)
+      if (nowMs < shakeCooldownUntil) return;
 
       if (!shakeFirstHitAt){
-        shakeFirstHitAt = nowMs;
+        shakeFirstHitAt = nowMs; // arm
         return;
       }
 
       const dt = nowMs - shakeFirstHitAt;
 
       if (dt <= DOUBLEBANG_MS){
-        // Double-bang achieved -> attempt detonation
-        if (energyBankPoints >= SHAKE_COST_POINTS){
-          // Success: spend + lamp + cooldown
-          spendEnergy(SHAKE_COST_POINTS);
+        // attempt detonation
+        if (canSpendShake()){
+          spendShake();
           flashShakeLamp(400);
 
-          shakeCooldownUntil = nowMs + COOLDOWN_MS;
-        } else {
-          // Forgiving fail: no lamp, no cooldown
-          // (double-bang still “happened”, we just don’t have juice)
-        }
+          // cooldown applies ONLY on successful detonation
+          shakeCooldownUntil = nowMs + SHAKE_COOLDOWN_MS;
+          shakeFirstHitAt = 0;
 
-        // reset baton either way
-        shakeFirstHitAt = 0;
+          // ensure lamp is blanked during cooldown (only the flash shows)
+          // (future hits won't retrigger anyway, but this prevents weird overlaps)
+        } else {
+          // forgiving failure: no lamp, no cooldown, rearm normally
+          shakeFirstHitAt = 0;
+        }
       } else {
-        // too late -> baton carries
+        // too late -> carry baton
         shakeFirstHitAt = nowMs;
       }
     }
@@ -904,66 +938,63 @@
       const v = Number(shakeVal01);
       if (!isFinite(v)) return;
 
-      // keep lamp blank during cooldown
-      if (nowMs < shakeCooldownUntil) {
-        hardOffShakeLamp();
-      }
+      // force lamp off during cooldown interval (visual contract)
+      if (nowMs < shakeCooldownUntil) forceShakeLampOff();
 
       if (v < SHAKE_HIT_THR) return;
 
+      // time debounce: only count a hit every N ms at most
       if ((nowMs - shakeLastHitAt) < SHAKE_HIT_DEBOUNCE_MS) return;
 
       shakeLastHitAt = nowMs;
       registerShakeHit(nowMs);
     }
 
-    function resetShakeDetector(){
-      shakeFirstHitAt = 0;
-      shakeLastHitAt = -1e9;
-      shakeCooldownUntil = 0;
-      hardOffShakeLamp();
-    }
-
     // =========================================================================
-    // STABILITY (new power-up)
-    // - Dynamics rolling average over 250ms
-    // - If avg is within 0..15%, stability is ON
-    // - Requires “real sustain” (coverage over time) before it can latch on
-    // - Independent of shake cooldown + energy bank
+    // STABILITY (new power-up) — sustain-based, no cooldown
+    // - Rolling avg over 250ms
+    // - Turns ON after a short sustain
+    // - Stays ON as long as avg stays low
+    // - OFF immediately when it leaves range
     // =========================================================================
-    const STABILITY_AVG_MS     = 250;
-    const STABILITY_REQUIRE_MS = 230;   // nearly full window coverage
-    const STABILITY_MAX_01     = 0.15;
+    const STABILITY_AVG_MS   = 250;
+    const STABILITY_ARM_MS   = 180;
+    const STABILITY_ON_THR   = 0.15;
+    const STABILITY_OFF_THR  = 0.17; // tiny hysteresis to stop boundary chatter
 
-    let dynSamples = [];   // {t, v}
+    let dynSamples = [];     // {t, v}
     let stabilityOn = false;
+    let stabilityHoldMs = 0;
+    let stabilityLastMs = 0;
 
     function setStability(on){
       stabilityOn = !!on;
-      if (els.dynLamp) els.dynLamp.classList.toggle("on", stabilityOn); // lamp #1 latch
-      if (els.shield)  els.shield.classList.toggle("on", stabilityOn);  // bubble shield
+      els.dynLampStable.classList.toggle("on", stabilityOn);
+      if (els.shield) els.shield.classList.toggle("on", stabilityOn);
     }
 
     function resetStability(){
       dynSamples = [];
+      stabilityOn = false;
+      stabilityHoldMs = 0;
+      stabilityLastMs = 0;
       setStability(false);
     }
 
     function updateStability(dyn01, nowMs){
       const v = clamp01(dyn01);
-      dynSamples.push({ t: nowMs, v });
 
+      if (!stabilityLastMs) stabilityLastMs = nowMs;
+      let dt = nowMs - stabilityLastMs;
+      stabilityLastMs = nowMs;
+      dt = clamp(dt, 0, 80);
+
+      dynSamples.push({ t: nowMs, v });
       const cutoff = nowMs - STABILITY_AVG_MS;
       while (dynSamples.length && dynSamples[0].t < cutoff) dynSamples.shift();
 
       if (!dynSamples.length){
-        if (stabilityOn) setStability(false);
-        return;
-      }
-
-      const coverage = nowMs - dynSamples[0].t;
-      if (coverage < STABILITY_REQUIRE_MS){
-        // not enough sustained window yet
+        stabilityHoldMs = 0;
         if (stabilityOn) setStability(false);
         return;
       }
@@ -972,8 +1003,19 @@
       for (const s of dynSamples) sum += s.v;
       const avg = sum / dynSamples.length;
 
-      const isStable = (avg <= STABILITY_MAX_01);
-      if (isStable !== stabilityOn) setStability(isStable);
+      const thr = stabilityOn ? STABILITY_OFF_THR : STABILITY_ON_THR;
+
+      if (avg <= thr){
+        stabilityHoldMs += dt;
+
+        if (!stabilityOn && stabilityHoldMs >= STABILITY_ARM_MS){
+          setStability(true);
+        }
+        // if already on, it stays on (no gating)
+      } else {
+        stabilityHoldMs = 0;
+        if (stabilityOn) setStability(false);
+      }
     }
 
     // =========================================================================
@@ -989,28 +1031,12 @@
       els.pairModal.setAttribute("aria-hidden","true");
     }
 
-    // =========================================================================
-    // ROOM STATE
-    // =========================================================================
-    function readUrlRoomOrNull(){
-      try{
-        const u = new URL(location.href);
-        const r = (u.searchParams.get("room") || "").trim();
-        if (!r) return null;
-        return normalizeRoom(r);
-      }catch(_){
-        return null;
-      }
-    }
-    let currentRoomChannel = normalizeRoom(readUrlRoomOrNull() || "orb:test");
-
     els.pairBtn.addEventListener("click", async () => {
       currentRoomChannel = "orb:" + randCode(6);
       await connect({ auto:false });
-
       resetShakeDetector();
       resetStability();
-
+      resetEnergyBank();
       openPairModal();
     });
 
@@ -1056,7 +1082,7 @@
     }
 
     // =========================================================================
-    // TELEMETRY MODAL
+    // TELEMETRY MODAL — unchanged
     // =========================================================================
     let teleRecording = false;
     let teleT0 = 0;
@@ -1161,7 +1187,22 @@
     }
 
     // =========================================================================
-    // PHYSICS + STARFIELD
+    // ROOM STATE
+    // =========================================================================
+    function readUrlRoomOrNull(){
+      try{
+        const u = new URL(location.href);
+        const r = (u.searchParams.get("room") || "").trim();
+        if (!r) return null;
+        return normalizeRoom(r);
+      }catch(_){
+        return null;
+      }
+    }
+    let currentRoomChannel = normalizeRoom(readUrlRoomOrNull() || "orb:test");
+
+    // =========================================================================
+    // PHYSICS + STARFIELD — unchanged
     // =========================================================================
     const WORLD_H = 2500;
 
@@ -1180,9 +1221,6 @@
       maxUpSpeed: 2200,
       maxDownSpeed: 2800,
     };
-
-    const ORB_SIZE_PX    = 95;
-    const SHIELD_SIZE_PX = 132;
 
     function groundCenterWorld(){
       return WORLD_H - (PHYS.groundFromBottomPx + PHYS.groundLinePx + PHYS.orbRadiusPx);
@@ -1217,15 +1255,8 @@
 
     function applyOrbTransform(){
       const y = orbScreenY();
-      const orbTop = y - PHYS.orbRadiusPx;
-
-      els.orb.style.transform = `translate(-50%, ${orbTop.toFixed(2)}px)`;
-
-      if (els.shield){
-        const extra = (SHIELD_SIZE_PX - ORB_SIZE_PX) * 0.5;
-        const shieldTop = orbTop - extra;
-        els.shield.style.transform = `translate(-50%, ${shieldTop.toFixed(2)}px)`;
-      }
+      const top = y - PHYS.orbRadiusPx;
+      els.orbWrap.style.transform = `translate(-50%, ${top.toFixed(2)}px)`;
     }
 
     function resetOrbToGround(){
@@ -1415,7 +1446,7 @@
     requestAnimationFrame(physicsStep);
 
     // =========================================================================
-    // ABLY RECEIVER
+    // ABLY RECEIVER — unchanged plumbing
     // =========================================================================
     let realtime = null;
     let channel = null;
@@ -1500,7 +1531,9 @@
         return (n > 1.5) ? (n / 100) : n;
       }
 
-      const energyIn = pick01NewOrOld("energy01", "energy");    // incoming
+      const nowMs = performance.now();
+
+      const energyFromPhone   = pick01NewOrOld("energy01", "energy");
       const groove   = pick01NewOrOld("groove01", "groove");
       const dynamics = pick01NewOrOld("dynamics01", "orbit01");
       const smooth   = pick01NewOrOld("smooth01", "smooth");
@@ -1508,66 +1541,56 @@
       const shake    = pick01NewOrOld("shake01", "shake");
       const locked   = !!d.locked;
 
-      // Receiver-side capacitor charge
-      chargeEnergyBankFromIncoming(energyIn);
+      // receiver energy bank updates first (so UI + gating use bank)
+      updateEnergyBankFromPhone(energyFromPhone, nowMs);
 
-      // Use banked energy for UI + glow + audio
-      const energy = energyBank01();
+      const energyUI01 = energyBankPts / 100; // 0..2 (cap=2.00)
 
       const lift = computeLift01(groove, smooth, speed);
 
       physState.lift01 = lift;
-      physState.energy01 = Math.max(0, Number(energy) || 0);
+      physState.energy01 = Math.max(0, Number(energyUI01) || 0);
       physState.dynamics01 = dynamics;
 
-      setBgFromEnergy(energy);
+      setBgFromEnergy(energyUI01);
 
-      els.pct.textContent = toPct01(lift);
-
-      const liftP = toPct01(lift);
-      const gP = toPct01(groove);
-      const sP = toPct01(smooth);
-      const sp = toPct01(speed);
-      const dP = toPct01(dynamics);
-      const sh = toPct01(shake);
-
-      // Energy display is bank points as percent (0..200%)
-      const ePoints = Math.round(energyBankPoints);
-      const eText = `${ePoints}%`;
+      // meter values (all same medium-ish size)
+      const liftP = Math.round(clamp01(lift) * 100);
+      const gP = Math.round(clamp01(groove) * 100);
+      const sP = Math.round(clamp01(smooth) * 100);
+      const sp = Math.round(clamp01(speed) * 100);
+      const dP = Math.round(clamp01(dynamics) * 100);
+      const sh = Math.round(Math.max(0, Number(shake) || 0) * 100);
+      const ePts = Math.round(energyBankPts); // 0..200
 
       els.vLift.textContent     = `${liftP}%`;
       els.vGroove.textContent   = `${gP}%${locked ? " (locked)" : ""}`;
       els.vSmooth.textContent   = `${sP}%`;
       els.vSpeed.textContent    = `${sp}%`;
       els.vDynamics.textContent = `${dP}%`;
-      els.vEnergy.textContent   = eText;
-      els.vShake.textContent    = `${sh}%`;
+      els.vEnergy.textContent   = `${ePts}%`;
+      els.vShake.textContent    = `${Math.max(0, sh)}%`;
 
+      // bars (energy uses bank UI)
       setBar(els.bLift,  lift);
       setBar(els.bGroove, groove);
       setBar(els.bSmooth, smooth);
       setBar(els.bSpeed,  speed);
       setBar(els.bDynamics, dynamics);
-
-      // Energy bar shows banked energy (0..2.0)
-      setBar(els.bEnergy, clamp01(energy / 2) * 2); // keep width sane; clamp01 expects 0..1
-      // Better: direct width based on 0..200%:
-      els.bEnergy.style.width = clamp(energyBankPoints, 0, 200).toFixed(1) + "%";
-
+      setBar(els.bEnergy, energyUI01); // clamped to 100% width, over shown via class
       setBar(els.bShake,  shake);
 
-      const over = (energy > 1);
+      const over = (energyUI01 > 1);
       els.vEnergy.classList.toggle("over", over);
       els.bEnergy.classList.toggle("over", over);
 
-      // STABILITY update (independent, even during shake cooldown)
-      const nowMs = performance.now();
+      // ✅ STABILITY (sustained low dynamics)
       updateStability(dynamics, nowMs);
 
-      // SHAKE DOUBLE-BANG (receiver-side) using bank + cooldown
+      // ✅ SHAKE double-bang (receiver-side), energy gated + cooldown
       processShakeDoubleBang(shake, nowMs);
 
-      // dynamics event flash goes to Lamp #2
+      // dynamics hit lamp (second one)
       const dynHit =
         d.dynHit === true ||
         d.dynamicsHit === true ||
@@ -1577,9 +1600,9 @@
         (Number(d.dyn01) > 0.5);
 
       const dynSpike = (clamp01(dynamics) >= 0.86);
-      if (dynHit || dynSpike) flashDynLamp(420);
+      if (dynHit || dynSpike) flashDynHitLamp(420);
 
-      setAudio(energy, groove, locked);
+      setAudio(energyUI01, groove, locked);
     }
 
     let connecting = false;
@@ -1649,10 +1672,9 @@
     // DEV button forces room=test always + launches QR
     els.newRoom.addEventListener("click", async () => {
       currentRoomChannel = "orb:test";
-
       resetShakeDetector();
       resetStability();
-
+      resetEnergyBank();
       await connect({ auto:false });
       openPairModal();
     });
