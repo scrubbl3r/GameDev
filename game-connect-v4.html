@@ -99,30 +99,24 @@
     .over{ color: var(--over) !important; }
     .fill.over{ background: var(--over) !important; }
 
-    /* -----------------------------------------------------------------------
-       UNIFIED PCT READOUT (same size for all meters)
-       - Inline at right edge of each meter row (after lamps)
-    ------------------------------------------------------------------------ */
-    .meterPct{
-      font-weight: 1000;
-      letter-spacing: -0.03em;
-      line-height: 1;
-      font-size: 24px; /* unified "small" size */
-      opacity: 0.96;
-      min-width: 64px; /* keeps right edge aligned */
-      text-align: right;
-      color: rgba(50,255,117,.96);
+    .big{
+      font-size:58px;
+      font-weight:1000;
+      margin:12px 0 8px;
+      letter-spacing:-0.04em;
+      line-height:0.92;
+      text-align:left;
       text-shadow:
-        0 0 calc(6px + 18px * var(--charge)) rgba(50,255,117, calc(0.10 + 0.30 * var(--charge)));
+        0 0 calc(10px + 40px * var(--charge)) rgba(50,255,117, calc(0.12 + 0.38 * var(--charge))),
+        0 0 calc(2px + 18px * var(--charge)) rgba(50,255,117, calc(0.10 + 0.25 * var(--charge)));
     }
-    .meterPct.over{
-      color: var(--over);
+    .big.over{
       text-shadow:
-        0 0 calc(6px + 18px * var(--charge)) rgba(255,212,0, calc(0.12 + 0.34 * var(--charge)));
+        0 0 calc(10px + 40px * var(--charge)) rgba(255,212,0, calc(0.14 + 0.42 * var(--charge))),
+        0 0 calc(2px + 18px * var(--charge)) rgba(255,212,0, calc(0.10 + 0.28 * var(--charge)));
     }
 
     .bars{margin-top:10px;}
-
     .barLabel{
       display:flex;
       align-items:baseline;
@@ -132,60 +126,19 @@
       opacity:.92;
     }
 
-    /* 50% thicker meters */
     .bar{
-      height:21px; /* was 14px */
+      height:14px;
       border-radius:999px;
       border:1px solid rgba(50,255,117,.35);
       background:rgba(50,255,117,.08);
       overflow:hidden;
-      margin:10px 0 14px;
+      margin:8px 0 10px;
     }
     .fill{
       height:100%;
       width:0%;
       background: rgba(50,255,117,.85);
       transition: width 80ms linear;
-    }
-
-    .groupGap{ height:10px; }
-
-    /* Each meter row: bar + lamps + pct inline */
-    .meterRow{
-      display:flex;
-      align-items:center;
-      gap:10px;
-      width:100%;
-    }
-    .barShort{
-      flex:1 1 auto;
-      max-width:none;
-      margin:10px 0 14px;
-    }
-
-    /* 50% bigger lamps */
-    .lamp{
-      width:24px;
-      height:24px;
-      border-radius:999px;
-      border:1px solid rgba(50,255,117,.35);
-      background: rgba(0,0,0,.30);
-      box-shadow: inset 0 0 0 1px rgba(0,0,0,.25);
-      flex:0 0 auto;
-    }
-    .lamp.on{
-      border-color: rgba(255,60,60,0.88);
-      background: var(--lamp);
-      box-shadow:
-        0 0 12px var(--lampGlow),
-        0 0 28px rgba(255,60,60,0.26);
-    }
-    .lamp.dyn.on{
-      border-color: rgba(80,160,255,0.90);
-      background: var(--dynLamp);
-      box-shadow:
-        0 0 12px var(--dynLampGlow),
-        0 0 28px rgba(80,160,255,0.30);
     }
 
     .logLine{
@@ -247,6 +200,44 @@
     #newRoom{ opacity: 0.26; font-weight: 800; margin-left: auto; }
     #newRoom:hover{ opacity: 0.46; border-color: rgba(50,255,117,.24); }
 
+    .groupGap{ height:10px; }
+
+    .meterRow{
+      display:flex;
+      align-items:center;
+      gap:10px;
+      width:100%;
+    }
+    .barShort{
+      flex:1 1 auto;
+      max-width:none;
+      margin:8px 0 10px;
+    }
+
+    .lamp{
+      width:16px;
+      height:16px;
+      border-radius:999px;
+      border:1px solid rgba(50,255,117,.35);
+      background: rgba(0,0,0,.30);
+      box-shadow: inset 0 0 0 1px rgba(0,0,0,.25);
+      flex:0 0 auto;
+    }
+    .lamp.on{
+      border-color: rgba(255,60,60,0.88);
+      background: var(--lamp);
+      box-shadow:
+        0 0 12px var(--lampGlow),
+        0 0 28px rgba(255,60,60,0.26);
+    }
+    .lamp.dyn.on{
+      border-color: rgba(80,160,255,0.90);
+      background: var(--dynLamp);
+      box-shadow:
+        0 0 12px var(--dynLampGlow),
+        0 0 28px rgba(80,160,255,0.30);
+    }
+
     .physHeader{
       font-weight: 900;
       margin-bottom: 10px;
@@ -302,6 +293,30 @@
         inset 0 0 0 1px rgba(0,0,0,.30);
       z-index:3;
     }
+
+    /* =========================
+       STABILITY SHIELD (bubble)
+       ========================= */
+    .shield{
+      position:absolute;
+      left:50%;
+      width:132px;
+      height:132px;
+      border-radius:999px;
+      pointer-events:none;
+      opacity:0;
+      transform: translate(-50%, 0px);
+      transition: opacity 120ms linear;
+      z-index:2;
+
+      border: 2px solid rgba(80,160,255,0.62);
+      background: rgba(80,160,255,0.10);
+      box-shadow:
+        0 0 14px rgba(80,160,255,0.35),
+        0 0 34px rgba(80,160,255,0.22),
+        inset 0 0 20px rgba(80,160,255,0.16);
+    }
+    .shield.on{ opacity:1; }
 
     .physControls{
       margin-top:12px;
@@ -406,8 +421,8 @@
 
     @media (max-width: 900px){
       .grid{grid-template-columns:1fr;}
+      .big{font-size:52px;}
       .qrBox{width: 240px; height:240px;}
-      .meterPct{ font-size: 22px; min-width: 60px; }
     }
   </style>
 
@@ -437,60 +452,39 @@
           <span id="last" class="lastText">(none yet)</span>
         </div>
 
+        <div id="bigCharge" class="big"><span id="pct">0</span>%</div>
+
         <div class="bars">
+          <div class="barLabel"><div>Lift</div><span id="vLift">0</span></div>
+          <div class="bar"><div id="bLift" class="fill"></div></div>
 
-          <!-- LIFT -->
-          <div class="barLabel"><div>Lift</div></div>
-          <div class="meterRow">
-            <div class="bar barShort"><div id="bLift" class="fill"></div></div>
-            <span id="vLift" class="meterPct">0%</span>
-          </div>
+          <div class="barLabel"><div>Groove</div><span id="vGroove">0</span></div>
+          <div class="bar"><div id="bGroove" class="fill"></div></div>
 
-          <!-- GROOVE -->
-          <div class="barLabel"><div>Groove</div></div>
-          <div class="meterRow">
-            <div class="bar barShort"><div id="bGroove" class="fill"></div></div>
-            <span id="vGroove" class="meterPct">0%</span>
-          </div>
+          <div class="barLabel"><div>Smooth</div><span id="vSmooth">0</span></div>
+          <div class="bar"><div id="bSmooth" class="fill"></div></div>
 
-          <!-- SMOOTH -->
-          <div class="barLabel"><div>Smooth</div></div>
-          <div class="meterRow">
-            <div class="bar barShort"><div id="bSmooth" class="fill"></div></div>
-            <span id="vSmooth" class="meterPct">0%</span>
-          </div>
+          <div class="barLabel"><div>Speed</div><span id="vSpeed">0</span></div>
+          <div class="bar"><div id="bSpeed" class="fill"></div></div>
 
-          <!-- SPEED -->
-          <div class="barLabel"><div>Speed</div></div>
-          <div class="meterRow">
-            <div class="bar barShort"><div id="bSpeed" class="fill"></div></div>
-            <span id="vSpeed" class="meterPct">0%</span>
-          </div>
-
-          <!-- DYNAMICS -->
-          <div class="barLabel"><div>Dynamics</div></div>
+          <div class="barLabel"><div>Dynamics</div><span id="vDynamics">0</span></div>
           <div class="meterRow">
             <div class="bar barShort"><div id="bDynamics" class="fill"></div></div>
-            <div id="dynLamp" class="lamp dyn" aria-label="Dynamics trigger lamp A"></div>
-            <div id="dynLamp2" class="lamp dyn" aria-label="Dynamics trigger lamp B"></div>
-            <span id="vDynamics" class="meterPct">0%</span>
+            <!-- Lamp #1 = STABILITY (latched) -->
+            <div id="dynLamp" class="lamp dyn" aria-label="Dynamics stability lamp"></div>
+            <!-- Lamp #2 = EVENT (flash) -->
+            <div id="dynLamp2" class="lamp dyn" aria-label="Dynamics event lamp"></div>
           </div>
 
-          <!-- ENERGY -->
-          <div class="barLabel"><div>Energy</div></div>
-          <div class="meterRow">
-            <div class="bar barShort"><div id="bEnergy" class="fill"></div></div>
-            <span id="vEnergy" class="meterPct">0%</span>
-          </div>
+          <div class="barLabel"><div>Energy</div><span id="vEnergy">0</span></div>
+          <div class="bar"><div id="bEnergy" class="fill"></div></div>
 
           <div class="groupGap"></div>
 
-          <!-- SHAKE -->
-          <div class="barLabel"><div>Shake</div></div>
+          <div class="barLabel"><div>Shake</div><span id="vShake">0</span></div>
           <div class="meterRow">
             <div class="bar barShort"><div id="bShake" class="fill"></div></div>
             <div id="shakeLamp" class="lamp" aria-label="Shake trigger lamp"></div>
-            <span id="vShake" class="meterPct">0%</span>
           </div>
         </div>
 
@@ -503,6 +497,10 @@
         <div id="physStage" class="physStage" aria-label="Physics test stage">
           <canvas id="stars" class="starCanvas" aria-hidden="true"></canvas>
           <div class="groundLine" aria-label="Ground"></div>
+
+          <!-- STABILITY bubble shield (behind orb) -->
+          <div id="shield" class="shield" aria-hidden="true"></div>
+
           <div id="orb" class="orb" aria-label="Orb"></div>
         </div>
 
@@ -578,6 +576,9 @@
       status: $("status"),
       last: $("last"),
 
+      bigCharge: $("bigCharge"),
+      pct: $("pct"),
+
       vLift:  $("vLift"),
       vGroove: $("vGroove"),
       vSmooth: $("vSmooth"),
@@ -594,12 +595,14 @@
       bEnergy: $("bEnergy"),
       bShake:  $("bShake"),
 
-      dynLamp: $("dynLamp"),
-      dynLamp2: $("dynLamp2"),
+      dynLamp: $("dynLamp"),     // Lamp #1 = stability latch
+      dynLamp2: $("dynLamp2"),   // Lamp #2 = event flash
       shakeLamp: $("shakeLamp"),
       fatal: $("fatal"),
 
       orb: $("orb"),
+      shield: $("shield"),
+
       physStage: $("physStage"),
       stars: $("stars"),
       gSlider: $("gSlider"),
@@ -625,6 +628,7 @@
 
     function clamp01(x){ x = Number(x); return Math.max(0, Math.min(1, isFinite(x) ? x : 0)); }
     const toPct01  = (x01) => Math.round(clamp01(x01) * 100);
+    const toPctRaw = (x)   => Math.round(Math.max(0, Number(x) || 0) * 100);
     function clamp(v, lo, hi){ return Math.max(lo, Math.min(hi, v)); }
 
     function setBar(el, v01){
@@ -693,7 +697,7 @@
     setBgFromEnergy(0);
 
     // =========================================================================
-    // AUDIO (optional) — unchanged
+    // AUDIO (optional)
     // =========================================================================
     let audioEnabled = false;
     let audioCtx = null, osc = null, gainNode = null;
@@ -778,10 +782,15 @@
     });
 
     // =========================================================================
-    // LAMPS (shake + dynamics) — independent timers
+    // LAMPS
     // =========================================================================
     let shakeLampTO = null;
-    let dynLampTO = null;
+    let dynLamp2TO = null;
+
+    function hardOffShakeLamp(){
+      els.shakeLamp.classList.remove("on");
+      if (shakeLampTO) { clearTimeout(shakeLampTO); shakeLampTO = null; }
+    }
 
     function flashShakeLamp(ms = 400){
       els.shakeLamp.classList.add("on");
@@ -792,84 +801,76 @@
       }, ms);
     }
 
+    // Dynamics lamp #2 is the “event flash” lamp
     function flashDynLamp(ms = 420){
-      els.dynLamp.classList.add("on");
-      els.dynLamp2.classList.add("on");
-      if (dynLampTO) clearTimeout(dynLampTO);
-      dynLampTO = setTimeout(() => {
-        els.dynLamp.classList.remove("on");
-        els.dynLamp2.classList.remove("on");
-        dynLampTO = null;
+      const lamp = els.dynLamp2 || els.dynLamp;
+      if (!lamp) return;
+      lamp.classList.add("on");
+      if (dynLamp2TO) clearTimeout(dynLamp2TO);
+      dynLamp2TO = setTimeout(() => {
+        lamp.classList.remove("on");
+        dynLamp2TO = null;
       }, ms);
     }
 
     // =========================================================================
-    // RECEIVER-SIDE ENERGY BANK (cap + spend)
+    // ENERGY BANK (receiver-side)
+    // - Cap: 200 points
+    // - Spend: 100 points per successful shake detonation
+    //
+    // Model: “capacitor”
+    // - incoming energy01 is treated as a charging *potential*
+    // - bank only rises to match that potential (up to cap)
+    // - bank falls only when spent
     // =========================================================================
-    const ENERGY_CAP_PTS   = 200;
-    const SHAKE_COST_PTS   = 100;
+    const ENERGY_BANK_CAP_POINTS   = 200;
+    const SHAKE_COST_POINTS        = 100;
 
-    let bankPts = 0;
-    let lastIncomingEnergyPts = 0;
+    let energyBankPoints = 0; // 0..200
 
-    function resetEnergyBank(){
-      bankPts = 0;
-      lastIncomingEnergyPts = 0;
+    function energyPotentialPointsFromIncoming(eIncoming01){
+      // allow overcharge (e>1) to translate into >100 potential
+      const e = Math.max(0, Number(eIncoming01) || 0);
+      return Math.round(e * 100);
     }
 
-    function bank01(){
-      return bankPts / 100; // 0..2
+    function chargeEnergyBankFromIncoming(eIncoming01){
+      const pot = energyPotentialPointsFromIncoming(eIncoming01);
+      // “capacitor”: bank rises to match potential (but never forced down)
+      energyBankPoints = Math.max(energyBankPoints, Math.min(ENERGY_BANK_CAP_POINTS, pot));
     }
 
-    function updateBankFromIncomingEnergy(incomingEnergy01){
-      const inc01 = Math.max(0, Number(incomingEnergy01) || 0); // allow >1.0 (overcharge)
-      const incomingPts = inc01 * 100;
-
-      const delta = incomingPts - lastIncomingEnergyPts;
-      lastIncomingEnergyPts = incomingPts;
-
-      if (delta > 0) bankPts += delta;
-
-      if (bankPts > ENERGY_CAP_PTS) bankPts = ENERGY_CAP_PTS;
-      if (bankPts < 0) bankPts = 0;
+    function spendEnergy(points){
+      energyBankPoints = clamp(energyBankPoints - (Number(points) || 0), 0, ENERGY_BANK_CAP_POINTS);
     }
 
-    function canSpendShake(){
-      return bankPts >= SHAKE_COST_PTS;
-    }
-
-    function spendShake(){
-      bankPts = Math.max(0, bankPts - SHAKE_COST_PTS);
+    function energyBank01(){
+      return energyBankPoints / 100;
     }
 
     // =========================================================================
-    // SHAKE DOUBLE-BANG (forgiving spend)
+    // SHAKE DOUBLE-BANG (Option B) + bank spending + cooldown blanking
+    //
+    // - Hit #2 ≥ 1.0 within DOUBLEBANG_MS attempts detonation
+    // - If energy < 100, attempt “fails” (no lamp), and you re-arm normally next hit
+    // - Cooldown blanks the lamp until rearm window ends
     // =========================================================================
-    const SHAKE_DOUBLEBANG_MS = 400;
-    const SHAKE_COOLDOWN_MS   = 2000;
+    const DOUBLEBANG_MS  = 400;
+    const COOLDOWN_MS    = 2000;
 
     const SHAKE_HIT_THR = 0.995;
     const SHAKE_HIT_DEBOUNCE_MS = 120;
 
-    let shakeFirstHitAt = 0;        // ms (0 = not armed)
-    let shakeLastHitAt  = -1e9;     // ms
-    let shakeCooldownUntil = 0;     // ms
-
-    function enterShakeCooldown(nowMs){
-      shakeCooldownUntil = nowMs + SHAKE_COOLDOWN_MS;
-      shakeFirstHitAt = 0;
-    }
-
-    function attemptDetonation(nowMs){
-      if (canSpendShake()){
-        spendShake();
-        flashShakeLamp(400);
-      }
-      enterShakeCooldown(nowMs);
-    }
+    let shakeFirstHitAt = 0;
+    let shakeLastHitAt  = -1e9;
+    let shakeCooldownUntil = 0;
 
     function registerShakeHit(nowMs){
-      if (nowMs < shakeCooldownUntil) return;
+      // Cooldown: ignore hits and keep lamp off
+      if (nowMs < shakeCooldownUntil) {
+        hardOffShakeLamp();
+        return;
+      }
 
       if (!shakeFirstHitAt){
         shakeFirstHitAt = nowMs;
@@ -878,9 +879,23 @@
 
       const dt = nowMs - shakeFirstHitAt;
 
-      if (dt <= SHAKE_DOUBLEBANG_MS){
-        attemptDetonation(nowMs);
+      if (dt <= DOUBLEBANG_MS){
+        // Double-bang achieved -> attempt detonation
+        if (energyBankPoints >= SHAKE_COST_POINTS){
+          // Success: spend + lamp + cooldown
+          spendEnergy(SHAKE_COST_POINTS);
+          flashShakeLamp(400);
+
+          shakeCooldownUntil = nowMs + COOLDOWN_MS;
+        } else {
+          // Forgiving fail: no lamp, no cooldown
+          // (double-bang still “happened”, we just don’t have juice)
+        }
+
+        // reset baton either way
+        shakeFirstHitAt = 0;
       } else {
+        // too late -> baton carries
         shakeFirstHitAt = nowMs;
       }
     }
@@ -888,6 +903,12 @@
     function processShakeDoubleBang(shakeVal01, nowMs){
       const v = Number(shakeVal01);
       if (!isFinite(v)) return;
+
+      // keep lamp blank during cooldown
+      if (nowMs < shakeCooldownUntil) {
+        hardOffShakeLamp();
+      }
+
       if (v < SHAKE_HIT_THR) return;
 
       if ((nowMs - shakeLastHitAt) < SHAKE_HIT_DEBOUNCE_MS) return;
@@ -900,6 +921,59 @@
       shakeFirstHitAt = 0;
       shakeLastHitAt = -1e9;
       shakeCooldownUntil = 0;
+      hardOffShakeLamp();
+    }
+
+    // =========================================================================
+    // STABILITY (new power-up)
+    // - Dynamics rolling average over 250ms
+    // - If avg is within 0..15%, stability is ON
+    // - Requires “real sustain” (coverage over time) before it can latch on
+    // - Independent of shake cooldown + energy bank
+    // =========================================================================
+    const STABILITY_AVG_MS     = 250;
+    const STABILITY_REQUIRE_MS = 230;   // nearly full window coverage
+    const STABILITY_MAX_01     = 0.15;
+
+    let dynSamples = [];   // {t, v}
+    let stabilityOn = false;
+
+    function setStability(on){
+      stabilityOn = !!on;
+      if (els.dynLamp) els.dynLamp.classList.toggle("on", stabilityOn); // lamp #1 latch
+      if (els.shield)  els.shield.classList.toggle("on", stabilityOn);  // bubble shield
+    }
+
+    function resetStability(){
+      dynSamples = [];
+      setStability(false);
+    }
+
+    function updateStability(dyn01, nowMs){
+      const v = clamp01(dyn01);
+      dynSamples.push({ t: nowMs, v });
+
+      const cutoff = nowMs - STABILITY_AVG_MS;
+      while (dynSamples.length && dynSamples[0].t < cutoff) dynSamples.shift();
+
+      if (!dynSamples.length){
+        if (stabilityOn) setStability(false);
+        return;
+      }
+
+      const coverage = nowMs - dynSamples[0].t;
+      if (coverage < STABILITY_REQUIRE_MS){
+        // not enough sustained window yet
+        if (stabilityOn) setStability(false);
+        return;
+      }
+
+      let sum = 0;
+      for (const s of dynSamples) sum += s.v;
+      const avg = sum / dynSamples.length;
+
+      const isStable = (avg <= STABILITY_MAX_01);
+      if (isStable !== stabilityOn) setStability(isStable);
     }
 
     // =========================================================================
@@ -915,11 +989,28 @@
       els.pairModal.setAttribute("aria-hidden","true");
     }
 
+    // =========================================================================
+    // ROOM STATE
+    // =========================================================================
+    function readUrlRoomOrNull(){
+      try{
+        const u = new URL(location.href);
+        const r = (u.searchParams.get("room") || "").trim();
+        if (!r) return null;
+        return normalizeRoom(r);
+      }catch(_){
+        return null;
+      }
+    }
+    let currentRoomChannel = normalizeRoom(readUrlRoomOrNull() || "orb:test");
+
     els.pairBtn.addEventListener("click", async () => {
       currentRoomChannel = "orb:" + randCode(6);
       await connect({ auto:false });
+
       resetShakeDetector();
-      resetEnergyBank();
+      resetStability();
+
       openPairModal();
     });
 
@@ -965,7 +1056,7 @@
     }
 
     // =========================================================================
-    // TELEMETRY MODAL — unchanged
+    // TELEMETRY MODAL
     // =========================================================================
     let teleRecording = false;
     let teleT0 = 0;
@@ -1070,22 +1161,7 @@
     }
 
     // =========================================================================
-    // ROOM STATE
-    // =========================================================================
-    function readUrlRoomOrNull(){
-      try{
-        const u = new URL(location.href);
-        const r = (u.searchParams.get("room") || "").trim();
-        if (!r) return null;
-        return normalizeRoom(r);
-      }catch(_){
-        return null;
-      }
-    }
-    let currentRoomChannel = normalizeRoom(readUrlRoomOrNull() || "orb:test");
-
-    // =========================================================================
-    // PHYSICS + STARFIELD — unchanged
+    // PHYSICS + STARFIELD
     // =========================================================================
     const WORLD_H = 2500;
 
@@ -1104,6 +1180,9 @@
       maxUpSpeed: 2200,
       maxDownSpeed: 2800,
     };
+
+    const ORB_SIZE_PX    = 95;
+    const SHIELD_SIZE_PX = 132;
 
     function groundCenterWorld(){
       return WORLD_H - (PHYS.groundFromBottomPx + PHYS.groundLinePx + PHYS.orbRadiusPx);
@@ -1138,8 +1217,15 @@
 
     function applyOrbTransform(){
       const y = orbScreenY();
-      const top = y - PHYS.orbRadiusPx;
-      els.orb.style.transform = `translate(-50%, ${top.toFixed(2)}px)`;
+      const orbTop = y - PHYS.orbRadiusPx;
+
+      els.orb.style.transform = `translate(-50%, ${orbTop.toFixed(2)}px)`;
+
+      if (els.shield){
+        const extra = (SHIELD_SIZE_PX - ORB_SIZE_PX) * 0.5;
+        const shieldTop = orbTop - extra;
+        els.shield.style.transform = `translate(-50%, ${shieldTop.toFixed(2)}px)`;
+      }
     }
 
     function resetOrbToGround(){
@@ -1206,7 +1292,6 @@
       return STAR_COLORS[(Math.random()*n)|0];
     }
 
-    let starCtx2 = null; // keep naming as-is in case you diff (no behavior change)
     function starResize(regen=false){
       const c = els.stars;
       if (!c) return;
@@ -1330,7 +1415,7 @@
     requestAnimationFrame(physicsStep);
 
     // =========================================================================
-    // ABLY RECEIVER — unchanged plumbing
+    // ABLY RECEIVER
     // =========================================================================
     let realtime = null;
     let channel = null;
@@ -1415,7 +1500,7 @@
         return (n > 1.5) ? (n / 100) : n;
       }
 
-      const incomingEnergy = pick01NewOrOld("energy01", "energy"); // raw feed (can be >1)
+      const energyIn = pick01NewOrOld("energy01", "energy");    // incoming
       const groove   = pick01NewOrOld("groove01", "groove");
       const dynamics = pick01NewOrOld("dynamics01", "orbit01");
       const smooth   = pick01NewOrOld("smooth01", "smooth");
@@ -1423,16 +1508,21 @@
       const shake    = pick01NewOrOld("shake01", "shake");
       const locked   = !!d.locked;
 
-      updateBankFromIncomingEnergy(incomingEnergy);
+      // Receiver-side capacitor charge
+      chargeEnergyBankFromIncoming(energyIn);
+
+      // Use banked energy for UI + glow + audio
+      const energy = energyBank01();
 
       const lift = computeLift01(groove, smooth, speed);
 
       physState.lift01 = lift;
-      physState.energy01 = Math.max(0, Number(incomingEnergy) || 0);
+      physState.energy01 = Math.max(0, Number(energy) || 0);
       physState.dynamics01 = dynamics;
 
-      const eBank01 = bank01(); // 0..2
-      setBgFromEnergy(Math.min(1, eBank01));
+      setBgFromEnergy(energy);
+
+      els.pct.textContent = toPct01(lift);
 
       const liftP = toPct01(lift);
       const gP = toPct01(groove);
@@ -1441,15 +1531,16 @@
       const dP = toPct01(dynamics);
       const sh = toPct01(shake);
 
+      // Energy display is bank points as percent (0..200%)
+      const ePoints = Math.round(energyBankPoints);
+      const eText = `${ePoints}%`;
+
       els.vLift.textContent     = `${liftP}%`;
       els.vGroove.textContent   = `${gP}%${locked ? " (locked)" : ""}`;
       els.vSmooth.textContent   = `${sP}%`;
       els.vSpeed.textContent    = `${sp}%`;
       els.vDynamics.textContent = `${dP}%`;
-
-      const bankPct = Math.round(clamp(eBank01, 0, 2) * 100);
-      els.vEnergy.textContent   = `${bankPct}%`;
-
+      els.vEnergy.textContent   = eText;
       els.vShake.textContent    = `${sh}%`;
 
       setBar(els.bLift,  lift);
@@ -1458,15 +1549,25 @@
       setBar(els.bSpeed,  speed);
       setBar(els.bDynamics, dynamics);
 
-      setBar(els.bEnergy, Math.min(1, eBank01));
+      // Energy bar shows banked energy (0..2.0)
+      setBar(els.bEnergy, clamp01(energy / 2) * 2); // keep width sane; clamp01 expects 0..1
+      // Better: direct width based on 0..200%:
+      els.bEnergy.style.width = clamp(energyBankPoints, 0, 200).toFixed(1) + "%";
+
       setBar(els.bShake,  shake);
 
-      const over = (eBank01 > 1);
+      const over = (energy > 1);
       els.vEnergy.classList.toggle("over", over);
       els.bEnergy.classList.toggle("over", over);
 
-      processShakeDoubleBang(shake, performance.now());
+      // STABILITY update (independent, even during shake cooldown)
+      const nowMs = performance.now();
+      updateStability(dynamics, nowMs);
 
+      // SHAKE DOUBLE-BANG (receiver-side) using bank + cooldown
+      processShakeDoubleBang(shake, nowMs);
+
+      // dynamics event flash goes to Lamp #2
       const dynHit =
         d.dynHit === true ||
         d.dynamicsHit === true ||
@@ -1478,7 +1579,7 @@
       const dynSpike = (clamp01(dynamics) >= 0.86);
       if (dynHit || dynSpike) flashDynLamp(420);
 
-      setAudio(Math.min(1, eBank01), groove, locked);
+      setAudio(energy, groove, locked);
     }
 
     let connecting = false;
@@ -1548,8 +1649,10 @@
     // DEV button forces room=test always + launches QR
     els.newRoom.addEventListener("click", async () => {
       currentRoomChannel = "orb:test";
+
       resetShakeDetector();
-      resetEnergyBank();
+      resetStability();
+
       await connect({ auto:false });
       openPairModal();
     });
