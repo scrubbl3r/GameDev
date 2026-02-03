@@ -31,6 +31,10 @@
       --bg-r: 0;
       --bg-g: 0;
       --bg-b: 0;
+
+      /* shockwave */
+      --shock: rgba(255, 60, 60, 0.92);
+      --shockGlow: rgba(255, 60, 60, 0.30);
     }
 
     html,body{
@@ -102,8 +106,6 @@
     .over{ color: var(--over) !important; }
     .fill.over{ background: var(--over) !important; }
 
-    /* (big lift number removed; we keep the same "mediumish" numbers everywhere) */
-
     .bars{margin-top:10px;}
 
     .barLabel{
@@ -115,7 +117,6 @@
       opacity:.92;
     }
 
-    /* thicker bars (+50% vs old 14px) */
     .bar{
       height:21px;
       border-radius:999px;
@@ -144,7 +145,6 @@
       margin:8px 0 10px;
     }
 
-    /* medium-ish numbers (same size for all meters) */
     .meterVal{
       flex:0 0 auto;
       min-width:64px;
@@ -222,7 +222,6 @@
 
     .groupGap{ height:10px; }
 
-    /* lamps scale with thicker bars */
     .lamp{
       width:24px;
       height:24px;
@@ -309,7 +308,6 @@
         inset 0 0 0 1px rgba(0,0,0,.30);
     }
 
-    /* bubble shield (stability power-up) */
     .shield{
       position:absolute;
       inset:-10px;
@@ -332,6 +330,69 @@
       box-shadow:
         0 0 16px rgba(120,210,255,0.24),
         0 0 42px rgba(120,210,255,0.14);
+    }
+
+    /* =========================================================================
+       SHOCKWAVE — concentric sinusoidal (wavy) rings (red)
+       Radius: 300px. Duration: 500ms.
+       Uses SVG circles with animated stroke-dashoffset to create a wavy ring feel.
+       ========================================================================= */
+    .shockwave{
+      position:absolute;
+      left:50%;
+      top:50%;
+      width:600px;              /* radius*2 */
+      height:600px;
+      transform: translate(-50%, -50%);
+      pointer-events:none;
+      z-index:4;                /* above orbWrap (3) */
+      opacity:0;
+    }
+
+    .shockwave.on{
+      animation: shockFade 500ms ease-out forwards;
+    }
+
+    @keyframes shockFade{
+      0%   { opacity:1; transform: translate(-50%,-50%) scale(0.08); filter: blur(0px); }
+      60%  { opacity:0.95; transform: translate(-50%,-50%) scale(1.00); filter: blur(0.35px); }
+      100% { opacity:0; transform: translate(-50%,-50%) scale(1.02); filter: blur(1.2px); }
+    }
+
+    .shockSvg{
+      width:100%;
+      height:100%;
+      overflow:visible;
+      filter: drop-shadow(0 0 10px var(--shockGlow));
+    }
+
+    .ring{
+      fill:none;
+      stroke: var(--shock);
+      stroke-width: 2.2;
+      opacity: 0.95;
+      stroke-linecap: round;
+      vector-effect: non-scaling-stroke;
+    }
+
+    /* "sinusoidal" vibe: animate dashoffset while using a dash pattern.
+       Each ring has a different phase speed so you get rippling interference. */
+    .ring.r1{ stroke-width:2.0; stroke-dasharray: 5 6 3 6; animation: wave 500ms linear forwards; }
+    .ring.r2{ stroke-width:2.2; stroke-dasharray: 7 6 4 7; animation: wave 500ms linear forwards; }
+    .ring.r3{ stroke-width:2.4; stroke-dasharray: 9 7 5 8; animation: wave 500ms linear forwards; }
+    .ring.r4{ stroke-width:2.6; stroke-dasharray: 11 8 6 9; animation: wave 500ms linear forwards; }
+
+    @keyframes wave{
+      0%   { stroke-dashoffset: 0;   opacity:0.95; }
+      100% { stroke-dashoffset: -120; opacity:0.10; }
+    }
+
+    /* Slight inner bloom */
+    .ring.glow{
+      stroke: rgba(255,60,60,0.55);
+      stroke-width: 6;
+      opacity: 0.18;
+      filter: blur(0.7px);
     }
 
     .physControls{
@@ -496,12 +557,12 @@
             <div id="vSpeed" class="meterVal">0%</div>
           </div>
 
-          <!-- Dynamics (two lamps: stability + hit) -->
+          <!-- Dynamics (stability + variability) -->
           <div class="barLabel"><div>Dynamics</div><span class="dim"> </span></div>
           <div class="meterRow">
             <div class="bar barShort"><div id="bDynamics" class="fill"></div></div>
             <div id="dynLampStable" class="lamp dyn" aria-label="Stability lamp"></div>
-            <div id="dynLampHit" class="lamp dyn" aria-label="Dynamics hit lamp"></div>
+            <div id="dynLampHit" class="lamp dyn" aria-label="Variability lamp"></div>
             <div id="vDynamics" class="meterVal">0%</div>
           </div>
 
@@ -532,6 +593,33 @@
         <div id="physStage" class="physStage" aria-label="Physics test stage">
           <canvas id="stars" class="starCanvas" aria-hidden="true"></canvas>
           <div class="groundLine" aria-label="Ground"></div>
+
+          <!-- SHOCKWAVE LAYER -->
+          <div id="shockwave" class="shockwave" aria-hidden="true">
+            <svg class="shockSvg" viewBox="0 0 600 600" xmlns="http://www.w3.org/2000/svg">
+              <defs>
+                <radialGradient id="shockFade" cx="50%" cy="50%" r="50%">
+                  <stop offset="0%"   stop-color="rgba(255,60,60,0.0)"/>
+                  <stop offset="40%"  stop-color="rgba(255,60,60,0.12)"/>
+                  <stop offset="75%"  stop-color="rgba(255,60,60,0.06)"/>
+                  <stop offset="100%" stop-color="rgba(255,60,60,0.0)"/>
+                </radialGradient>
+              </defs>
+
+              <!-- soft fill "blast" -->
+              <circle cx="300" cy="300" r="290" fill="url(#shockFade)" opacity="0.9"></circle>
+
+              <!-- concentric wavy rings -->
+              <circle class="ring glow" cx="300" cy="300" r="120"></circle>
+              <circle class="ring glow" cx="300" cy="300" r="190"></circle>
+              <circle class="ring glow" cx="300" cy="300" r="260"></circle>
+
+              <circle class="ring r1" cx="300" cy="300" r="120"></circle>
+              <circle class="ring r2" cx="300" cy="300" r="190"></circle>
+              <circle class="ring r3" cx="300" cy="300" r="260"></circle>
+              <circle class="ring r4" cx="300" cy="300" r="300"></circle>
+            </svg>
+          </div>
 
           <div id="orbWrap" class="orbWrap" aria-hidden="true">
             <div id="shield" class="shield" aria-label="Stability shield"></div>
@@ -655,6 +743,8 @@
       teleClose: $("teleClose"),
       teleRecBtn: $("teleRecBtn"),
       teleOut: $("teleOut"),
+
+      shockwave: $("shockwave"),
     };
 
     const WORKER_BASE = "https://orb-token.mrgarthwilliams.workers.dev";
@@ -709,12 +799,34 @@
     }
 
     // =========================================================================
+    // SHOCKWAVE TRIGGER (shake lamp triggers)
+    // =========================================================================
+    const SHOCK_DURATION_MS = 500;
+
+    let shockTO = null;
+    function triggerShockwave(){
+      if (!els.shockwave) return;
+
+      // restart animation cleanly
+      els.shockwave.classList.remove("on");
+      // force reflow
+      void els.shockwave.offsetWidth;
+      els.shockwave.classList.add("on");
+
+      if (shockTO) clearTimeout(shockTO);
+      shockTO = setTimeout(() => {
+        els.shockwave.classList.remove("on");
+        shockTO = null;
+      }, SHOCK_DURATION_MS + 30);
+    }
+
+    // =========================================================================
     // BACKGROUND (driven by receiver energy bank UI)
     // =========================================================================
     const BG0 = { r: 0,   g: 0,  b: 0  };
     const BG1 = { r: 255, g: 42, b: 0  };
     function setBgFromEnergy(e01) {
-      const t = clamp01(e01); // visual charge is 0..1
+      const t = clamp01(e01);
       const r = Math.round(BG0.r + (BG1.r - BG0.r) * t);
       const g = Math.round(BG0.g + (BG1.g - BG0.g) * t);
       const b = Math.round(BG0.b + (BG1.b - BG0.b) * t);
@@ -728,7 +840,7 @@
     setBgFromEnergy(0);
 
     // =========================================================================
-    // AUDIO (optional) — unchanged behavior, but driven by energy bank UI
+    // AUDIO (optional)
     // =========================================================================
     let audioEnabled = false;
     let audioCtx = null, osc = null, gainNode = null;
@@ -813,13 +925,13 @@
     });
 
     // =========================================================================
-    // LAMPS — independent timers
+    // LAMPS — shake only
     // =========================================================================
     let shakeLampTO = null;
-    let dynLampHitTO = null;
 
     function flashShakeLamp(ms = 400){
       els.shakeLamp.classList.add("on");
+      triggerShockwave(); // <-- shockwave triggers when shake lamp triggers
       if (shakeLampTO) clearTimeout(shakeLampTO);
       shakeLampTO = setTimeout(() => {
         els.shakeLamp.classList.remove("on");
@@ -830,15 +942,6 @@
     function forceShakeLampOff(){
       if (shakeLampTO) { clearTimeout(shakeLampTO); shakeLampTO = null; }
       els.shakeLamp.classList.remove("on");
-    }
-
-    function flashDynHitLamp(ms = 420){
-      els.dynLampHit.classList.add("on");
-      if (dynLampHitTO) clearTimeout(dynLampHitTO);
-      dynLampHitTO = setTimeout(() => {
-        els.dynLampHit.classList.remove("on");
-        dynLampHitTO = null;
-      }, ms);
     }
 
     // =========================================================================
@@ -928,20 +1031,27 @@
     }
 
     // =========================================================================
-    // STABILITY (power-up) — sustain-based, no cooldown
+    // STABILITY + VARIABILITY (no cooldown)
     // =========================================================================
-    const STABILITY_AVG_MS   = 250;
-    const STABILITY_ARM_MS   = 220;
-    const STABILITY_ON_THR   = 0.08;
-    const STABILITY_OFF_THR  = 0.10;
+    const DYN_AVG_MS   = 250;
+    const STABILITY_ARM_MS = 220;
+    const STABILITY_ON_THR  = 0.08;
+    const STABILITY_OFF_THR = 0.10;
+
+    const VARIABILITY_ARM_MS = 220;
+    const VARIABILITY_ON_THR  = 0.86;
+    const VARIABILITY_OFF_THR = 0.82;
 
     let dynSamples = [];
+
     let stabilityOn = false;
     let stabilityHoldMs = 0;
     let stabilityLastMs = 0;
 
-    // --- NEW: visual gating (grounded OR speed<2% => NO lamp, NO bubble) -----
-    const STABILITY_SPEED_MIN = 0.02; // 2%
+    let variabilityOn = false;
+    let variabilityHoldMs = 0;
+
+    const STABILITY_SPEED_MIN = 0.02;
     let stabilityVisualGate = true;
 
     function applyStabilityVisuals(){
@@ -950,21 +1060,33 @@
       if (els.shield) els.shield.classList.toggle("on", show);
     }
 
+    function applyVariabilityVisuals(){
+      const show = !!variabilityOn && !!stabilityVisualGate;
+      els.dynLampHit.classList.toggle("on", show);
+    }
+
     function setStability(on){
       stabilityOn = !!on;
       applyStabilityVisuals();
     }
-    // ------------------------------------------------------------------------
 
-    function resetStability(){
+    function setVariability(on){
+      variabilityOn = !!on;
+      applyVariabilityVisuals();
+    }
+
+    function resetStabilityVariability(){
       dynSamples = [];
       stabilityOn = false;
       stabilityHoldMs = 0;
       stabilityLastMs = 0;
+      variabilityOn = false;
+      variabilityHoldMs = 0;
       setStability(false);
+      setVariability(false);
     }
 
-    function updateStability(dyn01, nowMs){
+    function updateStabilityVariability(dyn01, nowMs){
       const v = clamp01(dyn01);
 
       if (!stabilityLastMs) stabilityLastMs = nowMs;
@@ -973,12 +1095,14 @@
       dt = clamp(dt, 0, 80);
 
       dynSamples.push({ t: nowMs, v });
-      const cutoff = nowMs - STABILITY_AVG_MS;
+      const cutoff = nowMs - DYN_AVG_MS;
       while (dynSamples.length && dynSamples[0].t < cutoff) dynSamples.shift();
 
       if (!dynSamples.length){
         stabilityHoldMs = 0;
+        variabilityHoldMs = 0;
         if (stabilityOn) setStability(false);
+        if (variabilityOn) setVariability(false);
         return;
       }
 
@@ -986,17 +1110,24 @@
       for (const s of dynSamples) sum += s.v;
       const avg = sum / dynSamples.length;
 
-      const thr = stabilityOn ? STABILITY_OFF_THR : STABILITY_ON_THR;
+      const thrStab = stabilityOn ? STABILITY_OFF_THR : STABILITY_ON_THR;
 
-      if (avg <= thr){
+      if (avg <= thrStab){
         stabilityHoldMs += dt;
-
-        if (!stabilityOn && stabilityHoldMs >= STABILITY_ARM_MS){
-          setStability(true);
-        }
+        if (!stabilityOn && stabilityHoldMs >= STABILITY_ARM_MS) setStability(true);
       } else {
         stabilityHoldMs = 0;
         if (stabilityOn) setStability(false);
+      }
+
+      const thrVar = variabilityOn ? VARIABILITY_OFF_THR : VARIABILITY_ON_THR;
+
+      if (avg >= thrVar){
+        variabilityHoldMs += dt;
+        if (!variabilityOn && variabilityHoldMs >= VARIABILITY_ARM_MS) setVariability(true);
+      } else {
+        variabilityHoldMs = 0;
+        if (variabilityOn) setVariability(false);
       }
     }
 
@@ -1017,7 +1148,7 @@
       currentRoomChannel = "orb:" + randCode(6);
       await connect({ auto:false });
       resetShakeDetector();
-      resetStability();
+      resetStabilityVariability();
       resetEnergyBank();
       openPairModal();
     });
@@ -1064,7 +1195,7 @@
     }
 
     // =========================================================================
-    // TELEMETRY MODAL — unchanged
+    // TELEMETRY MODAL
     // =========================================================================
     let teleRecording = false;
     let teleT0 = 0;
@@ -1184,7 +1315,7 @@
     let currentRoomChannel = normalizeRoom(readUrlRoomOrNull() || "orb:test");
 
     // =========================================================================
-    // PHYSICS + STARFIELD — unchanged (with tiny grounded flag)
+    // PHYSICS + STARFIELD
     // =========================================================================
     const WORLD_H = 2500;
 
@@ -1218,7 +1349,6 @@
       energy01: 0,
       dynamics01: 0,
 
-      // NEW: grounded flag (used only for stability visuals)
       onGround: false,
     };
 
@@ -1247,7 +1377,7 @@
     function resetOrbToGround(){
       physState.yW = groundCenterWorld();
       physState.v = 0;
-      physState.onGround = true; // NEW
+      physState.onGround = true;
       applyOrbTransform();
     }
 
@@ -1415,13 +1545,12 @@
       const yFloor = groundCenterWorld();
       const yCeil  = PHYS.orbRadiusPx;
 
-      // NEW: default to not grounded; set true only if clamped to floor
       physState.onGround = false;
 
       if (physState.yW > yFloor) {
         physState.yW = yFloor;
         if (physState.v > 0) physState.v = 0;
-        physState.onGround = true; // NEW
+        physState.onGround = true;
       }
 
       if (physState.yW < yCeil) {
@@ -1436,7 +1565,7 @@
     requestAnimationFrame(physicsStep);
 
     // =========================================================================
-    // ABLY RECEIVER — unchanged plumbing
+    // ABLY RECEIVER
     // =========================================================================
     let realtime = null;
     let channel = null;
@@ -1531,7 +1660,6 @@
       const shake    = pick01NewOrOld("shake01", "shake");
       const locked   = !!d.locked;
 
-      // receiver energy bank updates first (so UI + gating use bank)
       updateEnergyBankFromPhone(energyFromPhone, nowMs);
 
       const energyUI01 = energyBankPts / 100;
@@ -1544,7 +1672,6 @@
 
       setBgFromEnergy(energyUI01);
 
-      // meter values (all same medium-ish size)
       const liftP = Math.round(clamp01(lift) * 100);
       const gP = Math.round(clamp01(groove) * 100);
       const sP = Math.round(clamp01(smooth) * 100);
@@ -1561,7 +1688,6 @@
       els.vEnergy.textContent   = `${ePts}%`;
       els.vShake.textContent    = `${Math.max(0, sh)}%`;
 
-      // bars (energy uses bank UI)
       setBar(els.bLift,  lift);
       setBar(els.bGroove, groove);
       setBar(els.bSmooth, smooth);
@@ -1574,27 +1700,16 @@
       els.vEnergy.classList.toggle("over", over);
       els.bEnergy.classList.toggle("over", over);
 
-      // NEW: stability visuals ONLY when NOT grounded AND speed >= 2%
+      // Visual gate for BOTH stability + variability
       stabilityVisualGate = (!physState.onGround) && (clamp01(speed) >= STABILITY_SPEED_MIN);
-      applyStabilityVisuals(); // ensures immediate hide/show without touching stability logic
+      applyStabilityVisuals();
+      applyVariabilityVisuals();
 
-      // ✅ STABILITY (sustained low dynamics)
-      updateStability(dynamics, nowMs);
+      // Sustained low/high dynamics detectors
+      updateStabilityVariability(dynamics, nowMs);
 
-      // ✅ SHAKE double-bang (receiver-side), energy gated + cooldown
+      // Shake double-bang
       processShakeDoubleBang(shake, nowMs);
-
-      // dynamics hit lamp (second one)
-      const dynHit =
-        d.dynHit === true ||
-        d.dynamicsHit === true ||
-        d.dynEvent === true ||
-        (typeof d.dynEvent === "string" && d.dynEvent) ||
-        (Number(d.dynamicsHit01) > 0.5) ||
-        (Number(d.dyn01) > 0.5);
-
-      const dynSpike = (clamp01(dynamics) >= 0.86);
-      if (dynHit || dynSpike) flashDynHitLamp(420);
 
       setAudio(energyUI01, groove, locked);
     }
@@ -1667,7 +1782,7 @@
     els.newRoom.addEventListener("click", async () => {
       currentRoomChannel = "orb:test";
       resetShakeDetector();
-      resetStability();
+      resetStabilityVariability();
       resetEnergyBank();
       await connect({ auto:false });
       openPairModal();
