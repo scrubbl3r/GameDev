@@ -99,18 +99,35 @@
     .over{ color: var(--over) !important; }
     .fill.over{ background: var(--over) !important; }
 
-    .big{
-      font-size:58px;
-      font-weight:1000;
-      margin:12px 0 8px;
+    /* -----------------------------------------------------------------------
+       PCT TYPOGRAPHY
+       - Lift pct becomes the "big" pct at end of Lift row
+       - Other pct readouts become 75% of big (approx)
+    ------------------------------------------------------------------------ */
+    .meterPct{
+      font-weight: 1000;
+      letter-spacing: -0.03em;
+      line-height: 0.95;
+      /* ~75% of big */
+      font-size: clamp(32px, 4.6vw, 44px);
+      text-shadow:
+        0 0 calc(8px + 28px * var(--charge)) rgba(50,255,117, calc(0.10 + 0.32 * var(--charge))),
+        0 0 calc(2px + 12px * var(--charge)) rgba(50,255,117, calc(0.08 + 0.22 * var(--charge)));
+    }
+    .meterPct.over{
+      text-shadow:
+        0 0 calc(8px + 28px * var(--charge)) rgba(255,212,0, calc(0.12 + 0.36 * var(--charge))),
+        0 0 calc(2px + 12px * var(--charge)) rgba(255,212,0, calc(0.08 + 0.24 * var(--charge)));
+    }
+    .meterPctBig{
+      /* big lift readout (replaces old left big %) */
+      font-size: clamp(44px, 6vw, 58px);
       letter-spacing:-0.04em;
-      line-height:0.92;
-      text-align:left;
       text-shadow:
         0 0 calc(10px + 40px * var(--charge)) rgba(50,255,117, calc(0.12 + 0.38 * var(--charge))),
         0 0 calc(2px + 18px * var(--charge)) rgba(50,255,117, calc(0.10 + 0.25 * var(--charge)));
     }
-    .big.over{
+    .meterPctBig.over{
       text-shadow:
         0 0 calc(10px + 40px * var(--charge)) rgba(255,212,0, calc(0.14 + 0.42 * var(--charge))),
         0 0 calc(2px + 18px * var(--charge)) rgba(255,212,0, calc(0.10 + 0.28 * var(--charge)));
@@ -126,13 +143,14 @@
       opacity:.92;
     }
 
+    /* 50% thicker meters */
     .bar{
-      height:14px;
+      height:21px; /* was 14px */
       border-radius:999px;
       border:1px solid rgba(50,255,117,.35);
       background:rgba(50,255,117,.08);
       overflow:hidden;
-      margin:8px 0 10px;
+      margin:10px 0 14px; /* give a little breathing room for bigger % */
     }
     .fill{
       height:100%;
@@ -211,12 +229,13 @@
     .barShort{
       flex:1 1 auto;
       max-width:none;
-      margin:8px 0 10px;
+      margin:10px 0 14px; /* match thicker bars */
     }
 
+    /* 50% bigger lamps */
     .lamp{
-      width:16px;
-      height:16px;
+      width:24px;  /* was 16px */
+      height:24px; /* was 16px */
       border-radius:999px;
       border:1px solid rgba(50,255,117,.35);
       background: rgba(0,0,0,.30);
@@ -397,7 +416,6 @@
 
     @media (max-width: 900px){
       .grid{grid-template-columns:1fr;}
-      .big{font-size:52px;}
       .qrBox{width: 240px; height:240px;}
     }
   </style>
@@ -428,33 +446,35 @@
           <span id="last" class="lastText">(none yet)</span>
         </div>
 
-        <div id="bigCharge" class="big"><span id="pct">0</span>%</div>
-
         <div class="bars">
-          <div class="barLabel"><div>Lift</div><span id="vLift">0</span></div>
+          <div class="barLabel">
+            <div>Lift</div>
+            <span id="vLift" class="meterPct meterPctBig">0%</span>
+          </div>
           <div class="bar"><div id="bLift" class="fill"></div></div>
 
-          <div class="barLabel"><div>Groove</div><span id="vGroove">0</span></div>
+          <div class="barLabel"><div>Groove</div><span id="vGroove" class="meterPct">0%</span></div>
           <div class="bar"><div id="bGroove" class="fill"></div></div>
 
-          <div class="barLabel"><div>Smooth</div><span id="vSmooth">0</span></div>
+          <div class="barLabel"><div>Smooth</div><span id="vSmooth" class="meterPct">0%</span></div>
           <div class="bar"><div id="bSmooth" class="fill"></div></div>
 
-          <div class="barLabel"><div>Speed</div><span id="vSpeed">0</span></div>
+          <div class="barLabel"><div>Speed</div><span id="vSpeed" class="meterPct">0%</span></div>
           <div class="bar"><div id="bSpeed" class="fill"></div></div>
 
-          <div class="barLabel"><div>Dynamics</div><span id="vDynamics">0</span></div>
+          <div class="barLabel"><div>Dynamics</div><span id="vDynamics" class="meterPct">0%</span></div>
           <div class="meterRow">
             <div class="bar barShort"><div id="bDynamics" class="fill"></div></div>
-            <div id="dynLamp" class="lamp dyn" aria-label="Dynamics trigger lamp"></div>
+            <div id="dynLamp" class="lamp dyn" aria-label="Dynamics trigger lamp A"></div>
+            <div id="dynLamp2" class="lamp dyn" aria-label="Dynamics trigger lamp B"></div>
           </div>
 
-          <div class="barLabel"><div>Energy</div><span id="vEnergy">0</span></div>
+          <div class="barLabel"><div>Energy</div><span id="vEnergy" class="meterPct">0%</span></div>
           <div class="bar"><div id="bEnergy" class="fill"></div></div>
 
           <div class="groupGap"></div>
 
-          <div class="barLabel"><div>Shake</div><span id="vShake">0</span></div>
+          <div class="barLabel"><div>Shake</div><span id="vShake" class="meterPct">0%</span></div>
           <div class="meterRow">
             <div class="bar barShort"><div id="bShake" class="fill"></div></div>
             <div id="shakeLamp" class="lamp" aria-label="Shake trigger lamp"></div>
@@ -545,9 +565,6 @@
       status: $("status"),
       last: $("last"),
 
-      bigCharge: $("bigCharge"),
-      pct: $("pct"),
-
       vLift:  $("vLift"),
       vGroove: $("vGroove"),
       vSmooth: $("vSmooth"),
@@ -565,6 +582,7 @@
       bShake:  $("bShake"),
 
       dynLamp: $("dynLamp"),
+      dynLamp2: $("dynLamp2"),
       shakeLamp: $("shakeLamp"),
       fatal: $("fatal"),
 
@@ -594,7 +612,6 @@
 
     function clamp01(x){ x = Number(x); return Math.max(0, Math.min(1, isFinite(x) ? x : 0)); }
     const toPct01  = (x01) => Math.round(clamp01(x01) * 100);
-    const toPctRaw = (x)   => Math.round(Math.max(0, Number(x) || 0) * 100);
     function clamp(v, lo, hi){ return Math.max(lo, Math.min(hi, v)); }
 
     function setBar(el, v01){
@@ -764,18 +781,17 @@
 
     function flashDynLamp(ms = 420){
       els.dynLamp.classList.add("on");
+      els.dynLamp2.classList.add("on");
       if (dynLampTO) clearTimeout(dynLampTO);
       dynLampTO = setTimeout(() => {
         els.dynLamp.classList.remove("on");
+        els.dynLamp2.classList.remove("on");
         dynLampTO = null;
       }, ms);
     }
 
     // =========================================================================
     // RECEIVER-SIDE ENERGY BANK (cap + spend)
-    // - Bank is kept local so spending persists
-    // - We "earn" bank only from POSITIVE deltas of incoming energy
-    // - Cap is 200 points (=> bank01 max 2.0)
     // =========================================================================
     const ENERGY_CAP_PTS   = 200;
     const SHAKE_COST_PTS   = 100;
@@ -814,18 +830,7 @@
     }
 
     // =========================================================================
-    // SHAKE DOUBLE-BANG (Option B + forgiving spend)
-    //
-    // - "Hit" = shake >= 1.0 AND debounced by time (no need to dip below)
-    // - DOUBLEBANG_MS default 400
-    // - COOLDOWN_MS default 2000
-    //
-    // Behavior:
-    // - 1st hit arms
-    // - 2nd hit within window attempts detonation:
-    //     - if bank >= 100 => spend + lamp
-    //     - else => no lamp (forgiving)
-    //   In both cases: enter cooldown, clear baton.
+    // SHAKE DOUBLE-BANG (forgiving spend)
     // =========================================================================
     const SHAKE_DOUBLEBANG_MS = 400;
     const SHAKE_COOLDOWN_MS   = 2000;
@@ -847,8 +852,6 @@
         spendShake();
         flashShakeLamp(400);
       }
-      // forgiving: if not enough energy, we simply don't flash,
-      // but the double-bang "still happened" and we cool down.
       enterShakeCooldown(nowMs);
     }
 
@@ -865,7 +868,6 @@
       if (dt <= SHAKE_DOUBLEBANG_MS){
         attemptDetonation(nowMs);
       } else {
-        // too late -> carry baton
         shakeFirstHitAt = nowMs;
       }
     }
@@ -1407,7 +1409,6 @@
       const shake    = pick01NewOrOld("shake01", "shake");
       const locked   = !!d.locked;
 
-      // update receiver-side bank from incoming energy feed (positive deltas only)
       updateBankFromIncomingEnergy(incomingEnergy);
 
       const lift = computeLift01(groove, smooth, speed);
@@ -1416,11 +1417,8 @@
       physState.energy01 = Math.max(0, Number(incomingEnergy) || 0);
       physState.dynamics01 = dynamics;
 
-      // use BANK for visuals/audio; clamp background drive to 0..1
       const eBank01 = bank01(); // 0..2
       setBgFromEnergy(Math.min(1, eBank01));
-
-      els.pct.textContent = toPct01(lift);
 
       const liftP = toPct01(lift);
       const gP = toPct01(groove);
@@ -1435,7 +1433,6 @@
       els.vSpeed.textContent    = `${sp}%`;
       els.vDynamics.textContent = `${dP}%`;
 
-      // ENERGY UI now shows BANK (0..200%)
       const bankPct = Math.round(clamp(eBank01, 0, 2) * 100);
       els.vEnergy.textContent   = `${bankPct}%`;
 
@@ -1447,7 +1444,6 @@
       setBar(els.bSpeed,  speed);
       setBar(els.bDynamics, dynamics);
 
-      // Energy bar is bank mapped into 0..1 fill (cap at 100% visually)
       setBar(els.bEnergy, Math.min(1, eBank01));
       setBar(els.bShake,  shake);
 
@@ -1455,10 +1451,8 @@
       els.vEnergy.classList.toggle("over", over);
       els.bEnergy.classList.toggle("over", over);
 
-      // ✅ SHAKE DOUBLE-BANG (receiver-side, now spending from bank)
       processShakeDoubleBang(shake, performance.now());
 
-      // dynamics lamp
       const dynHit =
         d.dynHit === true ||
         d.dynamicsHit === true ||
@@ -1470,7 +1464,6 @@
       const dynSpike = (clamp01(dynamics) >= 0.86);
       if (dynHit || dynSpike) flashDynLamp(420);
 
-      // audio driven by BANK intensity (0..1)
       setAudio(Math.min(1, eBank01), groove, locked);
     }
 
@@ -1538,7 +1531,6 @@
       connecting = false;
     }
 
-    // DEV button forces room=test always + launches QR
     els.newRoom.addEventListener("click", async () => {
       currentRoomChannel = "orb:test";
       resetShakeDetector();
