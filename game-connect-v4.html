@@ -594,6 +594,7 @@
 
     function clamp01(x){ x = Number(x); return Math.max(0, Math.min(1, isFinite(x) ? x : 0)); }
     const toPct01  = (x01) => Math.round(clamp01(x01) * 100);
+    const toPctRaw = (x)   => Math.round(Math.max(0, Number(x) || 0) * 100);
     function clamp(v, lo, hi){ return Math.max(lo, Math.min(hi, v)); }
 
     function setBar(el, v01){
@@ -747,12 +748,12 @@
     });
 
     // =========================================================================
-    // LAMPS (shake + dynamics) — independent timers (no shared cancel)
+    // LAMPS (shake + dynamics) — independent timers
     // =========================================================================
     let shakeLampTO = null;
     let dynLampTO = null;
 
-    function flashShakeLamp(ms = 250){
+    function flashShakeLamp(ms = 400){
       els.shakeLamp.classList.add("on");
       if (shakeLampTO) clearTimeout(shakeLampTO);
       shakeLampTO = setTimeout(() => {
@@ -771,59 +772,90 @@
     }
 
     // =========================================================================
-    // ENERGY BANK (spendable capacitor, points = "%")
-    // - incoming energy01 can be > 1.0 (overcharge)
-    // - bank only increases from play, and only decreases when you spend it
-    // - shake detonation costs 100 points
+    // RECEIVER-SIDE ENERGY BANK (cap + spend)
+    // - Bank is kept local so spending persists
+    // - We "earn" bank only from POSITIVE deltas of incoming energy
+    // - Cap is 200 points (=> bank01 max 2.0)
     // =========================================================================
-    const ENERGY_SHAKE_COST_PTS = 100;
-    let energyBankPts = 0;
+    const ENERGY_CAP_PTS   = 200;
+    const SHAKE_COST_PTS   = 100;
 
-    function updateEnergyBankFromIncoming(rawEnergy01){
-      const pts = Math.max(0, (Number(rawEnergy01) || 0) * 100);
-      if (pts > energyBankPts) energyBankPts = pts; // pool upward (cap stays charged)
+    let bankPts = 0;
+    let lastIncomingEnergyPts = 0;
+
+    function resetEnergyBank(){
+      bankPts = 0;
+      lastIncomingEnergyPts = 0;
+    }
+
+    function bank01(){
+      return bankPts / 100; // 0..2
+    }
+
+    function updateBankFromIncomingEnergy(incomingEnergy01){
+      const inc01 = Math.max(0, Number(incomingEnergy01) || 0); // allow >1.0 (overcharge)
+      const incomingPts = inc01 * 100;
+
+      const delta = incomingPts - lastIncomingEnergyPts;
+      lastIncomingEnergyPts = incomingPts;
+
+      if (delta > 0) bankPts += delta;
+
+      if (bankPts > ENERGY_CAP_PTS) bankPts = ENERGY_CAP_PTS;
+      if (bankPts < 0) bankPts = 0;
     }
 
     function canSpendShake(){
-      return energyBankPts >= ENERGY_SHAKE_COST_PTS;
+      return bankPts >= SHAKE_COST_PTS;
     }
 
     function spendShake(){
-      if (!canSpendShake()) return false;
-      energyBankPts = Math.max(0, energyBankPts - ENERGY_SHAKE_COST_PTS);
-      return true;
+      bankPts = Math.max(0, bankPts - SHAKE_COST_PTS);
     }
 
     // =========================================================================
-    // SHAKE DOUBLE-BANG (Option B) + ENERGY GATE (forgiving)
+    // SHAKE DOUBLE-BANG (Option B + forgiving spend)
     //
     // - "Hit" = shake >= 1.0 AND debounced by time (no need to dip below)
     // - DOUBLEBANG_MS default 400
-    // - COOLDOWN_MS default 500
-    // - On success: spend 100 energy points, flash lamp briefly, then blank until rearm
-    // - Forgiving: if energy too low, the double-bang "happened" but fails (no lamp), and re-arm normally
+    // - COOLDOWN_MS default 2000
+    //
+    // Behavior:
+    // - 1st hit arms
+    // - 2nd hit within window attempts detonation:
+    //     - if bank >= 100 => spend + lamp
+    //     - else => no lamp (forgiving)
+    //   In both cases: enter cooldown, clear baton.
     // =========================================================================
     const SHAKE_DOUBLEBANG_MS = 400;
-    const SHAKE_COOLDOWN_MS   = 500;
-    const SHAKE_BLAST_MS      = 250;
+    const SHAKE_COOLDOWN_MS   = 2000;
 
-    // Count a hit when the UI meter is pegged "100%+" (shake01 ~ 1.0+)
     const SHAKE_HIT_THR = 0.995;
-
-    // Prevent "held at 1.0" from becoming infinite hits:
-    // must be at least this many ms between recognized hits
     const SHAKE_HIT_DEBOUNCE_MS = 120;
 
     let shakeFirstHitAt = 0;        // ms (0 = not armed)
     let shakeLastHitAt  = -1e9;     // ms
     let shakeCooldownUntil = 0;     // ms
 
+    function enterShakeCooldown(nowMs){
+      shakeCooldownUntil = nowMs + SHAKE_COOLDOWN_MS;
+      shakeFirstHitAt = 0;
+    }
+
+    function attemptDetonation(nowMs){
+      if (canSpendShake()){
+        spendShake();
+        flashShakeLamp(400);
+      }
+      // forgiving: if not enough energy, we simply don't flash,
+      // but the double-bang "still happened" and we cool down.
+      enterShakeCooldown(nowMs);
+    }
+
     function registerShakeHit(nowMs){
-      // cooldown: ignore hits completely (no baton update)
       if (nowMs < shakeCooldownUntil) return;
 
       if (!shakeFirstHitAt){
-        // first hit arms the window
         shakeFirstHitAt = nowMs;
         return;
       }
@@ -831,15 +863,7 @@
       const dt = nowMs - shakeFirstHitAt;
 
       if (dt <= SHAKE_DOUBLEBANG_MS){
-        // Attempt detonation (energy gate)
-        if (spendShake()){
-          // SUCCESS -> lamp blast + cooldown + clear baton
-          flashShakeLamp(SHAKE_BLAST_MS);
-          shakeCooldownUntil = nowMs + SHAKE_COOLDOWN_MS;
-        }
-        // FAIL (forgiving) -> no lamp, no cooldown
-        // Either way: clear baton so next hit re-arms normally
-        shakeFirstHitAt = 0;
+        attemptDetonation(nowMs);
       } else {
         // too late -> carry baton
         shakeFirstHitAt = nowMs;
@@ -849,10 +873,8 @@
     function processShakeDoubleBang(shakeVal01, nowMs){
       const v = Number(shakeVal01);
       if (!isFinite(v)) return;
-
       if (v < SHAKE_HIT_THR) return;
 
-      // time debounce: only count a hit every N ms at most
       if ((nowMs - shakeLastHitAt) < SHAKE_HIT_DEBOUNCE_MS) return;
 
       shakeLastHitAt = nowMs;
@@ -863,8 +885,6 @@
       shakeFirstHitAt = 0;
       shakeLastHitAt = -1e9;
       shakeCooldownUntil = 0;
-      if (shakeLampTO) { clearTimeout(shakeLampTO); shakeLampTO = null; }
-      els.shakeLamp.classList.remove("on");
     }
 
     // =========================================================================
@@ -884,6 +904,7 @@
       currentRoomChannel = "orb:" + randCode(6);
       await connect({ auto:false });
       resetShakeDetector();
+      resetEnergyBank();
       openPairModal();
     });
 
@@ -929,7 +950,7 @@
     }
 
     // =========================================================================
-    // TELEMETRY MODAL — unchanged (kept for your workflow)
+    // TELEMETRY MODAL — unchanged
     // =========================================================================
     let teleRecording = false;
     let teleT0 = 0;
@@ -1049,7 +1070,7 @@
     let currentRoomChannel = normalizeRoom(readUrlRoomOrNull() || "orb:test");
 
     // =========================================================================
-    // PHYSICS + STARFIELD — unchanged from your previous working build
+    // PHYSICS + STARFIELD — unchanged
     // =========================================================================
     const WORLD_H = 2500;
 
@@ -1378,34 +1399,26 @@
         return (n > 1.5) ? (n / 100) : n;
       }
 
-      const rawEnergy01 = pick01NewOrOld("energy01", "energy");
-      const groove      = pick01NewOrOld("groove01", "groove");
-      const dynamics    = pick01NewOrOld("dynamics01", "orbit01");
-      const smooth      = pick01NewOrOld("smooth01", "smooth");
-      const speed       = pick01NewOrOld("speed01", "speed");
-      const shake       = pick01NewOrOld("shake01", "shake");
-      const locked      = !!d.locked;
+      const incomingEnergy = pick01NewOrOld("energy01", "energy"); // raw feed (can be >1)
+      const groove   = pick01NewOrOld("groove01", "groove");
+      const dynamics = pick01NewOrOld("dynamics01", "orbit01");
+      const smooth   = pick01NewOrOld("smooth01", "smooth");
+      const speed    = pick01NewOrOld("speed01", "speed");
+      const shake    = pick01NewOrOld("shake01", "shake");
+      const locked   = !!d.locked;
 
-      // build/pool the capacitor from incoming energy
-      updateEnergyBankFromIncoming(rawEnergy01);
+      // update receiver-side bank from incoming energy feed (positive deltas only)
+      updateBankFromIncomingEnergy(incomingEnergy);
 
-      // compute lift from movement signals
       const lift = computeLift01(groove, smooth, speed);
 
-      // receiver-side values for game world
-      const bank01 = energyBankPts / 100;
-
       physState.lift01 = lift;
-      physState.energy01 = bank01;
+      physState.energy01 = Math.max(0, Number(incomingEnergy) || 0);
       physState.dynamics01 = dynamics;
 
-      // ✅ SHAKE DOUBLE-BANG (receiver-side) — may spend energyBankPts
-      processShakeDoubleBang(shake, performance.now());
-
-      // reflect *post-spend* bank into UI + glow/audio
-      const bank01Post = energyBankPts / 100;
-
-      setBgFromEnergy(bank01Post);
+      // use BANK for visuals/audio; clamp background drive to 0..1
+      const eBank01 = bank01(); // 0..2
+      setBgFromEnergy(Math.min(1, eBank01));
 
       els.pct.textContent = toPct01(lift);
 
@@ -1421,27 +1434,31 @@
       els.vSmooth.textContent   = `${sP}%`;
       els.vSpeed.textContent    = `${sp}%`;
       els.vDynamics.textContent = `${dP}%`;
-      els.vShake.textContent    = `${sh}%`;
 
-      // Energy is now the spendable bank (points == %)
-      const ePts = Math.round(energyBankPts);
-      els.vEnergy.textContent   = `${ePts}%`;
+      // ENERGY UI now shows BANK (0..200%)
+      const bankPct = Math.round(clamp(eBank01, 0, 2) * 100);
+      els.vEnergy.textContent   = `${bankPct}%`;
+
+      els.vShake.textContent    = `${sh}%`;
 
       setBar(els.bLift,  lift);
       setBar(els.bGroove, groove);
       setBar(els.bSmooth, smooth);
       setBar(els.bSpeed,  speed);
       setBar(els.bDynamics, dynamics);
+
+      // Energy bar is bank mapped into 0..1 fill (cap at 100% visually)
+      setBar(els.bEnergy, Math.min(1, eBank01));
       setBar(els.bShake,  shake);
 
-      // bar caps at 100% visually; overcharge still shows in number + glow
-      setBar(els.bEnergy, bank01Post);
-
-      const over = (energyBankPts > 100);
+      const over = (eBank01 > 1);
       els.vEnergy.classList.toggle("over", over);
       els.bEnergy.classList.toggle("over", over);
 
-      // dynamics lamp (unchanged behavior)
+      // ✅ SHAKE DOUBLE-BANG (receiver-side, now spending from bank)
+      processShakeDoubleBang(shake, performance.now());
+
+      // dynamics lamp
       const dynHit =
         d.dynHit === true ||
         d.dynamicsHit === true ||
@@ -1453,7 +1470,8 @@
       const dynSpike = (clamp01(dynamics) >= 0.86);
       if (dynHit || dynSpike) flashDynLamp(420);
 
-      setAudio(bank01Post, groove, locked);
+      // audio driven by BANK intensity (0..1)
+      setAudio(Math.min(1, eBank01), groove, locked);
     }
 
     let connecting = false;
@@ -1524,6 +1542,7 @@
     els.newRoom.addEventListener("click", async () => {
       currentRoomChannel = "orb:test";
       resetShakeDetector();
+      resetEnergyBank();
       await connect({ auto:false });
       openPairModal();
     });
