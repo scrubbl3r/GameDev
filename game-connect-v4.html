@@ -31,10 +31,6 @@
       --bg-r: 0;
       --bg-g: 0;
       --bg-b: 0;
-
-      /* shockwave */
-      --shock: rgba(255, 60, 60, 0.92);
-      --shockGlow: rgba(255, 60, 60, 0.30);
     }
 
     html,body{
@@ -294,20 +290,17 @@
       pointer-events:none;
     }
 
+    /* ✅ CLEAN ORB: no glow, no halo, no inset glow — just outline + fill */
     .orb{
       position:absolute;
       inset:0;
       border-radius:999px;
       border:2px solid var(--g);
-      background: rgba(var(--bg-r), var(--bg-g), var(--bg-b), 0.38);
-      box-shadow:
-        0 0 18px rgba(50,255,117,.10),
-        0 0 34px rgba(var(--bg-r), var(--bg-g), var(--bg-b), 0.22),
-        0 0 60px rgba(var(--bg-r), var(--bg-g), var(--bg-b), calc(0.12 + 0.36 * var(--charge))),
-        0 0 120px rgba(var(--bg-r), var(--bg-g), var(--bg-b), calc(0.05 + 0.24 * var(--charge))),
-        inset 0 0 0 1px rgba(0,0,0,.30);
+      background: rgba(var(--bg-r), var(--bg-g), var(--bg-b), 0.30);
+      box-shadow: none;
     }
 
+    /* bubble shield (stability power-up) */
     .shield{
       position:absolute;
       inset:-10px;
@@ -333,67 +326,55 @@
     }
 
     /* =========================================================================
-       SHOCKWAVE — concentric sinusoidal (wavy) rings (red)
-       Radius: 300px. Duration: 500ms.
-       Uses SVG circles with animated stroke-dashoffset to create a wavy ring feel.
+       ✅ SHOCKWAVE (shake-triggered)
+       - Duration: 200ms
+       - Size: 300px x 300px
        ========================================================================= */
     .shockwave{
       position:absolute;
       left:50%;
       top:50%;
-      width:300px;              /* radius*2 */
+      width:300px;
       height:300px;
       transform: translate(-50%, -50%);
-      pointer-events:none;
-      z-index:4;                /* above orbWrap (3) */
       opacity:0;
+      pointer-events:none;
+      z-index:4;
+      mix-blend-mode: screen;
+      filter:none;
     }
-
     .shockwave.on{
-      animation: shockFade 500ms ease-out forwards;
+      opacity:1;
+      animation: shockFade 200ms linear forwards;
     }
 
-    @keyframes shockFade{
-      0%   { opacity:1; transform: translate(-50%,-50%) scale(0.08); filter: blur(0px); }
-      60%  { opacity:0.95; transform: translate(-50%,-50%) scale(1.00); filter: blur(0.35px); }
-      100% { opacity:0; transform: translate(-50%,-50%) scale(1.02); filter: blur(1.2px); }
-    }
-
-    .shockSvg{
+    .shockwave svg{
       width:100%;
       height:100%;
-      overflow:visible;
-      filter: drop-shadow(0 0 10px var(--shockGlow));
+      display:block;
     }
 
     .ring{
-      fill:none;
-      stroke: var(--shock);
-      stroke-width: 2.2;
+      transform-origin: 50% 50%;
       opacity: 0.95;
-      stroke-linecap: round;
-      vector-effect: non-scaling-stroke;
     }
 
-    /* "sinusoidal" vibe: animate dashoffset while using a dash pattern.
-       Each ring has a different phase speed so you get rippling interference. */
-    .ring.r1{ stroke-width:2.0; stroke-dasharray: 5 6 3 6; animation: wave 500ms linear forwards; }
-    .ring.r2{ stroke-width:2.2; stroke-dasharray: 7 6 4 7; animation: wave 500ms linear forwards; }
-    .ring.r3{ stroke-width:2.4; stroke-dasharray: 9 7 5 8; animation: wave 500ms linear forwards; }
-    .ring.r4{ stroke-width:2.6; stroke-dasharray: 11 8 6 9; animation: wave 500ms linear forwards; }
+    /* expand outward while fading */
+    @keyframes shockFade{
+      0%   { transform: translate(-50%, -50%) scale(0.10); opacity: 1; }
+      100% { transform: translate(-50%, -50%) scale(1.00); opacity: 0; }
+    }
 
+    /* subtle sinusoidal “wobble” around the ring strokes */
     @keyframes wave{
-      0%   { stroke-dashoffset: 0;   opacity:0.95; }
-      100% { stroke-dashoffset: -120; opacity:0.10; }
+      0%   { stroke-dashoffset: 0; }
+      100% { stroke-dashoffset: -80; }
     }
 
-    /* Slight inner bloom */
-    .ring.glow{
-      stroke: rgba(255,60,60,0.55);
-      stroke-width: 6;
-      opacity: 0.18;
-      filter: blur(0.7px);
-    }
+    .ring.r1{ animation: wave 200ms linear infinite; }
+    .ring.r2{ animation: wave 200ms linear infinite; }
+    .ring.r3{ animation: wave 200ms linear infinite; }
+    .ring.r4{ animation: wave 200ms linear infinite; }
 
     .physControls{
       margin-top:12px;
@@ -557,12 +538,12 @@
             <div id="vSpeed" class="meterVal">0%</div>
           </div>
 
-          <!-- Dynamics (stability + variability) -->
+          <!-- Dynamics (two lamps: stability + variability) -->
           <div class="barLabel"><div>Dynamics</div><span class="dim"> </span></div>
           <div class="meterRow">
             <div class="bar barShort"><div id="bDynamics" class="fill"></div></div>
             <div id="dynLampStable" class="lamp dyn" aria-label="Stability lamp"></div>
-            <div id="dynLampHit" class="lamp dyn" aria-label="Variability lamp"></div>
+            <div id="dynLampVar" class="lamp dyn" aria-label="Variability lamp"></div>
             <div id="vDynamics" class="meterVal">0%</div>
           </div>
 
@@ -594,36 +575,24 @@
           <canvas id="stars" class="starCanvas" aria-hidden="true"></canvas>
           <div class="groundLine" aria-label="Ground"></div>
 
-          <!-- SHOCKWAVE LAYER -->
-          <div id="shockwave" class="shockwave" aria-hidden="true">
-            <svg class="shockSvg" viewBox="0 0 600 600" xmlns="http://www.w3.org/2000/svg">
-              <defs>
-                <radialGradient id="shockFade" cx="50%" cy="50%" r="50%">
-                  <stop offset="0%"   stop-color="rgba(255,60,60,0.0)"/>
-                  <stop offset="40%"  stop-color="rgba(255,60,60,0.12)"/>
-                  <stop offset="75%"  stop-color="rgba(255,60,60,0.06)"/>
-                  <stop offset="100%" stop-color="rgba(255,60,60,0.0)"/>
-                </radialGradient>
-              </defs>
-
-              <!-- soft fill "blast" -->
-              <circle cx="300" cy="300" r="290" fill="url(#shockFade)" opacity="0.9"></circle>
-
-              <!-- concentric wavy rings -->
-              <circle class="ring glow" cx="300" cy="300" r="120"></circle>
-              <circle class="ring glow" cx="300" cy="300" r="190"></circle>
-              <circle class="ring glow" cx="300" cy="300" r="260"></circle>
-
-              <circle class="ring r1" cx="300" cy="300" r="120"></circle>
-              <circle class="ring r2" cx="300" cy="300" r="190"></circle>
-              <circle class="ring r3" cx="300" cy="300" r="260"></circle>
-              <circle class="ring r4" cx="300" cy="300" r="300"></circle>
-            </svg>
-          </div>
-
           <div id="orbWrap" class="orbWrap" aria-hidden="true">
             <div id="shield" class="shield" aria-label="Stability shield"></div>
             <div id="orb" class="orb" aria-label="Orb"></div>
+          </div>
+
+          <!-- ✅ shockwave lives in stage so it can blast over everything -->
+          <div id="shockwave" class="shockwave" aria-hidden="true">
+            <svg viewBox="0 0 300 300" xmlns="http://www.w3.org/2000/svg">
+              <!-- red concentric rings with dash patterns; "wave" anim via dashoffset -->
+              <circle class="ring r1" cx="150" cy="150" r="46"  fill="none" stroke="rgba(255,60,60,0.95)" stroke-width="3"
+                      stroke-linecap="round" stroke-dasharray="10 10"/>
+              <circle class="ring r2" cx="150" cy="150" r="82"  fill="none" stroke="rgba(255,60,60,0.90)" stroke-width="3"
+                      stroke-linecap="round" stroke-dasharray="14 12"/>
+              <circle class="ring r3" cx="150" cy="150" r="112" fill="none" stroke="rgba(255,60,60,0.82)" stroke-width="3"
+                      stroke-linecap="round" stroke-dasharray="18 14"/>
+              <circle class="ring r4" cx="150" cy="150" r="138" fill="none" stroke="rgba(255,60,60,0.72)" stroke-width="3"
+                      stroke-linecap="round" stroke-dasharray="22 16"/>
+            </svg>
           </div>
         </div>
 
@@ -716,13 +685,14 @@
       bShake:  $("bShake"),
 
       dynLampStable: $("dynLampStable"),
-      dynLampHit: $("dynLampHit"),
+      dynLampVar: $("dynLampVar"),
       shakeLamp: $("shakeLamp"),
       fatal: $("fatal"),
 
       orbWrap: $("orbWrap"),
       orb: $("orb"),
       shield: $("shield"),
+      shockwave: $("shockwave"),
 
       physStage: $("physStage"),
       stars: $("stars"),
@@ -743,8 +713,6 @@
       teleClose: $("teleClose"),
       teleRecBtn: $("teleRecBtn"),
       teleOut: $("teleOut"),
-
-      shockwave: $("shockwave"),
     };
 
     const WORKER_BASE = "https://orb-token.mrgarthwilliams.workers.dev";
@@ -799,28 +767,6 @@
     }
 
     // =========================================================================
-    // SHOCKWAVE TRIGGER (shake lamp triggers)
-    // =========================================================================
-    const SHOCK_DURATION_MS = 200;
-
-    let shockTO = null;
-    function triggerShockwave(){
-      if (!els.shockwave) return;
-
-      // restart animation cleanly
-      els.shockwave.classList.remove("on");
-      // force reflow
-      void els.shockwave.offsetWidth;
-      els.shockwave.classList.add("on");
-
-      if (shockTO) clearTimeout(shockTO);
-      shockTO = setTimeout(() => {
-        els.shockwave.classList.remove("on");
-        shockTO = null;
-      }, SHOCK_DURATION_MS + 30);
-    }
-
-    // =========================================================================
     // BACKGROUND (driven by receiver energy bank UI)
     // =========================================================================
     const BG0 = { r: 0,   g: 0,  b: 0  };
@@ -840,7 +786,27 @@
     setBgFromEnergy(0);
 
     // =========================================================================
-    // AUDIO (optional)
+    // SHOCKWAVE TRIGGER (shake lamp event)
+    // =========================================================================
+    const SHOCK_DURATION_MS = 200;
+
+    let shockTO = null;
+    function triggerShockwave(){
+      if (!els.shockwave) return;
+      els.shockwave.classList.remove("on");
+      // reflow to restart animation reliably
+      void els.shockwave.offsetWidth;
+      els.shockwave.classList.add("on");
+
+      if (shockTO) clearTimeout(shockTO);
+      shockTO = setTimeout(() => {
+        els.shockwave.classList.remove("on");
+        shockTO = null;
+      }, SHOCK_DURATION_MS);
+    }
+
+    // =========================================================================
+    // AUDIO (optional) — unchanged behavior
     // =========================================================================
     let audioEnabled = false;
     let audioCtx = null, osc = null, gainNode = null;
@@ -925,13 +891,12 @@
     });
 
     // =========================================================================
-    // LAMPS — shake only
+    // LAMPS — independent timers
     // =========================================================================
     let shakeLampTO = null;
 
     function flashShakeLamp(ms = 400){
       els.shakeLamp.classList.add("on");
-      triggerShockwave(); // <-- shockwave triggers when shake lamp triggers
       if (shakeLampTO) clearTimeout(shakeLampTO);
       shakeLampTO = setTimeout(() => {
         els.shakeLamp.classList.remove("on");
@@ -1006,6 +971,7 @@
         if (canSpendShake()){
           spendShake();
           flashShakeLamp(400);
+          triggerShockwave(); // ✅ blast when shake lamp triggers
 
           shakeCooldownUntil = nowMs + SHAKE_COOLDOWN_MS;
           shakeFirstHitAt = 0;
@@ -1031,62 +997,70 @@
     }
 
     // =========================================================================
-    // STABILITY + VARIABILITY (no cooldown)
+    // STABILITY (low-end) + VARIABILITY (high-end mirror) — no cooldown
     // =========================================================================
-    const DYN_AVG_MS   = 250;
-    const STABILITY_ARM_MS = 220;
-    const STABILITY_ON_THR  = 0.08;
-    const STABILITY_OFF_THR = 0.10;
+    const STABILITY_AVG_MS   = 250;
+    const STABILITY_ARM_MS   = 220;
 
-    const VARIABILITY_ARM_MS = 220;
+    const STABILITY_ON_THR   = 0.08;
+    const STABILITY_OFF_THR  = 0.10;
+
+    // variability range N..100% (defaults: 0.86..1.00)
     const VARIABILITY_ON_THR  = 0.86;
     const VARIABILITY_OFF_THR = 0.82;
+    const VARIABILITY_ARM_MS  = 220;
+    const VARIABILITY_AVG_MS  = 250;
 
     let dynSamples = [];
-
     let stabilityOn = false;
     let stabilityHoldMs = 0;
     let stabilityLastMs = 0;
 
+    let varSamples = [];
     let variabilityOn = false;
     let variabilityHoldMs = 0;
+    let variabilityLastMs = 0;
 
+    // visual gating (grounded OR speed<2% => NO lamp, NO bubble)
     const STABILITY_SPEED_MIN = 0.02;
     let stabilityVisualGate = true;
 
     function applyStabilityVisuals(){
-      const show = !!stabilityOn && !!stabilityVisualGate;
-      els.dynLampStable.classList.toggle("on", show);
-      if (els.shield) els.shield.classList.toggle("on", show);
-    }
+      const showStable = !!stabilityOn && !!stabilityVisualGate;
+      const showVar = !!variabilityOn && !!stabilityVisualGate;
 
-    function applyVariabilityVisuals(){
-      const show = !!variabilityOn && !!stabilityVisualGate;
-      els.dynLampHit.classList.toggle("on", show);
+      els.dynLampStable.classList.toggle("on", showStable);
+      els.dynLampVar.classList.toggle("on", showVar);
+
+      // shield stays tied to stability only (as before)
+      if (els.shield) els.shield.classList.toggle("on", showStable);
     }
 
     function setStability(on){
       stabilityOn = !!on;
       applyStabilityVisuals();
     }
-
     function setVariability(on){
       variabilityOn = !!on;
-      applyVariabilityVisuals();
+      applyStabilityVisuals();
     }
 
-    function resetStabilityVariability(){
+    function resetStability(){
       dynSamples = [];
       stabilityOn = false;
       stabilityHoldMs = 0;
       stabilityLastMs = 0;
+      setStability(false);
+    }
+    function resetVariability(){
+      varSamples = [];
       variabilityOn = false;
       variabilityHoldMs = 0;
-      setStability(false);
+      variabilityLastMs = 0;
       setVariability(false);
     }
 
-    function updateStabilityVariability(dyn01, nowMs){
+    function updateStability(dyn01, nowMs){
       const v = clamp01(dyn01);
 
       if (!stabilityLastMs) stabilityLastMs = nowMs;
@@ -1095,14 +1069,12 @@
       dt = clamp(dt, 0, 80);
 
       dynSamples.push({ t: nowMs, v });
-      const cutoff = nowMs - DYN_AVG_MS;
+      const cutoff = nowMs - STABILITY_AVG_MS;
       while (dynSamples.length && dynSamples[0].t < cutoff) dynSamples.shift();
 
       if (!dynSamples.length){
         stabilityHoldMs = 0;
-        variabilityHoldMs = 0;
         if (stabilityOn) setStability(false);
-        if (variabilityOn) setVariability(false);
         return;
       }
 
@@ -1110,21 +1082,50 @@
       for (const s of dynSamples) sum += s.v;
       const avg = sum / dynSamples.length;
 
-      const thrStab = stabilityOn ? STABILITY_OFF_THR : STABILITY_ON_THR;
+      const thr = stabilityOn ? STABILITY_OFF_THR : STABILITY_ON_THR;
 
-      if (avg <= thrStab){
+      if (avg <= thr){
         stabilityHoldMs += dt;
-        if (!stabilityOn && stabilityHoldMs >= STABILITY_ARM_MS) setStability(true);
+
+        if (!stabilityOn && stabilityHoldMs >= STABILITY_ARM_MS){
+          setStability(true);
+        }
       } else {
         stabilityHoldMs = 0;
         if (stabilityOn) setStability(false);
       }
+    }
 
-      const thrVar = variabilityOn ? VARIABILITY_OFF_THR : VARIABILITY_ON_THR;
+    function updateVariability(dyn01, nowMs){
+      const v = clamp01(dyn01);
 
-      if (avg >= thrVar){
+      if (!variabilityLastMs) variabilityLastMs = nowMs;
+      let dt = nowMs - variabilityLastMs;
+      variabilityLastMs = nowMs;
+      dt = clamp(dt, 0, 80);
+
+      varSamples.push({ t: nowMs, v });
+      const cutoff = nowMs - VARIABILITY_AVG_MS;
+      while (varSamples.length && varSamples[0].t < cutoff) varSamples.shift();
+
+      if (!varSamples.length){
+        variabilityHoldMs = 0;
+        if (variabilityOn) setVariability(false);
+        return;
+      }
+
+      let sum = 0;
+      for (const s of varSamples) sum += s.v;
+      const avg = sum / varSamples.length;
+
+      const thr = variabilityOn ? VARIABILITY_OFF_THR : VARIABILITY_ON_THR;
+
+      if (avg >= thr){
         variabilityHoldMs += dt;
-        if (!variabilityOn && variabilityHoldMs >= VARIABILITY_ARM_MS) setVariability(true);
+
+        if (!variabilityOn && variabilityHoldMs >= VARIABILITY_ARM_MS){
+          setVariability(true);
+        }
       } else {
         variabilityHoldMs = 0;
         if (variabilityOn) setVariability(false);
@@ -1148,7 +1149,8 @@
       currentRoomChannel = "orb:" + randCode(6);
       await connect({ auto:false });
       resetShakeDetector();
-      resetStabilityVariability();
+      resetStability();
+      resetVariability();
       resetEnergyBank();
       openPairModal();
     });
@@ -1195,7 +1197,7 @@
     }
 
     // =========================================================================
-    // TELEMETRY MODAL
+    // TELEMETRY MODAL — unchanged
     // =========================================================================
     let teleRecording = false;
     let teleT0 = 0;
@@ -1315,7 +1317,7 @@
     let currentRoomChannel = normalizeRoom(readUrlRoomOrNull() || "orb:test");
 
     // =========================================================================
-    // PHYSICS + STARFIELD
+    // PHYSICS + STARFIELD — unchanged (with tiny grounded flag)
     // =========================================================================
     const WORLD_H = 2500;
 
@@ -1565,7 +1567,7 @@
     requestAnimationFrame(physicsStep);
 
     // =========================================================================
-    // ABLY RECEIVER
+    // ABLY RECEIVER — unchanged plumbing
     // =========================================================================
     let realtime = null;
     let channel = null;
@@ -1663,7 +1665,6 @@
       updateEnergyBankFromPhone(energyFromPhone, nowMs);
 
       const energyUI01 = energyBankPts / 100;
-
       const lift = computeLift01(groove, smooth, speed);
 
       physState.lift01 = lift;
@@ -1700,15 +1701,13 @@
       els.vEnergy.classList.toggle("over", over);
       els.bEnergy.classList.toggle("over", over);
 
-      // Visual gate for BOTH stability + variability
+      // visuals gate used by BOTH dyn lamps
       stabilityVisualGate = (!physState.onGround) && (clamp01(speed) >= STABILITY_SPEED_MIN);
       applyStabilityVisuals();
-      applyVariabilityVisuals();
 
-      // Sustained low/high dynamics detectors
-      updateStabilityVariability(dynamics, nowMs);
+      updateStability(dynamics, nowMs);
+      updateVariability(dynamics, nowMs);
 
-      // Shake double-bang
       processShakeDoubleBang(shake, nowMs);
 
       setAudio(energyUI01, groove, locked);
@@ -1782,7 +1781,8 @@
     els.newRoom.addEventListener("click", async () => {
       currentRoomChannel = "orb:test";
       resetShakeDetector();
-      resetStabilityVariability();
+      resetStability();
+      resetVariability();
       resetEnergyBank();
       await connect({ auto:false });
       openPairModal();
