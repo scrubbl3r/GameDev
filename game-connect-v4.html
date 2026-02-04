@@ -618,7 +618,7 @@
             <span>Gravity</span>
             <strong><span id="gVal">0.40</span>x</strong>
           </div>
-          <input id="gSlider" type="range" min="0" max="3" value="0.30" step="0.01" />
+          <input id="gSlider" type="range" min="0" max="3" value="0.35" step="0.01" />
 
           <div style="height:10px"></div>
 
@@ -626,7 +626,7 @@
             <span>Fall Drag</span>
             <strong><span id="dVal">1.00</span></strong>
           </div>
-          <input id="dSlider" type="range" min="0" max="6" value=".50" step="0.01" />
+          <input id="dSlider" type="range" min="0" max="6" value=".10" step="0.01" />
         </div>
       </div>
     </div>
@@ -1547,7 +1547,7 @@
     // =========================================================================
     // PHYSICS + STARFIELD — unchanged (with tiny grounded flag)
     // =========================================================================
-    const WORLD_H = 2500;
+    const WORLD_H = 5000;
 
     const SHIELD_DESCENT = {
       // v is in world units per second; positive is DOWN in this sim.
