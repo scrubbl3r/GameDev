@@ -854,41 +854,40 @@
     }
 
     // ---- Shield (pulse only while ON) ----
-    // ---- Shield (continuous while stability lamp is ON) ----
-    // ---- Shield (continuous while stability lamp is ON) ----
-    // No duration timer. The shield pulses forever while showStable is true.
+    let shieldTO = null;
+
     function shieldOffNow(){
-    if (!els.shield) return;
-    els.shield.classList.remove("on");
-    els.shield.style.opacity = "";
-    els.shield.style.animation = "";
+      if (shieldTO) { clearTimeout(shieldTO); shieldTO = null; }
+      if (!els.shield) return;
+      els.shield.classList.remove("on");
+      els.shield.style.opacity = "";
+      els.shield.style.animation = "";
     }
 
-    function shieldOnNow(){
-    if (!els.shield) return;
+    function playShield(){
+      if (!els.shield) return;
 
-    // keep your tuned look (alpha + pulse), but do NOT schedule an off timer
-    const a  = clamp(VFX_DEFAULTS.shield.alpha, 0, 1);
+      const ms = clamp(VFX_DEFAULTS.shield.durationMs, 80, 1200);
+      const a  = clamp(VFX_DEFAULTS.shield.alpha, 0, 1);
 
-    // clamp pulse max to shield alpha
-    const pMax = Math.min(clamp(VFX_DEFAULTS.shield.pulseMax, 0, 1), a);
-    const pMin = clamp(VFX_DEFAULTS.shield.pulseMin, 0, 1);
-    const pMs  = Math.round(clamp(VFX_DEFAULTS.shield.pulseMs, 20, 700));
+      // clamp pulse max to shield alpha
+      const pMax = Math.min(clamp(VFX_DEFAULTS.shield.pulseMax, 0, 1), a);
+      const pMin = clamp(VFX_DEFAULTS.shield.pulseMin, 0, 1);
+      const pMs  = Math.round(clamp(VFX_DEFAULTS.shield.pulseMs, 20, 700));
 
-    setVar("--shield-alpha", a.toFixed(2));
-    setVar("--shield-pulse-ms", pMs + "ms");
-    setVar("--shield-pulse-min", pMin.toFixed(2));
-    setVar("--shield-pulse-max", pMax.toFixed(2));
+      setVar("--shield-alpha", a.toFixed(2));
+      setVar("--shield-pulse-ms", pMs + "ms");
+      setVar("--shield-pulse-min", pMin.toFixed(2));
+      setVar("--shield-pulse-max", pMax.toFixed(2));
 
-    // If already on, don’t thrash layout / restart animation
-    if (els.shield.classList.contains("on")) return;
+      shieldOffNow();
+      void els.shield.offsetWidth; // restart animation cleanly
+      els.shield.classList.add("on");
 
-    // clean start once when turning on
-    shieldOffNow();
-    void els.shield.offsetWidth;
-    els.shield.classList.add("on");
+      shieldTO = setTimeout(() => {
+        shieldOffNow();
+      }, Math.max(80, ms));
     }
-
 
     // ---- Shockwave (spawned rings; plain circles; follows orb) ----
     let shockRAF = 0;
@@ -1165,6 +1164,13 @@
     function registerShakeHit(nowMs){
       if (nowMs < shakeCooldownUntil) return;
 
+      // ✅ NEW: if diversity/variability lamp is lit, block shockwave entirely.
+      // No spend, no lamp, no cooldown.
+      if (isDiversityLampLit()){
+        shakeFirstHitAt = 0;
+        return;
+      }
+
       if (!shakeFirstHitAt){
         shakeFirstHitAt = nowMs;
         return;
@@ -1241,12 +1247,20 @@
       els.dynLampVar.classList.toggle("on", showVar);
 
       // [VFX] Shield is a timed effect: trigger only when stability VISUALLY turns on.
-      // [VFX] Bubble shield is continuous whenever the stability lamp is lit.
-        if (showStable) shieldOnNow();
-        else shieldOffNow();
+      if (showStable && !prevStableVisual){
+        playShield();
+      }
+      // If visuals are gated OFF (grounded/speed low), force shield off immediately.
+      if (!showStable){
+        shieldOffNow();
+      }
 
-        prevStableVisual = showStable;
+      prevStableVisual = showStable;
+    }
 
+    // ✅ NEW helper: "diversity lamp is lit" means the variability lamp is visually ON.
+    function isDiversityLampLit(){
+      return !!variabilityOn && !!stabilityVisualGate;
     }
 
     function setStability(on){
