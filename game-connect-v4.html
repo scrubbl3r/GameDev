@@ -31,6 +31,30 @@
       --bg-r: 0;
       --bg-g: 0;
       --bg-b: 0;
+
+      /* ======================================================================
+         [VFX] ORB + SHIELD + SHOCKWAVE — screenshot defaults
+         - These are the defaults you tuned in the VFX tester.
+         ====================================================================== */
+
+      /* Orb geometry (kept aligned with PHYS.orbRadiusPx = 50 -> diameter 100) */
+      --orb-d: 100px;
+      --orb-stroke: 2px;
+      --orb-fill: rgba(0,0,0,0.25);
+
+      /* Shield */
+      --shield-d: 124px;          /* orb(100) + pad(12*2) */
+      --shield-stroke: 2px;
+      --shield-alpha: 1.00;
+
+      /* Pulse controls (active only while shield is ON) */
+      --shield-pulse-ms: 80ms;
+      --shield-pulse-min: 0.09;
+      --shield-pulse-max: 1.00;
+
+      /* Shockwave (rings) */
+      --shock-color: rgba(255, 64, 64, 0.95);
+      --shock-stroke: 4px;
     }
 
     html,body{
@@ -279,102 +303,106 @@
       z-index:2;
     }
 
+    /* ======================================================================
+       [VFX] ORB DOM STACK (ONE TRUE ORIGIN inside orbWrap)
+       - orbWrap is positioned by physics code (unchanged).
+       - origin anchors shield + shockwave + orb to the same center.
+       ====================================================================== */
     .orbWrap{
       position:absolute;
       left:50%;
-      width:95px;
-      height:95px;
+      width:var(--orb-d);
+      height:var(--orb-d);
       transform: translate(-50%, 0px);
       will-change: transform;
       z-index:3;
       pointer-events:none;
     }
 
-    /* ✅ CLEAN ORB: no glow, no halo, no inset glow — just outline + fill */
-    .orb{
+    .origin{
       position:absolute;
-      inset:0;
-      border-radius:999px;
-      border:2px solid var(--g);
+      left:50%;
+      top:50%;
+      width:0;
+      height:0;
+      pointer-events:none;
+    }
+
+    .atOrigin{
+      position:absolute;
+      left:0;
+      top:0;
+      transform: translate(-50%,-50%);
+      pointer-events:none;
+    }
+
+    /* ✅ CLEAN ORB: outline + fill only */
+    .orb{
+      width: var(--orb-d);
+      height: var(--orb-d);
+      border-radius: 999px;
+      border: var(--orb-stroke) solid var(--g);
       background: rgba(var(--bg-r), var(--bg-g), var(--bg-b), 0.30);
       box-shadow: none;
     }
 
-    /* bubble shield (stability power-up) */
+    /* Shield (pulse only while ON) */
     .shield{
-      position:absolute;
-      inset:-10px;
-      border-radius:999px;
+      width: var(--shield-d);
+      height: var(--shield-d);
+      border-radius: 999px;
+
       opacity:0;
-      transform: scale(0.96);
-      transition: opacity 120ms linear, transform 120ms ease-out;
-      border:2px solid rgba(120,210,255,0.0);
-      box-shadow: 0 0 0 rgba(120,210,255,0.0);
-      background: radial-gradient(circle at 45% 35%,
-        rgba(120,210,255,0.14) 0%,
-        rgba(120,210,255,0.06) 35%,
-        rgba(120,210,255,0.00) 70%);
-      mix-blend-mode: screen;
-    }
-    .shield.on{
-      opacity:1;
-      transform: scale(1.02);
-      border-color: rgba(120,210,255,0.72);
-      box-shadow:
-        0 0 16px rgba(120,210,255,0.24),
-        0 0 42px rgba(120,210,255,0.14);
-    }
-
-    /* =========================================================================
-       ✅ SHOCKWAVE (shake-triggered)
-       - Duration: 200ms
-       - Size: 300px x 300px
-       ========================================================================= */
-    .shockwave{
-      position:absolute;
-      left:50%;
-      top:50%;
-      width:300px;
-      height:300px;
-      transform: translate(-50%, -50%);
-      opacity:0;
-      pointer-events:none;
-      z-index:4;
-      mix-blend-mode: screen;
-      filter:none;
-    }
-    .shockwave.on{
-      opacity:1;
-      animation: shockFade 200ms linear forwards;
-    }
-
-    .shockwave svg{
-      width:100%;
-      height:100%;
-      display:block;
-    }
-
-    .ring{
+      transform: translate(-50%,-50%) scale(0.96);
       transform-origin: 50% 50%;
-      opacity: 0.95;
+
+      border: var(--shield-stroke) solid rgba(120,210,255,0.0);
+      background: radial-gradient(circle at 45% 35%,
+        rgba(120,210,255,0.12) 0%,
+        rgba(120,210,255,0.05) 40%,
+        rgba(120,210,255,0.00) 75%);
+      transition:
+        opacity 120ms linear,
+        transform 120ms ease-out,
+        border-color 120ms linear;
+      box-shadow:none;
+      mix-blend-mode: screen;
+      z-index: 4;
     }
 
-    /* expand outward while fading */
-    @keyframes shockFade{
-      0%   { transform: translate(-50%, -50%) scale(0.10); opacity: 1; }
-      100% { transform: translate(-50%, -50%) scale(1.00); opacity: 0; }
+    @keyframes shieldPulseAlpha {
+      0%   { opacity: var(--shield-pulse-min); }
+      50%  { opacity: var(--shield-pulse-max); }
+      100% { opacity: var(--shield-pulse-min); }
     }
 
-    /* subtle sinusoidal “wobble” around the ring strokes */
-    @keyframes wave{
-      0%   { stroke-dashoffset: 0; }
-      100% { stroke-dashoffset: -80; }
+    .shield.on{
+      transform: translate(-50%,-50%) scale(1.02);
+      border-color: rgba(120,210,255,0.85);
+      transition: none;
+      animation: shieldPulseAlpha var(--shield-pulse-ms) linear infinite;
     }
 
-    .ring.r1{ animation: wave 200ms linear infinite; }
-    .ring.r2{ animation: wave 200ms linear infinite; }
-    .ring.r3{ animation: wave 200ms linear infinite; }
-    .ring.r4{ animation: wave 200ms linear infinite; }
+    /* Shockwave layer (SVG rings spawned) */
+    .shockLayer{
+      position:absolute;
+      left:0;
+      top:0;
+      width:0;
+      height:0;
+      pointer-events:none;
+      overflow:visible;
+      z-index: 5; /* over orb+shield */
+      mix-blend-mode: screen;
+    }
+    .shockSvg{
+      position:absolute;
+      left:0;
+      top:0;
+      transform: translate(-50%,-50%);
+      overflow:visible;
+      pointer-events:none;
+    }
 
     .physControls{
       margin-top:12px;
@@ -575,24 +603,13 @@
           <canvas id="stars" class="starCanvas" aria-hidden="true"></canvas>
           <div class="groundLine" aria-label="Ground"></div>
 
+          <!-- [VFX] Updated orb schema (origin stack) -->
           <div id="orbWrap" class="orbWrap" aria-hidden="true">
-            <div id="shield" class="shield" aria-label="Stability shield"></div>
-            <div id="orb" class="orb" aria-label="Orb"></div>
-          </div>
-
-          <!-- ✅ shockwave lives in stage so it can blast over everything -->
-          <div id="shockwave" class="shockwave" aria-hidden="true">
-            <svg viewBox="0 0 300 300" xmlns="http://www.w3.org/2000/svg">
-              <!-- red concentric rings with dash patterns; "wave" anim via dashoffset -->
-              <circle class="ring r1" cx="150" cy="150" r="46"  fill="none" stroke="rgba(255,60,60,0.95)" stroke-width="3"
-                      stroke-linecap="round" stroke-dasharray="10 10"/>
-              <circle class="ring r2" cx="150" cy="150" r="82"  fill="none" stroke="rgba(255,60,60,0.90)" stroke-width="3"
-                      stroke-linecap="round" stroke-dasharray="14 12"/>
-              <circle class="ring r3" cx="150" cy="150" r="112" fill="none" stroke="rgba(255,60,60,0.82)" stroke-width="3"
-                      stroke-linecap="round" stroke-dasharray="18 14"/>
-              <circle class="ring r4" cx="150" cy="150" r="138" fill="none" stroke="rgba(255,60,60,0.72)" stroke-width="3"
-                      stroke-linecap="round" stroke-dasharray="22 16"/>
-            </svg>
+            <div id="origin" class="origin" aria-hidden="true">
+              <div id="shockLayer" class="shockLayer" aria-hidden="true"></div>
+              <div id="shield" class="shield atOrigin" aria-label="Stability shield"></div>
+              <div id="orb" class="orb atOrigin" aria-label="Orb"></div>
+            </div>
           </div>
         </div>
 
@@ -692,7 +709,9 @@
       orbWrap: $("orbWrap"),
       orb: $("orb"),
       shield: $("shield"),
-      shockwave: $("shockwave"),
+
+      /* [VFX] */
+      shockLayer: $("shockLayer"),
 
       physStage: $("physStage"),
       stars: $("stars"),
@@ -786,23 +805,208 @@
     setBgFromEnergy(0);
 
     // =========================================================================
-    // SHOCKWAVE TRIGGER (shake lamp event)
+    // [VFX] SHIELD + SHOCKWAVE (ported from VFX tester)
+    // - Does NOT touch meters/telemetry logic.
+    // - Shield is TRIGGERED on stability-lamp rising edge (duration-based, not continuous).
+    // - Shockwave is TRIGGERED by existing shake lamp event.
     // =========================================================================
-    const SHOCK_DURATION_MS = 200;
+    function setVar(name, value){
+      document.documentElement.style.setProperty(name, value);
+    }
 
-    let shockTO = null;
+    // Screenshot defaults (keep in one place)
+    const VFX_DEFAULTS = {
+      shield: {
+        durationMs: 1170,
+        alpha: 1.00,
+        pulseMs: 80,
+        pulseMin: 0.09,
+        pulseMax: 1.00
+      },
+      shock: {
+        startR: 43,
+        endR: 169,
+        rings: 2,
+        spawnMs: 105,
+        stroke: 4,
+        decayMs: 150
+      }
+    };
+
+    // Apply defaults -> CSS vars
+    (function initVfxDefaults(){
+      setVar("--shield-alpha", String(VFX_DEFAULTS.shield.alpha.toFixed(2)));
+      setVar("--shield-pulse-ms", String(Math.round(VFX_DEFAULTS.shield.pulseMs)) + "ms");
+      setVar("--shield-pulse-min", String(VFX_DEFAULTS.shield.pulseMin.toFixed(2)));
+      setVar("--shield-pulse-max", String(Math.min(VFX_DEFAULTS.shield.pulseMax, VFX_DEFAULTS.shield.alpha).toFixed(2)));
+
+      // keep shock stroke even and as px var
+      const stroke = evenStroke(VFX_DEFAULTS.shock.stroke, 2, 20);
+      VFX_DEFAULTS.shock.stroke = stroke;
+      setVar("--shock-stroke", stroke + "px");
+    })();
+
+    function evenStroke(n, min = 2, max = 20){
+      n = Math.round(Number(n) || min);
+      n = Math.max(min, Math.min(max, n));
+      if (n % 2 === 1) n += 1;
+      return n;
+    }
+
+    // ---- Shield (pulse only while ON) ----
+    let shieldTO = null;
+
+    function shieldOffNow(){
+      if (shieldTO) { clearTimeout(shieldTO); shieldTO = null; }
+      if (!els.shield) return;
+      els.shield.classList.remove("on");
+      els.shield.style.opacity = "";
+      els.shield.style.animation = "";
+    }
+
+    function playShield(){
+      if (!els.shield) return;
+
+      const ms = clamp(VFX_DEFAULTS.shield.durationMs, 80, 1200);
+      const a  = clamp(VFX_DEFAULTS.shield.alpha, 0, 1);
+
+      // clamp pulse max to shield alpha
+      const pMax = Math.min(clamp(VFX_DEFAULTS.shield.pulseMax, 0, 1), a);
+      const pMin = clamp(VFX_DEFAULTS.shield.pulseMin, 0, 1);
+      const pMs  = Math.round(clamp(VFX_DEFAULTS.shield.pulseMs, 20, 700));
+
+      setVar("--shield-alpha", a.toFixed(2));
+      setVar("--shield-pulse-ms", pMs + "ms");
+      setVar("--shield-pulse-min", pMin.toFixed(2));
+      setVar("--shield-pulse-max", pMax.toFixed(2));
+
+      shieldOffNow();
+      void els.shield.offsetWidth; // restart animation cleanly
+      els.shield.classList.add("on");
+
+      shieldTO = setTimeout(() => {
+        shieldOffNow();
+      }, Math.max(80, ms));
+    }
+
+    // ---- Shockwave (spawned rings; plain circles; follows orb) ----
+    let shockRAF = 0;
+    let shockSvg = null;
+    let spawnAcc = 0;
+    const activeRings = [];
+
+    function buildShockSVG(){
+      const maxR = 1000;
+      const size = (maxR * 2) + 40;
+      const cx = size * 0.5;
+      const cy = size * 0.5;
+
+      const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+      svg.setAttribute("class", "shockSvg");
+      svg.setAttribute("width", size);
+      svg.setAttribute("height", size);
+      svg.setAttribute("viewBox", `0 0 ${size} ${size}`);
+      svg.setAttribute("shape-rendering", "geometricPrecision");
+      svg.__cx = cx;
+      svg.__cy = cy;
+      return svg;
+    }
+
+    function makeRingCircle(svg){
+      const c = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+      c.setAttribute("cx", svg.__cx);
+      c.setAttribute("cy", svg.__cy);
+      c.setAttribute("r", "1");
+      c.setAttribute("fill", "none");
+      c.setAttribute("stroke", "var(--shock-color)");
+      c.setAttribute("stroke-width", "var(--shock-stroke)");
+      c.setAttribute("stroke-linecap", "round");
+      c.setAttribute("opacity", "0");
+      return c;
+    }
+
+    function clearShock(){
+      if (shockRAF) cancelAnimationFrame(shockRAF);
+      shockRAF = 0;
+      spawnAcc = 0;
+      activeRings.length = 0;
+
+      if (shockSvg && shockSvg.parentNode) shockSvg.parentNode.removeChild(shockSvg);
+      shockSvg = null;
+    }
+
+    function playShock(){
+      if (!els.shockLayer) return;
+
+      // keep stroke var in sync (even px)
+      const stroke = evenStroke(VFX_DEFAULTS.shock.stroke, 2, 20);
+      setVar("--shock-stroke", stroke + "px");
+
+      const cfg = {
+        startR: clamp(VFX_DEFAULTS.shock.startR, 1, 1000),
+        endR: clamp(VFX_DEFAULTS.shock.endR, 1, 1000),
+        rings: Math.round(clamp(VFX_DEFAULTS.shock.rings, 1, 6)),
+        spawnMs: Math.round(clamp(VFX_DEFAULTS.shock.spawnMs, 1, 700)),
+        decayMs: Math.round(clamp(VFX_DEFAULTS.shock.decayMs, 40, 2000)),
+      };
+
+      clearShock();
+
+      shockSvg = buildShockSVG();
+      els.shockLayer.appendChild(shockSvg);
+
+      let last = performance.now();
+      let spawned = 0;
+
+      function tick(now){
+        const dt = Math.max(0, now - last);
+        last = now;
+
+        spawnAcc += dt;
+        while (spawned < cfg.rings && spawnAcc >= cfg.spawnMs){
+          spawnAcc -= cfg.spawnMs;
+
+          const circle = makeRingCircle(shockSvg);
+          shockSvg.appendChild(circle);
+
+          activeRings.push({ born: now, circle });
+          spawned += 1;
+        }
+
+        for (let i = activeRings.length - 1; i >= 0; i--){
+          const r0 = activeRings[i];
+          const age = now - r0.born;
+          const t01 = Math.max(0, Math.min(1, age / cfg.decayMs));
+
+          const r = cfg.startR + (cfg.endR - cfg.startR) * t01;
+          r0.circle.setAttribute("r", r.toFixed(2));
+
+          const alpha = (t01 <= 0) ? 0 : (1 - t01);
+          r0.circle.setAttribute("opacity", alpha.toFixed(3));
+
+          if (t01 >= 1){
+            if (r0.circle.parentNode) r0.circle.parentNode.removeChild(r0.circle);
+            activeRings.splice(i, 1);
+          }
+        }
+
+        const allSpawned = (spawned >= cfg.rings);
+        const noneAlive = (activeRings.length === 0);
+
+        if (allSpawned && noneAlive){
+          clearShock();
+          return;
+        }
+
+        shockRAF = requestAnimationFrame(tick);
+      }
+
+      shockRAF = requestAnimationFrame(tick);
+    }
+
+    // For legacy call sites:
     function triggerShockwave(){
-      if (!els.shockwave) return;
-      els.shockwave.classList.remove("on");
-      // reflow to restart animation reliably
-      void els.shockwave.offsetWidth;
-      els.shockwave.classList.add("on");
-
-      if (shockTO) clearTimeout(shockTO);
-      shockTO = setTimeout(() => {
-        els.shockwave.classList.remove("on");
-        shockTO = null;
-      }, SHOCK_DURATION_MS);
+      playShock();
     }
 
     // =========================================================================
@@ -971,7 +1175,7 @@
         if (canSpendShake()){
           spendShake();
           flashShakeLamp(400);
-          triggerShockwave(); // ✅ blast when shake lamp triggers
+          triggerShockwave(); // ✅ [VFX] rings shockwave when shake lamp triggers
 
           shakeCooldownUntil = nowMs + SHAKE_COOLDOWN_MS;
           shakeFirstHitAt = 0;
@@ -1025,6 +1229,9 @@
     const STABILITY_SPEED_MIN = 0.02;
     let stabilityVisualGate = true;
 
+    // [VFX] rising-edge trigger state for shield
+    let prevStableVisual = false;
+
     function applyStabilityVisuals(){
       const showStable = !!stabilityOn && !!stabilityVisualGate;
       const showVar = !!variabilityOn && !!stabilityVisualGate;
@@ -1032,8 +1239,16 @@
       els.dynLampStable.classList.toggle("on", showStable);
       els.dynLampVar.classList.toggle("on", showVar);
 
-      // shield stays tied to stability only (as before)
-      if (els.shield) els.shield.classList.toggle("on", showStable);
+      // [VFX] Shield is a timed effect: trigger only when stability VISUALLY turns on.
+      if (showStable && !prevStableVisual){
+        playShield();
+      }
+      // If visuals are gated OFF (grounded/speed low), force shield off immediately.
+      if (!showStable){
+        shieldOffNow();
+      }
+
+      prevStableVisual = showStable;
     }
 
     function setStability(on){
@@ -1050,7 +1265,9 @@
       stabilityOn = false;
       stabilityHoldMs = 0;
       stabilityLastMs = 0;
+      prevStableVisual = false;
       setStability(false);
+      shieldOffNow();
     }
     function resetVariability(){
       varSamples = [];

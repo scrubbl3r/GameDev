@@ -1,0 +1,661 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Orb VFX Tester — Shield + Shockwave</title>
+  <style>
+    :root{
+      --g:#32ff75;
+      --bg:#000;
+      --panel: rgba(0,0,0,.55);
+      --border: rgba(50,255,117,.18);
+
+      /* Orb (receiver orb size) */
+      --orb-d: 110px;
+      --orb-stroke: 2px;
+      --orb-fill: rgba(0,0,0,0.25);
+
+      /* Shield */
+      --shield-d: 134px;
+      --shield-stroke: 2px;
+
+      /* Shield alpha (also used to clamp pulse max) */
+      --shield-alpha: 1.00;
+
+      /* Pulse controls (only active while shield is ON) — screenshot defaults */
+      --shield-pulse-ms: 80ms;
+      --shield-pulse-min: 0.09;
+      --shield-pulse-max: 1.00;
+
+      /* Shockwave */
+      --shock-color: rgba(255, 64, 64, 0.95);
+      --shock-stroke: 4px;
+    }
+
+    *, *::before, *::after{ box-sizing: border-box; }
+
+    html,body{
+      height:100%;
+      margin:0;
+      background:var(--bg);
+      color:var(--g);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      overflow:hidden;
+    }
+
+    body::before{
+      content:"";
+      position:fixed;
+      inset:0;
+      pointer-events:none;
+      background:
+        radial-gradient(1200px 700px at 50% 35%, rgba(0,0,0,.0) 0%, rgba(0,0,0,.45) 55%, rgba(0,0,0,.75) 100%);
+      opacity:0.95;
+      mix-blend-mode:multiply;
+      z-index:0;
+    }
+
+    .wrap{
+      position:relative;
+      z-index:1;
+      max-width:1080px;
+      margin:22px auto;
+      padding:0 16px;
+      display:grid;
+      grid-template-columns: 1fr 420px;
+      gap:16px;
+      align-items:start;
+    }
+
+    .card{
+      background:var(--panel);
+      border:1px solid var(--border);
+      border-radius:16px;
+      padding:14px 14px 16px;
+      box-shadow: 0 18px 80px rgba(0,0,0,.55);
+      overflow:hidden;
+    }
+
+    .title{
+      font-weight:1000;
+      letter-spacing:.3px;
+      margin-bottom:10px;
+      display:flex;
+      justify-content:space-between;
+      align-items:baseline;
+      gap:10px;
+    }
+    .title .dim{opacity:.7; font-weight:800; font-size:12px;}
+
+    .stage{
+      height:min(78vh, 740px);
+      border:1px solid rgba(50,255,117,.22);
+      border-radius:14px;
+      background:#000;
+      position:relative;
+      overflow:hidden;
+      box-shadow: inset 0 0 0 1px rgba(0,0,0,.25);
+    }
+
+    /* ONE TRUE ORIGIN */
+    .origin{
+      position:absolute;
+      left:50%;
+      top:50%;
+      width:0;
+      height:0;
+      pointer-events:none;
+    }
+
+    .atOrigin{
+      position:absolute;
+      left:0;
+      top:0;
+      transform: translate(-50%,-50%);
+      pointer-events:none;
+    }
+
+    .orb{
+      width: var(--orb-d);
+      height: var(--orb-d);
+      border-radius: 999px;
+      border: var(--orb-stroke) solid var(--g);
+      background: var(--orb-fill);
+      box-shadow: none;
+    }
+
+    .shield{
+      width: var(--shield-d);
+      height: var(--shield-d);
+      border-radius: 999px;
+
+      opacity:0;
+      transform: translate(-50%,-50%) scale(0.96);
+      transform-origin: 50% 50%;
+
+      border: var(--shield-stroke) solid rgba(120,210,255,0.0);
+      background: radial-gradient(circle at 45% 35%,
+        rgba(120,210,255,0.12) 0%,
+        rgba(120,210,255,0.05) 40%,
+        rgba(120,210,255,0.00) 75%);
+      transition:
+        opacity 120ms linear,
+        transform 120ms ease-out,
+        border-color 120ms linear;
+      box-shadow:none;
+      mix-blend-mode: screen;
+    }
+
+    @keyframes shieldPulseAlpha {
+      0%   { opacity: var(--shield-pulse-min); }
+      50%  { opacity: var(--shield-pulse-max); }
+      100% { opacity: var(--shield-pulse-min); }
+    }
+
+    /* Pulse only while ON */
+    .shield.on{
+      transform: translate(-50%,-50%) scale(1.02);
+      border-color: rgba(120,210,255,0.85);
+      transition: none;
+      animation: shieldPulseAlpha var(--shield-pulse-ms) linear infinite;
+    }
+
+    .shockLayer{
+      position:absolute;
+      left:0;
+      top:0;
+      width:0;
+      height:0;
+      pointer-events:none;
+      overflow:visible;
+    }
+    .shockSvg{
+      position:absolute;
+      left:0;
+      top:0;
+      transform: translate(-50%,-50%);
+      overflow:visible;
+      pointer-events:none;
+    }
+
+    .section{
+      border-top:1px solid rgba(50,255,117,.14);
+      padding-top:12px;
+      margin-top:12px;
+    }
+    .section:first-child{
+      border-top:none;
+      padding-top:0;
+      margin-top:0;
+    }
+
+    .row{
+      display:flex;
+      gap:10px;
+      align-items:center;
+      flex-wrap:wrap;
+    }
+
+    button{
+      padding:10px 12px;
+      border-radius:12px;
+      border:1px solid var(--border);
+      background:rgba(0,0,0,.45);
+      color:var(--g);
+      cursor:pointer;
+      font-weight:1000;
+      white-space:nowrap;
+    }
+    button:hover{border-color:rgba(50,255,117,.35)}
+    button:disabled{ opacity:.55; cursor:default; }
+
+    .sliderRow{
+      display:flex;
+      align-items:baseline;
+      justify-content:space-between;
+      gap:12px;
+      font-size:12px;
+      opacity:.92;
+      margin-top:10px;
+    }
+    .sliderRow strong{ font-weight: 1000; opacity:1; }
+    input[type="range"]{
+      width:100%;
+      margin-top:8px;
+      accent-color: var(--g);
+    }
+
+    .hint{
+      margin-top:10px;
+      font-size:11px;
+      opacity:.75;
+      line-height:1.35;
+    }
+
+    @media (max-width: 960px){
+      .wrap{ grid-template-columns: 1fr; }
+      .stage{ height:min(62vh, 620px); }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <div class="title">
+        <span>Preview</span>
+        <span class="dim">Orb VFX tester (shield + shockwave)</span>
+      </div>
+
+      <div class="stage" id="stage" aria-label="Preview stage">
+        <div class="origin" id="origin">
+          <div class="shockLayer" id="shockLayer"></div>
+          <div class="shield atOrigin" id="shield" aria-hidden="true"></div>
+          <div class="orb atOrigin" id="orb" aria-hidden="true"></div>
+        </div>
+      </div>
+
+      <div class="hint">
+        Defaults match the screenshot (shield + pulse + shockwave).
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="title">
+        <span>Controls</span>
+        <span class="dim">visual only</span>
+      </div>
+
+      <!-- Shield controls -->
+      <div class="section">
+        <div class="row">
+          <button id="playShield">Play Shield</button>
+        </div>
+
+        <div class="sliderRow">
+          <span>Shield duration</span>
+          <strong><span id="vShieldMs">1170</span>ms</strong>
+        </div>
+        <input id="shieldMs" type="range" min="80" max="1200" value="1170" step="10" />
+
+        <div class="sliderRow">
+          <span>Shield opacity</span>
+          <strong><span id="vShieldAlpha">1.00</span></strong>
+        </div>
+        <input id="shieldAlpha" type="range" min="0" max="1" value="1.00" step="0.01" />
+
+        <div class="sliderRow">
+          <span>Pulse rate</span>
+          <strong><span id="vPulseMs">80</span>ms</strong>
+        </div>
+        <input id="pulseMs" type="range" min="20" max="700" value="80" step="5" />
+
+        <div class="sliderRow">
+          <span>Pulse min alpha</span>
+          <strong><span id="vPulseMin">0.09</span></strong>
+        </div>
+        <input id="pulseMin" type="range" min="0" max="1" value="0.09" step="0.01" />
+
+        <div class="sliderRow">
+          <span>Pulse max alpha</span>
+          <strong><span id="vPulseMax">1.00</span></strong>
+        </div>
+        <input id="pulseMax" type="range" min="0" max="1" value="1.00" step="0.01" />
+      </div>
+
+      <!-- Shockwave controls -->
+      <div class="section">
+        <div class="row">
+          <button id="playShock">Play Shockwave</button>
+        </div>
+
+        <div class="sliderRow">
+          <span>Start radius</span>
+          <strong><span id="vStartR">43</span>px</strong>
+        </div>
+        <input id="startR" type="range" min="1" max="1000" value="43" step="1" />
+
+        <div class="sliderRow">
+          <span>End radius</span>
+          <strong><span id="vEndR">169</span>px</strong>
+        </div>
+        <input id="endR" type="range" min="1" max="1000" value="169" step="1" />
+
+        <div class="sliderRow">
+          <span>Rings count</span>
+          <strong><span id="vRings">2</span></strong>
+        </div>
+        <input id="rings" type="range" min="1" max="6" value="2" step="1" />
+
+        <div class="sliderRow">
+          <span>Ring spawn rate</span>
+          <strong><span id="vSpawn">105</span>ms</strong>
+        </div>
+        <input id="spawn" type="range" min="1" max="700" value="105" step="1" />
+
+        <div class="sliderRow">
+          <span>Stroke width (even)</span>
+          <strong><span id="vStroke">4</span>px</strong>
+        </div>
+        <input id="stroke" type="range" min="2" max="20" value="4" step="1" />
+
+        <div class="sliderRow">
+          <span>Decay</span>
+          <strong><span id="vDecay">150</span>ms</strong>
+        </div>
+        <input id="decay" type="range" min="40" max="2000" value="150" step="10" />
+
+        <div class="hint">
+          Spawn rate controls how often a new ring is created. Decay controls how long each ring lives (and fades).
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+
+    const els = {
+      shockLayer: $("shockLayer"),
+      shield: $("shield"),
+
+      playShield: $("playShield"),
+      shieldMs: $("shieldMs"),
+      vShieldMs: $("vShieldMs"),
+      shieldAlpha: $("shieldAlpha"),
+      vShieldAlpha: $("vShieldAlpha"),
+
+      pulseMs: $("pulseMs"),
+      vPulseMs: $("vPulseMs"),
+      pulseMin: $("pulseMin"),
+      vPulseMin: $("vPulseMin"),
+      pulseMax: $("pulseMax"),
+      vPulseMax: $("vPulseMax"),
+
+      playShock: $("playShock"),
+      startR: $("startR"),
+      vStartR: $("vStartR"),
+      endR: $("endR"),
+      vEndR: $("vEndR"),
+      rings: $("rings"),
+      vRings: $("vRings"),
+      spawn: $("spawn"),
+      vSpawn: $("vSpawn"),
+      stroke: $("stroke"),
+      vStroke: $("vStroke"),
+      decay: $("decay"),
+      vDecay: $("vDecay"),
+    };
+
+    function setVar(name, value){
+      document.documentElement.style.setProperty(name, value);
+    }
+
+    function clamp(v, lo, hi){
+      v = Number(v);
+      if (!isFinite(v)) v = lo;
+      return Math.max(lo, Math.min(hi, v));
+    }
+
+    function evenPx(n, min = 0, max = 9999){
+      n = Math.round(Number(n) || 0);
+      n = Math.max(min, Math.min(max, n));
+      if (n % 2 === 1) n += 1;
+      return n;
+    }
+
+    // =========================================================================
+    // GEOMETRY (forced even)
+    // =========================================================================
+    const GEOM = { orbD:110, orbStroke:2, shieldPad:12, shieldStroke:2 };
+
+    function applyGeometryVars(){
+      GEOM.orbD = evenPx(GEOM.orbD, 2, 2000);
+      GEOM.orbStroke = evenPx(GEOM.orbStroke, 2, 40);
+      GEOM.shieldPad = evenPx(GEOM.shieldPad, 0, 400);
+      GEOM.shieldStroke = evenPx(GEOM.shieldStroke, 2, 40);
+
+      const shieldD = GEOM.orbD + (GEOM.shieldPad * 2);
+
+      setVar("--orb-d", GEOM.orbD + "px");
+      setVar("--orb-stroke", GEOM.orbStroke + "px");
+      setVar("--shield-d", shieldD + "px");
+      setVar("--shield-stroke", GEOM.shieldStroke + "px");
+    }
+    applyGeometryVars();
+
+    // =========================================================================
+    // Shield (pulse only while ON)
+    // =========================================================================
+    let shieldTO = null;
+
+    function applyShield(){
+      const ms = clamp(els.shieldMs.value, 80, 1200);
+      const a  = clamp(els.shieldAlpha.value, 0, 1);
+
+      els.vShieldMs.textContent = String(Math.round(ms));
+      els.vShieldAlpha.textContent = a.toFixed(2);
+
+      setVar("--shield-alpha", a.toFixed(2));
+      // by default, clamp pulse max to shield alpha
+      setVar("--shield-pulse-max", a.toFixed(2));
+    }
+
+    function applyPulse(){
+      const pMs = Math.round(clamp(els.pulseMs.value, 20, 700));
+      let pMin = clamp(els.pulseMin.value, 0, 1);
+      let pMax = clamp(els.pulseMax.value, 0, 1);
+
+      if (pMin > pMax){
+        const t = pMin; pMin = pMax; pMax = t;
+        els.pulseMin.value = pMin.toFixed(2);
+        els.pulseMax.value = pMax.toFixed(2);
+      }
+
+      const a = clamp(els.shieldAlpha.value, 0, 1);
+      const maxClamped = Math.min(pMax, a);
+
+      els.vPulseMs.textContent = String(pMs);
+      els.vPulseMin.textContent = pMin.toFixed(2);
+      els.vPulseMax.textContent = maxClamped.toFixed(2);
+
+      setVar("--shield-pulse-ms", pMs + "ms");
+      setVar("--shield-pulse-min", pMin.toFixed(2));
+      setVar("--shield-pulse-max", maxClamped.toFixed(2));
+    }
+
+    function shieldOffNow(){
+      els.shield.classList.remove("on");
+      els.shield.style.opacity = "";
+      els.shield.style.animation = "";
+    }
+
+    function playShield(){
+      applyShield();
+      applyPulse();
+
+      shieldOffNow();
+      void els.shield.offsetWidth; // restart animation cleanly
+      els.shield.classList.add("on");
+
+      if (shieldTO) clearTimeout(shieldTO);
+      const ms = clamp(els.shieldMs.value, 80, 1200);
+
+      shieldTO = setTimeout(() => {
+        shieldOffNow();
+        shieldTO = null;
+      }, Math.max(80, ms));
+    }
+
+    els.playShield.addEventListener("click", playShield);
+    els.shieldMs.addEventListener("input", applyShield);
+    els.shieldAlpha.addEventListener("input", () => { applyShield(); applyPulse(); });
+
+    els.pulseMs.addEventListener("input", applyPulse);
+    els.pulseMin.addEventListener("input", applyPulse);
+    els.pulseMax.addEventListener("input", applyPulse);
+
+    applyShield();
+    applyPulse();
+    shieldOffNow(); // OFF by default, no continuous pulse
+
+    // =========================================================================
+    // Shockwave (spawned rings; plain circles)
+    // =========================================================================
+    const SHOCK = { endRadiusPx:169, spawnRateMs:105, decayMs:150 };
+
+    let shockRAF = 0;
+    let shockSvg = null;
+    let spawnAcc = 0;
+    const activeRings = [];
+
+    function evenStroke(n, min = 2, max = 20){
+      n = Math.round(Number(n) || min);
+      n = Math.max(min, Math.min(max, n));
+      if (n % 2 === 1) n += 1;
+      return n;
+    }
+
+    function applyShock(){
+      const startR  = clamp(els.startR.value, 1, 1000);
+      const endR    = clamp(els.endR.value,   1, 1000);
+      const rings   = Math.round(clamp(els.rings.value, 1, 6));
+      const spawnMs = Math.round(clamp(els.spawn.value, 1, 700));
+      const decayMs = Math.round(clamp(els.decay.value, 40, 2000));
+
+      const stroke = evenStroke(els.stroke.value, 2, 20);
+      els.stroke.value = stroke;
+
+      els.vStartR.textContent = String(Math.round(startR));
+      els.vEndR.textContent   = String(Math.round(endR));
+      els.vRings.textContent  = String(rings);
+      els.vSpawn.textContent  = String(spawnMs);
+      els.vDecay.textContent  = String(decayMs);
+      els.vStroke.textContent = String(stroke);
+
+      SHOCK.endRadiusPx = endR;
+      SHOCK.spawnRateMs = spawnMs;
+      SHOCK.decayMs     = decayMs;
+
+      setVar("--shock-stroke", stroke + "px");
+      return { startR, endR, rings, spawnMs, decayMs, stroke };
+    }
+
+    function buildShockSVG(){
+      const maxR = 1000;
+      const size = (maxR * 2) + 40;
+      const cx = size * 0.5;
+      const cy = size * 0.5;
+
+      const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+      svg.setAttribute("class", "shockSvg");
+      svg.setAttribute("width", size);
+      svg.setAttribute("height", size);
+      svg.setAttribute("viewBox", `0 0 ${size} ${size}`);
+      svg.setAttribute("shape-rendering", "geometricPrecision");
+      svg.__cx = cx;
+      svg.__cy = cy;
+      return svg;
+    }
+
+    function makeRingCircle(svg){
+      const c = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+      c.setAttribute("cx", svg.__cx);
+      c.setAttribute("cy", svg.__cy);
+      c.setAttribute("r", "1");
+      c.setAttribute("fill", "none");
+      c.setAttribute("stroke", "var(--shock-color)");
+      c.setAttribute("stroke-width", "var(--shock-stroke)");
+      c.setAttribute("stroke-linecap", "round");
+      c.setAttribute("opacity", "0");
+      return c;
+    }
+
+    function clearShock(){
+      if (shockRAF) cancelAnimationFrame(shockRAF);
+      shockRAF = 0;
+      spawnAcc = 0;
+      activeRings.length = 0;
+
+      if (shockSvg && shockSvg.parentNode) shockSvg.parentNode.removeChild(shockSvg);
+      shockSvg = null;
+    }
+
+    function playShock(){
+      const cfg = applyShock();
+      clearShock();
+
+      shockSvg = buildShockSVG();
+      els.shockLayer.appendChild(shockSvg);
+
+      let last = performance.now();
+      let spawned = 0;
+
+      function tick(now){
+        const dt = Math.max(0, now - last);
+        last = now;
+
+        spawnAcc += dt;
+        while (spawned < cfg.rings && spawnAcc >= cfg.spawnMs){
+          spawnAcc -= cfg.spawnMs;
+
+          const circle = makeRingCircle(shockSvg);
+          shockSvg.appendChild(circle);
+
+          activeRings.push({ born: now, circle });
+          spawned += 1;
+        }
+
+        for (let i = activeRings.length - 1; i >= 0; i--){
+          const r0 = activeRings[i];
+          const age = now - r0.born;
+          const t01 = Math.max(0, Math.min(1, age / cfg.decayMs));
+
+          const r = cfg.startR + (cfg.endR - cfg.startR) * t01;
+          r0.circle.setAttribute("r", r.toFixed(2));
+
+          const alpha = (t01 <= 0) ? 0 : (1 - t01);
+          r0.circle.setAttribute("opacity", alpha.toFixed(3));
+
+          if (t01 >= 1){
+            if (r0.circle.parentNode) r0.circle.parentNode.removeChild(r0.circle);
+            activeRings.splice(i, 1);
+          }
+        }
+
+        const allSpawned = (spawned >= cfg.rings);
+        const noneAlive = (activeRings.length === 0);
+
+        if (allSpawned && noneAlive){
+          clearShock();
+          return;
+        }
+
+        shockRAF = requestAnimationFrame(tick);
+      }
+
+      shockRAF = requestAnimationFrame(tick);
+    }
+
+    els.playShock.addEventListener("click", playShock);
+    els.startR.addEventListener("input", applyShock);
+    els.endR.addEventListener("input", applyShock);
+    els.rings.addEventListener("input", applyShock);
+    els.spawn.addEventListener("input", applyShock);
+    els.stroke.addEventListener("input", applyShock);
+    els.decay.addEventListener("input", applyShock);
+
+    applyShock();
+
+    window.addEventListener("keydown", (e) => {
+      if (e.code === "Space"){
+        e.preventDefault();
+        playShock();
+      }
+      if (e.key.toLowerCase() === "b"){
+        playShield();
+      }
+    });
+  </script>
+</body>
+</html>
