@@ -2071,11 +2071,13 @@
       openPairModal();
     });
 
-    // START SCREEN: big PAIR PHONE button triggers the existing Pair flow, then hides.
-    els.startBtn.addEventListener("click", () => {
-      // Hide immediately (visual intent), then run exact same behavior as Pair Phone.
-      els.startScreen.classList.add("off");
-      els.pairBtn.click();
+    els.startBtn.addEventListener("click", async () => {
+        // This click is a user gesture → allowed to start AudioContext
+        if (!audioEnabled) await enableAudio();
+
+        // Hide immediately (visual intent), then run exact same behavior as Pair Phone.
+        els.startScreen.classList.add("off");
+    els.pairBtn.click();
     });
 
     (async function init(){
