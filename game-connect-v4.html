@@ -1549,6 +1549,13 @@
     // =========================================================================
     const WORLD_H = 2500;
 
+    const SHIELD_DESCENT = {
+      // v is in world units per second; positive is DOWN in this sim.
+      // Small positive values can happen from jitter; this threshold forgives that.
+      vDownThr: 60,        // treat as "real descent" only above this
+      graceMs: 260         // how long continuous descent is forgiven
+    };
+
     const PHYS = {
       groundFromBottomPx: 15,
       groundLinePx: 2,
@@ -1580,6 +1587,10 @@
       dynamics01: 0,
 
       onGround: false,
+
+      // shield descent grace tracking
+      descendMs: 0,
+      shieldDescentBlocked: false,
     };
 
     function stageRect(){
@@ -1772,6 +1783,21 @@
 
       physState.yW += physState.v * dt;
 
+      // ---------------------------------------------------------
+      // Shield descent grace gate (time-based)
+      // ---------------------------------------------------------
+      const dtMs = dt * 1000;
+
+      if (physState.v > SHIELD_DESCENT.vDownThr) {
+        physState.descendMs = Math.min(SHIELD_DESCENT.graceMs * 2, physState.descendMs + dtMs);
+      } else {
+        // level or ascending (or tiny descent): forgiveness resets instantly
+        physState.descendMs = 0;
+      }
+
+      physState.shieldDescentBlocked = (physState.descendMs >= SHIELD_DESCENT.graceMs);
+
+
       const yFloor = groundCenterWorld();
       const yCeil  = PHYS.orbRadiusPx;
 
@@ -1929,8 +1955,14 @@
       els.vEnergy.classList.toggle("over", over);
       els.bEnergy.classList.toggle("over", over);
 
-      // visuals gate used by BOTH dyn lamps
-      stabilityVisualGate = (!physState.onGround) && (clamp01(speed) >= STABILITY_SPEED_MIN);
+      // visuals gate used by BOTH dyn lamps (and bubble shield)
+      // Add descent-based gating: shield only works when level/ascending,
+      // with a short grace window during descent.
+      stabilityVisualGate =
+        (!physState.onGround) &&
+        (clamp01(speed) >= STABILITY_SPEED_MIN) &&
+        (!physState.shieldDescentBlocked);
+
       applyStabilityVisuals();
 
       updateStability(dynamics, nowMs);
