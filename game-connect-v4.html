@@ -509,6 +509,60 @@
       .grid{grid-template-columns:1fr;}
       .qrBox{width: 240px; height:240px;}
     }
+
+    /* ======================================================================
+       QUICK START OVERLAY (first-run)
+       - black card with "PAIR PHONE"
+       - one click enables audio + opens pairing QR
+       ====================================================================== */
+    .startScreen{
+      position:fixed;
+      inset:0;
+      z-index:1000;
+      display:none;
+      align-items:center;
+      justify-content:center;
+      padding:18px;
+      background: rgba(0,0,0,0.88);
+      backdrop-filter: blur(10px);
+    }
+    .startScreen.on{ display:flex; }
+
+    .startCard{
+      width: min(520px, 94vw);
+      border-radius:18px;
+      border:1px solid rgba(50,255,117,.22);
+      background: rgba(0,0,0,.78);
+      box-shadow: 0 26px 120px rgba(0,0,0,.70);
+      padding:18px 18px 16px;
+    }
+    .startTitle{
+      font-weight: 1000;
+      letter-spacing: .3px;
+      margin-bottom: 10px;
+      font-size: 14px;
+    }
+    .startHint{
+      font-size: 11px;
+      opacity: .78;
+      line-height: 1.35;
+      margin-top: 10px;
+    }
+    .startBtn{
+      width:100%;
+      padding:14px 14px;
+      border-radius:14px;
+      border:1px solid rgba(50,255,117,.55);
+      background: rgba(0,0,0,.45);
+      color: var(--g);
+      font-weight: 1000;
+      letter-spacing: .4px;
+      cursor:pointer;
+    }
+    .startBtn:hover{
+      border-color: rgba(50,255,117,.85);
+      box-shadow: 0 0 24px rgba(50,255,117,.12);
+    }
   </style>
 
   <script src="https://cdn.ably.com/lib/ably.min-1.js"></script>
@@ -632,6 +686,17 @@
     </div>
   </div>
 
+  <!-- QUICK START OVERLAY (first-run) -->
+  <div id="startScreen" class="startScreen" aria-hidden="true">
+    <div class="startCard" role="dialog" aria-label="Quick start">
+      <div class="startTitle">Orb Relay/Receiver</div>
+      <button id="startBtn" class="startBtn">PAIR PHONE</button>
+      <div class="startHint">
+        This will enable audio + open pairing QR in one click.
+      </div>
+    </div>
+  </div>
+
   <div id="pairModal" class="modal" aria-hidden="true">
     <div class="backdrop" id="pairBackdrop"></div>
     <div class="modalCard" role="dialog" aria-label="Pair phone">
@@ -732,9 +797,37 @@
       teleClose: $("teleClose"),
       teleRecBtn: $("teleRecBtn"),
       teleOut: $("teleOut"),
+
+      // quick start
+      startScreen: $("startScreen"),
+      startBtn: $("startBtn"),
     };
 
     const WORKER_BASE = "https://orb-token.mrgarthwilliams.workers.dev";
+
+    // =========================================================================
+    // QUICK START (first-run overlay)
+    // =========================================================================
+    const START_KEY = "orb_receiver_started_v1";
+
+    function showStartScreen(){
+      if (!els.startScreen) return;
+      els.startScreen.classList.add("on");
+      els.startScreen.setAttribute("aria-hidden","false");
+    }
+
+    function hideStartScreen(remember=true){
+      if (!els.startScreen) return;
+      els.startScreen.classList.remove("on");
+      els.startScreen.setAttribute("aria-hidden","true");
+      if (remember) {
+        try { localStorage.setItem(START_KEY, "1"); } catch(_) {}
+      }
+    }
+
+    function hasStartedBefore(){
+      try { return localStorage.getItem(START_KEY) === "1"; } catch(_) { return false; }
+    }
 
     function clamp01(x){ x = Number(x); return Math.max(0, Math.min(1, isFinite(x) ? x : 0)); }
     function clamp(v, lo, hi){ return Math.max(lo, Math.min(hi, v)); }
@@ -1373,7 +1466,7 @@
       els.pairModal.setAttribute("aria-hidden","true");
     }
 
-    els.pairBtn.addEventListener("click", async () => {
+    async function startNewPairSession(){
       currentRoomChannel = "orb:" + randCode(6);
       await connect({ auto:false });
       resetShakeDetector();
@@ -1381,6 +1474,10 @@
       resetVariability();
       resetEnergyBank();
       openPairModal();
+    }
+
+    els.pairBtn.addEventListener("click", async () => {
+      await startNewPairSession();
     });
 
     els.pairBackdrop.addEventListener("click", closePairModal);
@@ -1422,6 +1519,15 @@
         els.qr.textContent = "QR render error";
         console.error("QR render error:", e);
       }
+    }
+
+    // Start screen: enable audio + pair + show QR, then reveal UI
+    if (els.startBtn){
+      els.startBtn.addEventListener("click", async () => {
+        await enableAudio();
+        await startNewPairSession();
+        hideStartScreen(true);
+      });
     }
 
     // =========================================================================
@@ -2050,6 +2156,11 @@
 
     (async function init(){
       connect({ auto:true });
+
+      // Show quick start only on first-run (persisted)
+      if (!hasStartedBefore()){
+        showStartScreen();
+      }
     })();
   </script>
 </body>
