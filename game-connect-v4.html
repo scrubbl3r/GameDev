@@ -34,7 +34,6 @@
 
       /* ======================================================================
          [VFX] ORB + SHIELD + SHOCKWAVE — screenshot defaults
-         - These are the defaults you tuned in the VFX tester.
          ====================================================================== */
 
       /* Orb geometry (kept aligned with PHYS.orbRadiusPx = 50 -> diameter 100) */
@@ -305,8 +304,6 @@
 
     /* ======================================================================
        [VFX] ORB DOM STACK (ONE TRUE ORIGIN inside orbWrap)
-       - orbWrap is positioned by physics code (unchanged).
-       - origin anchors shield + shockwave + orb to the same center.
        ====================================================================== */
     .orbWrap{
       position:absolute;
@@ -511,57 +508,54 @@
     }
 
     /* ======================================================================
-       QUICK START OVERLAY (first-run)
-       - black card with "PAIR PHONE"
-       - one click enables audio + opens pairing QR
+       START SCREEN (PAIR PHONE) — big green outline button, covers receiver+game
+       - Touches nothing else; just overlays until you click.
        ====================================================================== */
-    .startScreen{
+    #startScreen{
       position:fixed;
       inset:0;
-      z-index:1000;
-      display:none;
+      display:flex;
       align-items:center;
       justify-content:center;
-      padding:18px;
-      background: rgba(0,0,0,0.88);
-      backdrop-filter: blur(10px);
+      padding: 24px 16px;
+      z-index: 998; /* below modals (999), above app */
+      pointer-events:auto;
     }
-    .startScreen.on{ display:flex; }
+    #startScreen.off{ display:none; }
 
-    .startCard{
-      width: min(520px, 94vw);
-      border-radius:18px;
-      border:1px solid rgba(50,255,117,.22);
-      background: rgba(0,0,0,.78);
-      box-shadow: 0 26px 120px rgba(0,0,0,.70);
-      padding:18px 18px 16px;
-    }
-    .startTitle{
-      font-weight: 1000;
-      letter-spacing: .3px;
-      margin-bottom: 10px;
-      font-size: 14px;
-    }
-    .startHint{
-      font-size: 11px;
-      opacity: .78;
-      line-height: 1.35;
-      margin-top: 10px;
-    }
-    .startBtn{
-      width:100%;
-      padding:14px 14px;
-      border-radius:14px;
-      border:1px solid rgba(50,255,117,.55);
-      background: rgba(0,0,0,.45);
+    #startBtn{
+      width: min(980px, calc(100vw - 32px));
+      height: min(800px, calc(100vh - 48px));
+      border-radius: 18px;
+      border: 3px solid var(--g);
+      background: rgba(0,0,0,0.05);
       color: var(--g);
       font-weight: 1000;
-      letter-spacing: .4px;
+      letter-spacing: .18em;
+      text-transform: uppercase;
+      display:flex;
+      align-items:center;
+      justify-content:center;
       cursor:pointer;
+      box-shadow:
+        0 0 0 1px rgba(50,255,117,.10) inset,
+        0 0 28px rgba(50,255,117,.10);
+      text-shadow:
+        0 0 16px rgba(50,255,117,.14);
+      user-select:none;
+      -webkit-tap-highlight-color: transparent;
     }
-    .startBtn:hover{
-      border-color: rgba(50,255,117,.85);
-      box-shadow: 0 0 24px rgba(50,255,117,.12);
+    #startBtn:hover{
+      box-shadow:
+        0 0 0 1px rgba(50,255,117,.16) inset,
+        0 0 40px rgba(50,255,117,.14);
+    }
+    #startBtn:active{
+      transform: translateY(1px);
+    }
+    #startBtn span{
+      font-size: clamp(28px, 5.2vw, 64px);
+      line-height: 1;
     }
   </style>
 
@@ -570,6 +564,13 @@
 </head>
 
 <body>
+  <!-- START SCREEN OVERLAY -->
+  <div id="startScreen" aria-label="Start screen">
+    <button id="startBtn" aria-label="Pair phone">
+      <span>PAIR PHONE</span>
+    </button>
+  </div>
+
   <div class="wrap">
     <div class="grid">
       <div class="card cardTall">
@@ -686,17 +687,6 @@
     </div>
   </div>
 
-  <!-- QUICK START OVERLAY (first-run) -->
-  <div id="startScreen" class="startScreen" aria-hidden="true">
-    <div class="startCard" role="dialog" aria-label="Quick start">
-      <div class="startTitle">Orb Relay/Receiver</div>
-      <button id="startBtn" class="startBtn">PAIR PHONE</button>
-      <div class="startHint">
-        This will enable audio + open pairing QR in one click.
-      </div>
-    </div>
-  </div>
-
   <div id="pairModal" class="modal" aria-hidden="true">
     <div class="backdrop" id="pairBackdrop"></div>
     <div class="modalCard" role="dialog" aria-label="Pair phone">
@@ -742,6 +732,9 @@
     const $ = (id) => document.getElementById(id);
 
     const els = {
+      startScreen: $("startScreen"),
+      startBtn: $("startBtn"),
+
       pairBtn: $("pairBtn"),
       newRoom: $("newRoom"),
       audioBtn: $("audioBtn"),
@@ -797,37 +790,9 @@
       teleClose: $("teleClose"),
       teleRecBtn: $("teleRecBtn"),
       teleOut: $("teleOut"),
-
-      // quick start
-      startScreen: $("startScreen"),
-      startBtn: $("startBtn"),
     };
 
     const WORKER_BASE = "https://orb-token.mrgarthwilliams.workers.dev";
-
-    // =========================================================================
-    // QUICK START (first-run overlay)
-    // =========================================================================
-    const START_KEY = "orb_receiver_started_v1";
-
-    function showStartScreen(){
-      if (!els.startScreen) return;
-      els.startScreen.classList.add("on");
-      els.startScreen.setAttribute("aria-hidden","false");
-    }
-
-    function hideStartScreen(remember=true){
-      if (!els.startScreen) return;
-      els.startScreen.classList.remove("on");
-      els.startScreen.setAttribute("aria-hidden","true");
-      if (remember) {
-        try { localStorage.setItem(START_KEY, "1"); } catch(_) {}
-      }
-    }
-
-    function hasStartedBefore(){
-      try { return localStorage.getItem(START_KEY) === "1"; } catch(_) { return false; }
-    }
 
     function clamp01(x){ x = Number(x); return Math.max(0, Math.min(1, isFinite(x) ? x : 0)); }
     function clamp(v, lo, hi){ return Math.max(lo, Math.min(hi, v)); }
@@ -899,15 +864,11 @@
 
     // =========================================================================
     // [VFX] SHIELD + SHOCKWAVE (ported from VFX tester)
-    // - Does NOT touch meters/telemetry logic.
-    // - Shield is TRIGGERED on stability-lamp rising edge (duration-based, not continuous).
-    // - Shockwave is TRIGGERED by existing shake lamp event.
     // =========================================================================
     function setVar(name, value){
       document.documentElement.style.setProperty(name, value);
     }
 
-    // Screenshot defaults (keep in one place)
     const VFX_DEFAULTS = {
       shield: {
         durationMs: 1170,
@@ -926,14 +887,12 @@
       }
     };
 
-    // Apply defaults -> CSS vars
     (function initVfxDefaults(){
       setVar("--shield-alpha", String(VFX_DEFAULTS.shield.alpha.toFixed(2)));
       setVar("--shield-pulse-ms", String(Math.round(VFX_DEFAULTS.shield.pulseMs)) + "ms");
       setVar("--shield-pulse-min", String(VFX_DEFAULTS.shield.pulseMin.toFixed(2)));
       setVar("--shield-pulse-max", String(Math.min(VFX_DEFAULTS.shield.pulseMax, VFX_DEFAULTS.shield.alpha).toFixed(2)));
 
-      // keep shock stroke even and as px var
       const stroke = evenStroke(VFX_DEFAULTS.shock.stroke, 2, 20);
       VFX_DEFAULTS.shock.stroke = stroke;
       setVar("--shock-stroke", stroke + "px");
@@ -946,44 +905,33 @@
       return n;
     }
 
-    // ---- Shield (pulse only while ON) ----
-    // ---- Shield (continuous while stability lamp is ON) ----
-    // ---- Shield (continuous while stability lamp is ON) ----
-    // No duration timer. The shield pulses forever while showStable is true.
     function shieldOffNow(){
-    if (!els.shield) return;
-    els.shield.classList.remove("on");
-    els.shield.style.opacity = "";
-    els.shield.style.animation = "";
+      if (!els.shield) return;
+      els.shield.classList.remove("on");
+      els.shield.style.opacity = "";
+      els.shield.style.animation = "";
     }
 
     function shieldOnNow(){
-    if (!els.shield) return;
+      if (!els.shield) return;
 
-    // keep your tuned look (alpha + pulse), but do NOT schedule an off timer
-    const a  = clamp(VFX_DEFAULTS.shield.alpha, 0, 1);
+      const a  = clamp(VFX_DEFAULTS.shield.alpha, 0, 1);
+      const pMax = Math.min(clamp(VFX_DEFAULTS.shield.pulseMax, 0, 1), a);
+      const pMin = clamp(VFX_DEFAULTS.shield.pulseMin, 0, 1);
+      const pMs  = Math.round(clamp(VFX_DEFAULTS.shield.pulseMs, 20, 700));
 
-    // clamp pulse max to shield alpha
-    const pMax = Math.min(clamp(VFX_DEFAULTS.shield.pulseMax, 0, 1), a);
-    const pMin = clamp(VFX_DEFAULTS.shield.pulseMin, 0, 1);
-    const pMs  = Math.round(clamp(VFX_DEFAULTS.shield.pulseMs, 20, 700));
+      setVar("--shield-alpha", a.toFixed(2));
+      setVar("--shield-pulse-ms", pMs + "ms");
+      setVar("--shield-pulse-min", pMin.toFixed(2));
+      setVar("--shield-pulse-max", pMax.toFixed(2));
 
-    setVar("--shield-alpha", a.toFixed(2));
-    setVar("--shield-pulse-ms", pMs + "ms");
-    setVar("--shield-pulse-min", pMin.toFixed(2));
-    setVar("--shield-pulse-max", pMax.toFixed(2));
+      if (els.shield.classList.contains("on")) return;
 
-    // If already on, don’t thrash layout / restart animation
-    if (els.shield.classList.contains("on")) return;
-
-    // clean start once when turning on
-    shieldOffNow();
-    void els.shield.offsetWidth;
-    els.shield.classList.add("on");
+      shieldOffNow();
+      void els.shield.offsetWidth;
+      els.shield.classList.add("on");
     }
 
-
-    // ---- Shockwave (spawned rings; plain circles; follows orb) ----
     let shockRAF = 0;
     let shockSvg = null;
     let spawnAcc = 0;
@@ -1032,7 +980,6 @@
     function playShock(){
       if (!els.shockLayer) return;
 
-      // keep stroke var in sync (even px)
       const stroke = evenStroke(VFX_DEFAULTS.shock.stroke, 2, 20);
       setVar("--shock-stroke", stroke + "px");
 
@@ -1098,7 +1045,6 @@
       shockRAF = requestAnimationFrame(tick);
     }
 
-    // For legacy call sites:
     function triggerShockwave(){
       playShock();
     }
@@ -1258,12 +1204,10 @@
     function registerShakeHit(nowMs){
       if (nowMs < shakeCooldownUntil) return;
 
-        // ✅ Gate: if diversity/variability lamp is lit, do NOT allow shockwave detonation.
-        // No spend, no lamp flash, no cooldown.
-        if (isDiversityLampLit()){
-            shakeFirstHitAt = 0;
-            return;
-        }
+      if (isDiversityLampLit()){
+        shakeFirstHitAt = 0;
+        return;
+      }
 
       if (!shakeFirstHitAt){
         shakeFirstHitAt = nowMs;
@@ -1276,7 +1220,7 @@
         if (canSpendShake()){
           spendShake();
           flashShakeLamp(400);
-          triggerShockwave(); // ✅ [VFX] rings shockwave when shake lamp triggers
+          triggerShockwave();
 
           shakeCooldownUntil = nowMs + SHAKE_COOLDOWN_MS;
           shakeFirstHitAt = 0;
@@ -1302,7 +1246,7 @@
     }
 
     // =========================================================================
-    // STABILITY (low-end) + VARIABILITY (high-end mirror) — no cooldown
+    // STABILITY + VARIABILITY — no cooldown
     // =========================================================================
     const STABILITY_AVG_MS   = 250;
     const STABILITY_ARM_MS   = 220;
@@ -1310,7 +1254,6 @@
     const STABILITY_ON_THR   = 0.08;
     const STABILITY_OFF_THR  = 0.10;
 
-    // variability range N..100% (defaults: 0.86..1.00)
     const VARIABILITY_ON_THR  = 0.80;
     const VARIABILITY_OFF_THR = 0.78;
     const VARIABILITY_ARM_MS  = 220;
@@ -1326,11 +1269,9 @@
     let variabilityHoldMs = 0;
     let variabilityLastMs = 0;
 
-    // visual gating (grounded OR speed<2% => NO lamp, NO bubble)
     const STABILITY_SPEED_MIN = 0.02;
     let stabilityVisualGate = true;
 
-    // [VFX] rising-edge trigger state for shield
     let prevStableVisual = false;
 
     function applyStabilityVisuals(){
@@ -1340,20 +1281,15 @@
       els.dynLampStable.classList.toggle("on", showStable);
       els.dynLampVar.classList.toggle("on", showVar);
 
-      // [VFX] Shield is a timed effect: trigger only when stability VISUALLY turns on.
-      // [VFX] Bubble shield is continuous whenever the stability lamp is lit.
-        if (showStable) shieldOnNow();
-        else shieldOffNow();
+      if (showStable) shieldOnNow();
+      else shieldOffNow();
 
-        prevStableVisual = showStable;
-
+      prevStableVisual = showStable;
     }
 
-    // True when the diversity/variability lamp is ACTUALLY lit (same gating as visuals)
     function isDiversityLampLit(){
-    return !!variabilityOn && !!stabilityVisualGate;
+      return !!variabilityOn && !!stabilityVisualGate;
     }
-
 
     function setStability(on){
       stabilityOn = !!on;
@@ -1466,7 +1402,7 @@
       els.pairModal.setAttribute("aria-hidden","true");
     }
 
-    async function startNewPairSession(){
+    els.pairBtn.addEventListener("click", async () => {
       currentRoomChannel = "orb:" + randCode(6);
       await connect({ auto:false });
       resetShakeDetector();
@@ -1474,10 +1410,6 @@
       resetVariability();
       resetEnergyBank();
       openPairModal();
-    }
-
-    els.pairBtn.addEventListener("click", async () => {
-      await startNewPairSession();
     });
 
     els.pairBackdrop.addEventListener("click", closePairModal);
@@ -1519,15 +1451,6 @@
         els.qr.textContent = "QR render error";
         console.error("QR render error:", e);
       }
-    }
-
-    // Start screen: enable audio + pair + show QR, then reveal UI
-    if (els.startBtn){
-      els.startBtn.addEventListener("click", async () => {
-        await enableAudio();
-        await startNewPairSession();
-        hideStartScreen(true);
-      });
     }
 
     // =========================================================================
@@ -1656,10 +1579,8 @@
     const WORLD_H = 5000;
 
     const SHIELD_DESCENT = {
-      // v is in world units per second; positive is DOWN in this sim.
-      // Small positive values can happen from jitter; this threshold forgives that.
-      vDownThr: 60,        // treat as "real descent" only above this
-      graceMs: 260         // how long continuous descent is forgiven
+      vDownThr: 60,
+      graceMs: 260
     };
 
     const PHYS = {
@@ -1694,7 +1615,6 @@
 
       onGround: false,
 
-      // shield descent grace tracking
       descendMs: 0,
       shieldDescentBlocked: false,
     };
@@ -1889,20 +1809,15 @@
 
       physState.yW += physState.v * dt;
 
-      // ---------------------------------------------------------
-      // Shield descent grace gate (time-based)
-      // ---------------------------------------------------------
       const dtMs = dt * 1000;
 
       if (physState.v > SHIELD_DESCENT.vDownThr) {
         physState.descendMs = Math.min(SHIELD_DESCENT.graceMs * 2, physState.descendMs + dtMs);
       } else {
-        // level or ascending (or tiny descent): forgiveness resets instantly
         physState.descendMs = 0;
       }
 
       physState.shieldDescentBlocked = (physState.descendMs >= SHIELD_DESCENT.graceMs);
-
 
       const yFloor = groundCenterWorld();
       const yCeil  = PHYS.orbRadiusPx;
@@ -2061,9 +1976,6 @@
       els.vEnergy.classList.toggle("over", over);
       els.bEnergy.classList.toggle("over", over);
 
-      // visuals gate used by BOTH dyn lamps (and bubble shield)
-      // Add descent-based gating: shield only works when level/ascending,
-      // with a short grace window during descent.
       stabilityVisualGate =
         (!physState.onGround) &&
         (clamp01(speed) >= STABILITY_SPEED_MIN) &&
@@ -2136,6 +2048,11 @@
 
         if (els.pairModal.classList.contains("on")) closePairModal();
 
+        // If the start screen is still up for some reason, drop it on first msg.
+        if (els.startScreen && !els.startScreen.classList.contains("off")) {
+          els.startScreen.classList.add("off");
+        }
+
         teleMaybeLog(d);
         scheduleUIUpdate(d);
       });
@@ -2154,13 +2071,15 @@
       openPairModal();
     });
 
+    // START SCREEN: big PAIR PHONE button triggers the existing Pair flow, then hides.
+    els.startBtn.addEventListener("click", () => {
+      // Hide immediately (visual intent), then run exact same behavior as Pair Phone.
+      els.startScreen.classList.add("off");
+      els.pairBtn.click();
+    });
+
     (async function init(){
       connect({ auto:true });
-
-      // Show quick start only on first-run (persisted)
-      if (!hasStartedBefore()){
-        showStartScreen();
-      }
     })();
   </script>
 </body>
