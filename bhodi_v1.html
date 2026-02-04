@@ -74,7 +74,14 @@
     #hud .ok { color: #7dffab; }
     #hud .bad { color: #ff8080; }
     #hud .warn { color: #ffd27d; }
+    #hud .row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+    #hud label { cursor:pointer; user-select:none; }
+    #hud input[type="checkbox"]{
+      accent-color: var(--g);
+      transform: translateY(1px);
+    }
 
+    /* WIN / GAME OVER overlay (existing) */
     #overlay {
       position:fixed; inset:0;
       display:none; place-items:center;
@@ -104,6 +111,67 @@
       opacity:.65;
     }
 
+    /* START GATE (new) */
+    #startGate{
+      position:fixed; inset:0;
+      display:grid; place-items:center;
+      background: rgba(0,0,0,.86);
+      z-index: 50;
+    }
+    #startGate .card{
+      width: min(92vw, 720px);
+      padding: 26px 26px 22px;
+      border-radius: 18px;
+      background: rgba(0,0,0,.72);
+      /* NO STROKE (schema update) */
+      border: none;
+      box-shadow: 0 0 0 1px rgba(50,255,117,.14), 0 0 60px rgba(50,255,117,.08), 0 30px 130px rgba(0,0,0,.75);
+      text-align:center;
+      color: var(--g);
+      text-shadow: 0 0 18px rgba(50,255,117,.22);
+      cursor: pointer;
+      user-select:none;
+    }
+    #startGate .title{
+      font-size: 22px;
+      letter-spacing: 1.8px;
+      text-transform: uppercase;
+      line-height: 1.25;
+    }
+    #startGate .sub{
+      margin-top: 10px;
+      font-size: 12px;
+      opacity:.85;
+    }
+    #startGate .hint{
+      margin-top: 14px;
+      font-size: 11px;
+      opacity:.70;
+    }
+    #startGate .pillRow{
+      margin-top: 16px;
+      display:flex;
+      justify-content:center;
+      gap:10px;
+      flex-wrap:wrap;
+    }
+    #startGate .pill{
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+      padding: 7px 10px;
+      border-radius: 999px;
+      background: rgba(50,255,117,.08);
+      box-shadow: 0 0 0 1px rgba(50,255,117,.16) inset;
+      font-size: 11px;
+      opacity:.95;
+    }
+    #startGate .dot{
+      width:6px;height:6px;border-radius:99px;
+      background: var(--g);
+      box-shadow: 0 0 10px rgba(50,255,117,.35);
+    }
+
     #webcam {
       position:fixed; right:14px; top:14px;
       width: 220px; height: 165px;
@@ -127,13 +195,35 @@
     <canvas id="game" width="900" height="600"></canvas>
   </div>
 
+  <!-- START SCREEN (new) -->
+  <div id="startGate" aria-hidden="false">
+    <div class="card" id="startCard" role="button" tabindex="0" aria-label="Start">
+      <div class="title">TIME. IS. A. FLAT. CIRCLE.</div>
+      <div class="sub">Click to begin — voice is pre-opted-in.</div>
+      <div class="pillRow">
+        <div class="pill"><span class="dot"></span> VOICE: ON</div>
+        <div class="pill">V key toggles later</div>
+        <div class="pill">Two hands → circles → lift</div>
+      </div>
+      <div class="hint">Browser requirement: this click starts speech recognition.</div>
+    </div>
+  </div>
+
   <div id="hud">
     <div><b>VECTOR LEVITATION</b> <span class="dim">— Incantation Test (Dual Circles v1)</span></div>
     <div class="dim">• <b>Two hands</b>: draw circles → combined levitation</div>
     <div class="dim">• <b>Steering</b>: circle quality difference steers (falls back to 1-hand steering if a hand drops)</div>
     <div class="dim">• <b>Danger</b>: touch the red teeth underside → <b>GAME OVER</b></div>
     <div class="dim">• <b>Spell</b>: approach the final platform until it glows, then speak: <b>"satanis mentis maximus"</b></div>
-    <div class="dim">Tip: click/tap once to enable voice (browser requirement).</div>
+
+    <div class="row" style="margin-top:6px;">
+      <label class="dim" title="Default ON in this build">
+        <input id="voiceOpt" type="checkbox" checked />
+        VOICE opt-in
+      </label>
+      <span class="dim">• Click the start screen once to begin.</span>
+    </div>
+
     <hr style="border:none;border-top:1px solid rgba(50,255,117,.18); margin:10px 0;">
     <div id="status">Initializing…</div>
   </div>
@@ -167,6 +257,11 @@
     const overlaySub   = document.getElementById("overlaySub");
     const overlayHint  = document.getElementById("overlayHint");
     const overlayCard  = document.getElementById("overlayCard");
+
+    // START GATE (new)
+    const startGate = document.getElementById("startGate");
+    const startCard = document.getElementById("startCard");
+    const voiceOpt  = document.getElementById("voiceOpt");
 
     // =========================================================================
     // TUNING
@@ -448,7 +543,7 @@
 
       let pathLen = 0;
       for (let i=1;i<points.length;i++){
-        pathLen += Math.hypot(points[i].x - points[i-1].x, points[i].y - points[i-1].y);
+        pathLen += Math.hypot(points[i].x - points[i-1].x, points[i-1].y - points[i].y) * 0 + Math.hypot(points[i].x - points[i-1].x, points[i].y - points[i-1].y);
       }
       const circumference = 2 * Math.PI * rMean;
       const loopScore = clamp(pathLen / (circumference * TUNE.loopLenMultiplier), 0, 1);
@@ -492,7 +587,7 @@
         minTrackingConfidence: 0.55
       });
 
-      statusEl.innerHTML = '<span class="ok">Webcam ready.</span> Click/tap once to enable voice.';
+      statusEl.innerHTML = '<span class="ok">Webcam ready.</span> Click the start screen to enable voice.';
     }
 
     // =========================================================================
@@ -612,10 +707,63 @@
       try { recognition.start(); } catch(e) {}
     }
 
-    canvas.addEventListener("pointerdown", function(){ startVoice(); }, { once:false });
+    function stopVoice(){
+      if (!voiceEnabled) return;
+      voiceEnabled = false;
+      if (recognition) {
+        try { recognition.stop(); } catch(e) {}
+      }
+    }
+
+    // =========================================================================
+    // START SCREEN GATE (new)
+    // =========================================================================
+    let started = false;
+
+    function beginFromGate(){
+      if (started) return;
+      started = true;
+
+      if (startGate) startGate.style.display = "none";
+
+      // auto voice (opt-in is checked in this build)
+      if (voiceOpt && voiceOpt.checked) startVoice();
+
+      // small HUD nudge
+      // (status will update on next step() call anyway)
+    }
+
+    if (startCard) {
+      startCard.addEventListener("pointerdown", function(e){
+        e.preventDefault();
+        beginFromGate();
+      }, { passive:false });
+      startCard.addEventListener("keydown", function(e){
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          beginFromGate();
+        }
+      });
+    }
+
+    // toggle voice anytime (after start)
     window.addEventListener("keydown", function(e){
-      if (e.key === "v" || e.key === "V") startVoice();
+      if (e.key === "v" || e.key === "V") {
+        if (!started) return; // keep the schema clean: start screen is the gesture
+        if (voiceEnabled) stopVoice(); else startVoice();
+      }
+      if (!started && (e.key === "Enter" || e.key === " ")) {
+        beginFromGate();
+      }
     });
+
+    if (voiceOpt) {
+      voiceOpt.addEventListener("change", function(){
+        if (!started) return;
+        if (voiceOpt.checked) startVoice();
+        else stopVoice();
+      });
+    }
 
     // =========================================================================
     // Background
@@ -696,7 +844,7 @@
       ctx.lineWidth = 2;
       ctx.beginPath(); ctx.arc(spellCx, spellCy, R, 0, Math.PI*2); ctx.stroke();
 
-      ctx.globalAlpha = retAlpha * 0.65;
+      ctx.globalAlpha = ret_toggleAlpha = retAlpha * 0.65;
       ctx.beginPath(); ctx.arc(spellCx, spellCy, R * 0.72, 0, Math.PI*2); ctx.stroke();
 
       ctx.globalAlpha = retAlpha * 0.85;
@@ -1000,7 +1148,7 @@
 
       const voiceStr =
         (window.SpeechRecognition || window.webkitSpeechRecognition)
-          ? (voiceEnabled ? '<span class="ok">VOICE</span> <b>ON</b>' : '<span class="warn">VOICE</span> <b>OFF</b> (click/tap)')
+          ? (voiceEnabled ? '<span class="ok">VOICE</span> <b>ON</b>' : '<span class="warn">VOICE</span> <b>OFF</b> (start screen)')
           : '<span class="bad">VOICE</span> <b>UNSUPPORTED</b>';
 
       const armStr = (winningPlatform && winningPlatform.spelled)
