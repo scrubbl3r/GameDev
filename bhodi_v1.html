@@ -120,9 +120,40 @@
       filter: contrast(1.1) brightness(.95) saturate(1.05);
       opacity:.92;
     }
+
+    /* ============================================================
+       START SCREEN (black screen + centered START GAME link)
+       ============================================================ */
+    #startScreen{
+      position:fixed; inset:0;
+      display:grid; place-items:center;
+      background:#000;
+      z-index: 9999;
+    }
+    #startScreen a{
+      color: var(--g);
+      text-decoration: underline;
+      font-weight: 800;
+      letter-spacing: 1.2px;
+      text-transform: uppercase;
+      font-size: 20px;
+      padding: 16px 22px;
+      border-radius: 14px;
+      background: rgba(0,0,0,0);
+      text-shadow: 0 0 18px rgba(50,255,117,.22);
+    }
+    #startScreen a:active{
+      transform: translateY(1px);
+    }
   </style>
 </head>
 <body>
+
+  <!-- START SCREEN -->
+  <div id="startScreen">
+    <a href="#" id="startBtn">START GAME</a>
+  </div>
+
   <div id="wrap">
     <canvas id="game" width="900" height="600"></canvas>
   </div>
@@ -135,7 +166,7 @@
     <div class="dim">• <b>Spell</b>: approach the final platform until it glows, then speak: <b>"satanis mentis maximus"</b></div>
     <div class="dim">Tip: click/tap once to enable voice (browser requirement).</div>
     <hr style="border:none;border-top:1px solid rgba(50,255,117,.18); margin:10px 0;">
-    <div id="status">Initializing…</div>
+    <div id="status">Waiting for START GAME…</div>
   </div>
 
   <div id="overlay">
@@ -167,6 +198,9 @@
     const overlaySub   = document.getElementById("overlaySub");
     const overlayHint  = document.getElementById("overlayHint");
     const overlayCard  = document.getElementById("overlayCard");
+
+    const startScreen = document.getElementById("startScreen");
+    const startBtn = document.getElementById("startBtn");
 
     // =========================================================================
     // TUNING
@@ -243,14 +277,12 @@
     function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
     function lerp(a,b,t){ return a + (b-a)*t; }
 
-    // FIX: no px1 typo (this was your previous crash)
     function distPointAABB(px, py, x0, y0, x1, y1) {
       const dx = (px < x0) ? (x0 - px) : (px > x1 ? (px - x1) : 0);
       const dy = (py < y0) ? (y0 - py) : (py > y1 ? (py - y1) : 0);
       return Math.hypot(dx, dy);
     }
 
-    // Safer normalization (no \p{…} unicode property escapes)
     function normalizeSpeech(s){
       return String(s || "")
         .toLowerCase()
@@ -492,7 +524,7 @@
         minTrackingConfidence: 0.55
       });
 
-      statusEl.innerHTML = '<span class="ok">Webcam ready.</span> Click/tap once to enable voice.';
+      statusEl.innerHTML = '<span class="ok">Webcam ready.</span> Voice is enabled.';
     }
 
     // =========================================================================
@@ -519,7 +551,6 @@
         const pts = lms[i];
         if (!pts || pts.length < 9) continue;
 
-        // handedness extraction (many shapes exist)
         let name = null;
         const h = handed[i];
         if (h && h[0] && (h[0].categoryName || h[0].displayName)) name = h[0].categoryName || h[0].displayName;
@@ -612,6 +643,7 @@
       try { recognition.start(); } catch(e) {}
     }
 
+    // keep these (doesn't change mechanics) — voice already ON after START GAME
     canvas.addEventListener("pointerdown", function(){ startVoice(); }, { once:false });
     window.addEventListener("keydown", function(e){
       if (e.key === "v" || e.key === "V") startVoice();
@@ -781,7 +813,6 @@
 
       const prevX = ball.prevX, prevY = ball.prevY;
 
-      // TOP landing
       if (prevY <= ey0 && ball.y > ey0 && ball.vy > 0) {
         ball.y = ey0;
         ball.vy = 0;
@@ -793,7 +824,6 @@
         return;
       }
 
-      // UNDERSIDE impact (teeth kill for non-winning)
       if (prevY >= ey1 && ball.y < ey1 && ball.vy < 0) {
         if (!p.isWinning) {
           ball.alive = false;
@@ -806,21 +836,18 @@
         return;
       }
 
-      // LEFT
       if (prevX <= ex0 && ball.x > ex0 && ball.vx > 0) {
         ball.x = ex0;
         ball.vx = -Math.abs(ball.vx) * TUNE.bounceSide;
         return;
       }
 
-      // RIGHT
       if (prevX >= ex1 && ball.x < ex1 && ball.vx < 0) {
         ball.x = ex1;
         ball.vx = Math.abs(ball.vx) * TUNE.bounceSide;
         return;
       }
 
-      // Fallback push-out
       const dxL = (ball.x - ex0);
       const dxR = (ex1 - ball.x);
       const dyT = (ball.y - ey0);
@@ -878,7 +905,6 @@
         const toothH = TUNE.teethHeight;
         const step = Math.max(8, TUNE.teethStep);
 
-        // bright red bottom edge
         ctx.globalAlpha = 0.85;
         ctx.strokeStyle = "rgba(255,43,43,1)";
         ctx.lineWidth = 3;
@@ -887,7 +913,6 @@
         ctx.lineTo(p.x + p.w, bottom);
         ctx.stroke();
 
-        // sharp triangle zig-zag
         ctx.globalAlpha = 0.95;
         ctx.strokeStyle = "rgba(255,43,43,1)";
         ctx.lineWidth = 2;
@@ -906,7 +931,6 @@
         }
         ctx.stroke();
 
-        // faint fill under teeth
         ctx.globalAlpha = 0.18;
         ctx.fillStyle = "rgba(255,43,43,1)";
         ctx.beginPath();
@@ -992,12 +1016,12 @@
 
       updateArming();
 
-      // HUD
       const ePct = Math.round(circleEnergy * 100);
       const lPct = Math.round(scoreL * 100);
       const rPct = Math.round(scoreR * 100);
       const cPct = Math.round(liftCharge * 100);
 
+      // IMPORTANT: voice display is driven by voiceEnabled (we turn it on at START GAME)
       const voiceStr =
         (window.SpeechRecognition || window.webkitSpeechRecognition)
           ? (voiceEnabled ? '<span class="ok">VOICE</span> <b>ON</b>' : '<span class="warn">VOICE</span> <b>OFF</b> (click/tap)')
@@ -1110,7 +1134,7 @@
       ctx.save();
       ctx.fillStyle = "rgba(50,255,117,0.75)";
       ctx.font = "600 12px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace";
-      ctx.fillText("AVOID RED TEETH UNDERSIDES → REACH THE FINAL PLATFORM → SPEAK → LAND ON ORANGE", 18, H - 18);
+      ctx.fillText("REACH THE FINAL PLATFORM → SPEAK, 'Time is a flat circel' → LAND ON ORANGE", 18, H - 18);
       ctx.restore();
     }
 
@@ -1133,12 +1157,24 @@
     }
 
     // =========================================================================
-    // Boot
+    // Boot (now starts ONLY after clicking START GAME)
     // =========================================================================
-    (async function main(){
+    let started = false;
+
+    async function startGame(){
+      if (started) return;
+      started = true;
+
+      // hide black start screen
+      startScreen.style.display = "none";
+
+      // start voice immediately from the user gesture
+      startVoice();
+
       try {
         await setupWebcam();
         await initLandmarker();
+        lastT = performance.now();
         requestAnimationFrame(loop);
       } catch (err) {
         console.error(err);
@@ -1146,7 +1182,12 @@
           '<span class="bad">Failed to init webcam/model.</span><br>' +
           '<span class="dim">' + String(err) + '</span>';
       }
-    })();
+    }
+
+    startBtn.addEventListener("click", function(e){
+      e.preventDefault();
+      startGame();
+    });
   </script>
 </body>
 </html>
