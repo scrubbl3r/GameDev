@@ -13,7 +13,7 @@
       background: #000;
       color: var(--green);
       font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
-      transition: background-color 80ms linear; /* keep phone glow mapping */
+      transition: background-color 80ms linear;
       touch-action: manipulation;
     }
 
@@ -36,6 +36,7 @@
       letter-spacing: 0.02em;
       box-shadow: 0 0 22px rgba(125,211,95,0.18);
       -webkit-tap-highlight-color: transparent;
+      user-select: none;
     }
     #startBtn:active { transform: scale(0.98); }
     #startBtn:disabled { opacity: 0.55; }
@@ -62,7 +63,6 @@
 
       set();
 
-      // iOS Chrome: visualViewport changes when bars show/hide & during scroll
       window.addEventListener('resize', set, { passive: true });
       window.addEventListener('orientationchange', set, { passive: true });
       if (window.visualViewport) {
@@ -75,9 +75,17 @@
   <script>
   (() => {
     // =========================================================================
-    // UI (single button only)
+    // UI (single button only) — Start → Orient Phone → Stop
     // =========================================================================
     const startBtn = document.getElementById('startBtn');
+
+    const UI = {
+      state: "idle",   // "idle" | "running_need_orient" | "running_oriented"
+    };
+
+    function setBtn(label){
+      startBtn.textContent = label;
+    }
 
     // =========================================================================
     // Keep phone glow mapping (background color), driven by energy
@@ -136,35 +144,12 @@
       ably = new Ably.Realtime({ authUrl, autoConnect: true });
       ablyChannel = ably.channels.get(room);
 
-      // ✅ Await attach so we don’t publish into a not-yet-attached channel.
+      // Await attach so we don’t publish into a not-yet-attached channel.
       await new Promise((resolve) => {
         ablyChannel.attach(() => resolve());
       });
 
-      // =========================================================================
-      // ✅ NEW: COMMAND LISTENER (lean) — lets receiver trigger calibration
-      // Event name: "cmd"
-      // Payload examples:
-      //   { cmd:"orient", step:1, durMs:3000 }
-      //   { cmd:"orient", step:2, durMs:3000 }
-      //   { cmd:"orientReset" }
-      // =========================================================================
-      ablyChannel.subscribe("cmd", (msg) => {
-        const d = msg && msg.data;
-        if (!d || typeof d !== "object") return;
-
-        if (d.cmd === "orientReset") {
-          orientReset();
-          return;
-        }
-
-        if (d.cmd === "orient") {
-          const step = (d.step === 2) ? 2 : 1;
-          const durMs = Math.max(800, Math.min(8000, Number(d.durMs) || 3000));
-          orientStart(step, durMs);
-          return;
-        }
-      });
+      // 🚫 NOTE: No "cmd" subscription by request (phone owns orientation flow)
 
       return true;
     }
@@ -176,13 +161,13 @@
     }
 
     // =========================================================================
-    // ✅ NETWORK THROTTLE (unchanged)
+    // NETWORK THROTTLE (unchanged)
     // =========================================================================
     const SEND_HZ = 12;
     const SEND_MIN_MS = 1000 / SEND_HZ;
 
     // =========================================================================
-    // ✅ TELEMETRY SIZE SWITCH
+    // TELEMETRY SIZE SWITCH
     // =========================================================================
     const TELEMETRY = false;
     const TELEMETRY_URL = (() => {
@@ -229,9 +214,6 @@
         locked:      !!p.locked,
         shakeHit:    !!p.shakeHit,
         hz:          roundN(p.hz, 3),
-
-        // ✅ NEW: direction code included ONLY on shakeHit (so signature ignores it)
-        // (we purposely do NOT include it in sig so normal motion doesn't spam sends)
       };
     }
 
@@ -253,7 +235,7 @@
     }
 
     // =========================================================================
-    // ✅ publishDynamics trims payload when TELEMETRY_ON is false
+    // publishDynamics trims payload when TELEMETRY_ON is false
     // =========================================================================
     function publishDynamics(payload, dt, force=false) {
       if (!ablyChannel) return;
@@ -267,11 +249,8 @@
       lastSig = sig;
       nextSendAtMs = now + SEND_MIN_MS;
 
-      // ✅ SMALL base payload (what the game needs)
       const out = {
         room: payload.room,
-
-        // fall drag default exposed for receiver (ignored if not used)
         fallDrag: FALL_DRAG_DEFAULT,
 
         energy01:   sig.energy01,
@@ -285,14 +264,12 @@
         hz:         sig.hz,
       };
 
-      // ✅ NEW: send shake direction ONLY when a shakeHit fires (lean)
-      // sd: "L"|"R"|"F"|"B"|"U"|"D" or "" (omitted if unknown)
+      // send shake direction ONLY when a shakeHit fires (lean)
       if (payload.shakeHit && payload.sd) out.sd = payload.sd;
 
-      // ✅ NEW: optional orient status messages (only during calibration, lean)
-      // oc: 1..2 step active, od: 1 when done, or 0 when reset
-      if (payload.oc) out.oc = payload.oc;
-      if (payload.od) out.od = payload.od;
+      // orient status only as tiny pings (1 during step, 1 when done, 0 reset)
+      if (payload.oc !== undefined && payload.oc !== null) out.oc = payload.oc;
+      if (payload.od !== undefined && payload.od !== null) out.od = payload.od;
 
       if (TELEMETRY_ON) {
         out.t     = roundN(payload.t, 1);
@@ -302,7 +279,6 @@
         out.wFilt = roundN(payload.wFilt, 2);
         out.cap   = roundN(payload.cap, 2);
 
-        // DYNAMICS DEBUG (same meaning as old orbit debug)
         out.d_r2      = roundN(payload.d_r2, 4);
         out.d_r3      = roundN(payload.d_r3, 4);
         out.d_gate    = roundN(payload.d_gate, 4);
@@ -310,7 +286,6 @@
         out.d_couple  = roundN(payload.d_couple, 4);
       }
 
-      // Event name kept as "orb" (project routing); payload uses dynamics naming.
       ablyChannel.publish("orb", out, (err) => {
         if (err) console.warn("[ably publish err]", err);
       });
@@ -339,12 +314,11 @@
     const JERK_LOOSE = 2600.0;
 
     // =========================================================================
-    // ✅ DYNAMICS — v4.0 (DIRECTIONAL DIVERSITY, 1s window) — functionally same
+    // DYNAMICS — v4.0 (DIRECTIONAL DIVERSITY, 1s window) — functionally same
     // =========================================================================
     const DYNAMICS_WINDOW_SEC = 1.00;
     const DYNAMICS_FLOOR = 0.18;
 
-    // UI shaping for published dynamics01 (applied to diversity)
     const DYNAMICS_UI_EXP  = 1.0;
     const DYNAMICS_UI_GAIN = 3.5;
 
@@ -358,6 +332,19 @@
 
     const UI_SMOOTH   = 0.10;
     const LOCK_SMOOTH = 0.14;
+
+    const GROOVE_EXP    = 0.70;
+    const SMOOTH_EXP    = 0.70;
+    const DYNAMICS_EXP  = 1.00;
+
+    const EARN_SCALE = 1.00;
+
+    const COAST_QUALITY_MIN  = 0.28;
+    const COAST_DECAY_MULT   = 0.65;
+
+    const SMOOTH_KILL_THRESH     = 0.12;
+    const SMOOTH_KILL_DECAY_MULT = 3.25;
+    const SMOOTH_KILL_UNLOCK     = true;
 
     const GRACE_SEC = 0.75;
 
@@ -387,25 +374,6 @@
     const SPEED_RELEASE_HZ = 8.0;
 
     // =========================================================================
-    // SSOT MOBILE 2.0 — ENERGY MODEL
-    // =========================================================================
-    const GROOVE_EXP    = 0.70;
-    const SMOOTH_EXP    = 0.70;
-    const DYNAMICS_EXP  = 1.00;
-
-    const EARN_SCALE = 1.00;
-
-    const COAST_QUALITY_MIN  = 0.28;
-    const COAST_DECAY_MULT   = 0.65;
-
-    // =========================================================================
-    // ✅ ANTI-EXPLOIT: SMOOTH KILL SWITCH
-    // =========================================================================
-    const SMOOTH_KILL_THRESH     = 0.12;
-    const SMOOTH_KILL_DECAY_MULT = 3.25;
-    const SMOOTH_KILL_UNLOCK     = true;
-
-    // =========================================================================
     // DISRUPTOR v3 — SHAKE (FAST HIT + SLOW METER) + LOW-SMOOTH BOOST
     // =========================================================================
     const SHAKE_BASELINE_HZ = 0.75;
@@ -415,44 +383,40 @@
     const SHAKE_HP_WEIGHT   = 1.00;
     const SHAKE_JERK_WEIGHT = 0.35;
 
-    // Meter (shake01) — purely descriptive intensity
     const SHAKE_METER_GAIN  = 2.10;
     const SHAKE_METER_DECAY = 2.60;
 
-    // ---- LOW-SMOOTH BOOST (kept; affects meter only) -------------------------
     const SHAKE_SMOOTH_BOOST_START   = 0.45;
     const SHAKE_SMOOTH_THR_DROP_MAX  = 0.60;
 
     // =========================================================================
-    // ✅ NEW SHAKE WIN RULE:
+    // NEW SHAKE WIN RULE:
     // "When shake meter hits 100% twice in 500ms" => shakeHit
     // =========================================================================
     const SHAKE_WIN_WINDOW_SEC = 0.50;
-    const SHAKE_FULL_HI = 0.999;   // treat as "100%"
-    // (no extra cooldown needed; we only count rising edges into FULL)
+    const SHAKE_FULL_HI = 0.999;
 
     // =========================================================================
-    // ✅ NEW: SHAKE DIRECTION (gravity-projected + optional 2-step orientation)
-    //  - Uses linear acceleration (accIncG - gravityLPF) so phone tilt doesn't matter
-    //  - If not oriented yet, it still reports U/D (vertical) reliably and uses
-    //    a fallback horizontal axis until calibration.
-    //  - Network cost: adds `sd` ONLY when shakeHit fires.
+    // NEW: SHAKE DIRECTION + 2-step orientation flow (PHONE-OWNED)
     // =========================================================================
-    const GRAV_LPF_HZ = 2.0;        // gravity estimate smoothing
-    const IMPULSE_WIN_SEC = 0.22;   // window to integrate impulse around hit
-    const VDOM_RATIO = 1.20;        // if vertical > horizontal*ratio => U/D
-    const ORIENT_MIN_IMP = 0.35;    // minimum horizontal impulse magnitude to accept sample
+    const GRAV_LPF_HZ = 2.0;
+    const IMPULSE_WIN_SEC = 0.22;
+    const VDOM_RATIO = 1.20;
+    const ORIENT_MIN_IMP = 0.35;
+
+    // Oriented basis (world-ish, in device coords): X=Left/Right, Y=Forward/Back
+    let haveOrient = false;
+    let bx = {x:1,y:0,z:0};
+    let by = {x:0,y:1,z:0};
 
     // gravity LPF vector
     let gX=0, gY=0, gZ=9.81;
 
-    // impulse buffer of linear accel samples (short history)
+    // impulse buffer (linear accel)
     const aLinBuf = []; // {t, dt, x,y,z}
     function pushALin(t, dt, ax, ay, az){
       const d = Math.max(1e-4, Number(dt)||0);
       aLinBuf.push({ t, dt:d, x:ax, y:ay, z:az });
-
-      // keep ~0.5s
       const cutoff = t - 0.55;
       while (aLinBuf.length && aLinBuf[0].t < cutoff) aLinBuf.shift();
     }
@@ -465,66 +429,23 @@
       return { x:x/m, y:y/m, z:z/m, m };
     }
 
-    // Oriented basis (world-ish, in device coords): X=Left/Right, Y=Forward/Back, Z ~ gravity
-    let haveOrient = false;
-    let bx = {x:1,y:0,z:0}; // horizontal axis 1
-    let by = {x:0,y:1,z:0}; // horizontal axis 2
-
-    // calibration state (triggered by receiver cmd)
-    const orient = {
-      active: false,
-      step: 0,          // 1 or 2
-      untilT: 0,
-      samples: [],      // projected horizontal impulse vectors (in device coords, gravity-plane)
-      done1: false,
-      done2: false
-    };
-
-    function orientReset(){
-      haveOrient = false;
-      orient.active = false;
-      orient.step = 0;
-      orient.untilT = 0;
-      orient.samples.length = 0;
-      orient.done1 = orient.done2 = false;
-      bx = {x:1,y:0,z:0};
-      by = {x:0,y:1,z:0};
-      // publish a tiny "reset" ping (optional)
-      publishDynamics({ room, energy01: energyUI, groove01:lastGrooveUI, dynamics01:lastDynamicsUI, smooth01:lastSmoothUI,
-        speed01:speedOut, shake01, shakeHit:false, locked:false, hz:0, oc:0, od:0 }, 0, true);
-    }
-
-    function orientStart(step=1, durMs=3000){
-      orient.active = true;
-      orient.step = step;
-      orient.untilT = (performance.now()/1000) + (durMs/1000);
-      orient.samples.length = 0;
-      // publish a tiny "start step" ping (optional)
-      publishDynamics({ room, energy01: energyUI, groove01:lastGrooveUI, dynamics01:lastDynamicsUI, smooth01:lastSmoothUI,
-        speed01:speedOut, shake01, shakeHit:false, locked:false, hz:0, oc:step, od:0 }, 0, true);
-    }
-
     function projectToPlane(vx,vy,vz, nx,ny,nz){
-      // v_proj = v - n*dot(v,n)
       const d = dot3(vx,vy,vz, nx,ny,nz);
       return { x: vx - nx*d, y: vy - ny*d, z: vz - nz*d };
     }
 
     function orthonormalize(hx,hy,hz, gx,gy,gz){
-      // make h perpendicular to g, then normalize
       const hp = projectToPlane(hx,hy,hz, gx,gy,gz);
       const u = unit3(hp.x, hp.y, hp.z);
       return { x:u.x, y:u.y, z:u.z, mag:u.m };
     }
 
     function computeImpulse(tNow){
-      // integrate linear accel over last IMPULSE_WIN_SEC
       const t0 = tNow - IMPULSE_WIN_SEC;
       let sx=0, sy=0, sz=0;
       for (let i = aLinBuf.length - 1; i >= 0; i--){
         const s = aLinBuf[i];
         if (s.t < t0) break;
-        // dt-weighted sum acts like a crude impulse integral
         const w = s.dt;
         sx += s.x * w;
         sy += s.y * w;
@@ -534,32 +455,26 @@
     }
 
     function chooseDirectionFromImpulse(ix,iy,iz, gx,gy,gz){
-      // gHat in device coords
       const gU = unit3(gx,gy,gz);
       const gHat = {x:gU.x, y:gU.y, z:gU.z};
 
-      // vertical component (along gravity vector)
       const v = dot3(ix,iy,iz, gHat.x,gHat.y,gHat.z);
-      // horizontal component magnitude
       const hp = projectToPlane(ix,iy,iz, gHat.x,gHat.y,gHat.z);
       const hMag = norm3(hp.x,hp.y,hp.z);
       const vMag = Math.abs(v);
 
       if (vMag > (hMag * VDOM_RATIO)) {
-        // NOTE: sign may be reversed depending on platform; easy to flip if needed.
         return (v >= 0) ? "D" : "U";
       }
 
-      // horizontal classification: if oriented, use bx/by; else use a fallback axis
+      // If not oriented, still classify on a stable fallback axis in gravity plane
       let ax1 = bx, ax2 = by;
       if (!haveOrient) {
-        // fallback: pick any stable axis in the gravity plane (derived from gHat)
-        // create a reference vector not parallel to gHat, then project
-        const ref = (Math.abs(gHat.z) < 0.9) ? {x:0,y:0,z:1} : {x:0,y:1,z:0};
+        const gHatAbsZ = Math.abs(gHat.z);
+        const ref = (gHatAbsZ < 0.9) ? {x:0,y:0,z:1} : {x:0,y:1,z:0};
         const p = projectToPlane(ref.x,ref.y,ref.z, gHat.x,gHat.y,gHat.z);
         const u = unit3(p.x,p.y,p.z);
         ax1 = {x:u.x,y:u.y,z:u.z};
-        // ax2 = gHat x ax1
         const cx = gHat.y*ax1.z - gHat.z*ax1.y;
         const cy = gHat.z*ax1.x - gHat.x*ax1.z;
         const cz = gHat.x*ax1.y - gHat.y*ax1.x;
@@ -570,32 +485,87 @@
       const dx = dot3(hp.x,hp.y,hp.z, ax1.x,ax1.y,ax1.z);
       const dy = dot3(hp.x,hp.y,hp.z, ax2.x,ax2.y,ax2.z);
 
-      if (Math.abs(dx) >= Math.abs(dy)) {
-        return (dx >= 0) ? "R" : "L";
-      } else {
-        return (dy >= 0) ? "F" : "B";
-      }
+      if (Math.abs(dx) >= Math.abs(dy)) return (dx >= 0) ? "R" : "L";
+      return (dy >= 0) ? "F" : "B";
     }
 
-    function orientConsumeSample(imp, tNow){
-      // Use current gravity vector
-      const gU = unit3(gX,gY,gZ);
-      const gHat = {x:gU.x,y:gU.y,z:gU.z};
+    // -------------------------------------------------------------------------
+    // ORIENT FLOW (PHONE-OWNED): two 3s windows collecting shakeHit impulses
+    // -------------------------------------------------------------------------
+    const ORIENT_STEP_MS = 3000;
 
-      // Project impulse to horizontal plane (perp to gravity)
+    const orient = {
+      active: false,
+      step: 0,       // 1 or 2
+      untilT: 0,     // seconds
+      samples: [],   // {x,y,z} unit vectors in gravity plane
+    };
+
+    function orientReset(){
+      haveOrient = false;
+      orient.active = false;
+      orient.step = 0;
+      orient.untilT = 0;
+      orient.samples.length = 0;
+      bx = {x:1,y:0,z:0};
+      by = {x:0,y:1,z:0};
+
+      // ping reset (optional)
+      publishDynamics({
+        room,
+        energy01: energyUI,
+        groove01: lastGrooveUI,
+        dynamics01: lastDynamicsUI,
+        smooth01: lastSmoothUI,
+        speed01: speedOut,
+        shake01,
+        shakeHit:false,
+        sd:"",
+        locked:false,
+        hz:0,
+        oc:0,
+        od:0
+      }, 0, true);
+    }
+
+    function orientStart(step){
+      orient.active = true;
+      orient.step = step;
+      orient.samples.length = 0;
+      orient.untilT = (performance.now()/1000) + (ORIENT_STEP_MS/1000);
+
+      // ping start step
+      publishDynamics({
+        room,
+        energy01: energyUI,
+        groove01: lastGrooveUI,
+        dynamics01: lastDynamicsUI,
+        smooth01: lastSmoothUI,
+        speed01: speedOut,
+        shake01,
+        shakeHit:false,
+        sd:"",
+        locked:false,
+        hz:0,
+        oc:step,
+        od:0
+      }, 0, true);
+    }
+
+    function orientConsumeImpulse(imp){
+      const gU = unit3(gX,gY,gZ);
+      const gHat = {x:gU.x, y:gU.y, z:gU.z};
+
       const hp = projectToPlane(imp.x,imp.y,imp.z, gHat.x,gHat.y,gHat.z);
       const hMag = norm3(hp.x,hp.y,hp.z);
       if (hMag < ORIENT_MIN_IMP) return false;
 
-      // Store normalized horizontal direction (ignore magnitude)
       const hu = unit3(hp.x,hp.y,hp.z);
       orient.samples.push({x:hu.x,y:hu.y,z:hu.z});
       return true;
     }
 
     function pcaAxisFromSamples(samples){
-      // Very small PCA-ish: take mean of samples, normalize.
-      // Works well for “shake back and forth” where vectors align to an axis.
       let mx=0,my=0,mz=0;
       for (const s of samples){ mx += s.x; my += s.y; mz += s.z; }
       const n = Math.max(1, samples.length);
@@ -604,28 +574,24 @@
       return { x:u.x, y:u.y, z:u.z, mag:u.m };
     }
 
-    function orientFinishStepIfReady(tNow){
-      if (!orient.active) return;
+    function orientFinalizeIfTime(tNow){
+      if (!orient.active) return false;
+      if (tNow < orient.untilT) return false;
 
-      if (tNow < orient.untilT) return;
-
-      // finalize current step if we got enough samples
       if (orient.samples.length < 6) {
-        // not enough: keep it active for another short slice (silent)
-        orient.untilT = tNow + 1.0;
-        return;
+        orient.untilT = tNow + 1.0; // silently extend
+        return false;
       }
 
       const gU = unit3(gX,gY,gZ);
-      const gHat = {x:gU.x,y:gU.y,z:gU.z};
+      const gHat = {x:gU.x, y:gU.y, z:gU.z};
 
       if (orient.step === 1) {
         const ax = pcaAxisFromSamples(orient.samples);
         const axOrtho = orthonormalize(ax.x,ax.y,ax.z, gHat.x,gHat.y,gHat.z);
         bx = {x:axOrtho.x,y:axOrtho.y,z:axOrtho.z};
-        orient.done1 = true;
 
-        // Make a provisional by (perp in plane)
+        // provisional by = gHat x bx
         const cx = gHat.y*bx.z - gHat.z*bx.y;
         const cy = gHat.z*bx.x - gHat.x*bx.z;
         const cz = gHat.x*bx.y - gHat.y*bx.x;
@@ -635,14 +601,18 @@
         orient.active = false;
         orient.samples.length = 0;
 
-        publishDynamics({ room, energy01: energyUI, groove01:lastGrooveUI, dynamics01:lastDynamicsUI, smooth01:lastSmoothUI,
-          speed01:speedOut, shake01, shakeHit:false, locked:false, hz:0, oc:1, od:1 }, 0, true);
+        publishDynamics({
+          room, energy01: energyUI, groove01:lastGrooveUI, dynamics01:lastDynamicsUI, smooth01:lastSmoothUI,
+          speed01:speedOut, shake01, shakeHit:false, sd:"", locked:false, hz:0, oc:1, od:1
+        }, 0, true);
 
-      } else if (orient.step === 2) {
-        // derive by from samples, then make it perpendicular to bx in plane
+        return true;
+      }
+
+      if (orient.step === 2) {
         const ay = pcaAxisFromSamples(orient.samples);
 
-        // remove component along bx, then re-orthonormalize to gravity plane
+        // remove component along bx
         const d = dot3(ay.x,ay.y,ay.z, bx.x,bx.y,bx.z);
         const rx = ay.x - bx.x * d;
         const ry = ay.y - bx.y * d;
@@ -650,27 +620,32 @@
 
         const byOrtho = orthonormalize(rx,ry,rz, gHat.x,gHat.y,gHat.z);
         if (byOrtho.mag < 0.3) {
-          // bad sample (too parallel) -> extend a bit silently
           orient.untilT = tNow + 1.0;
           orient.samples.length = 0;
-          return;
+          return false;
         }
 
         by = {x:byOrtho.x,y:byOrtho.y,z:byOrtho.z};
-        orient.done2 = true;
 
-        // re-orthonormalize bx to be perpendicular to by (numerical hygiene)
+        // re-orthonormalize bx vs by
         const d2 = dot3(bx.x,bx.y,bx.z, by.x,by.y,by.z);
         const bx2 = orthonormalize(bx.x - by.x*d2, bx.y - by.y*d2, bx.z - by.z*d2, gHat.x,gHat.y,gHat.z);
         bx = {x:bx2.x,y:bx2.y,z:bx2.z};
 
         haveOrient = true;
+
         orient.active = false;
         orient.samples.length = 0;
 
-        publishDynamics({ room, energy01: energyUI, groove01:lastGrooveUI, dynamics01:lastDynamicsUI, smooth01:lastSmoothUI,
-          speed01:speedOut, shake01, shakeHit:false, locked:false, hz:0, oc:2, od:1 }, 0, true);
+        publishDynamics({
+          room, energy01: energyUI, groove01:lastGrooveUI, dynamics01:lastDynamicsUI, smooth01:lastSmoothUI,
+          speed01:speedOut, shake01, shakeHit:false, sd:"", locked:false, hz:0, oc:2, od:1
+        }, 0, true);
+
+        return true;
       }
+
+      return false;
     }
 
     // =========================================================================
@@ -738,9 +713,7 @@
 
       for (let lag=minLag; lag<=maxLag; lag++) {
         let c=0;
-        for (let i=0;i<n-lag;i++) {
-          c += (signal[i]-mean) * (signal[i+lag]-mean);
-        }
+        for (let i=0;i<n-lag;i++) c += (signal[i]-mean) * (signal[i+lag]-mean);
         const r = c / varr;
         if (r > best) { best = r; bestLag = lag; }
       }
@@ -791,7 +764,6 @@
       dynamicsVecBuf.push(vec);
       dynamicsDtBuf.push(d);
 
-      // Keep at most ~2.5s of history (memory cap, not behavior).
       let acc = 0;
       for (let i = dynamicsDtBuf.length - 1; i >= 0; i--){
         acc += dynamicsDtBuf[i];
@@ -881,10 +853,7 @@
     let prevAx = 0, prevAy = 0, prevAz = 0;
     let prevAmag = 9.81;
 
-    // ✅ NEW: track "full meter" hits for double-hit rule
-    let shakeFullTimes = []; // seconds (t) when shake01 rises into ~100%
-
-    // ✅ NEW: last computed shake direction code ("L/R/F/B/U/D")
+    let shakeFullTimes = [];
     let lastShakeDir = "";
 
     let audioCtx = null, osc = null, gainNode = null;
@@ -985,8 +954,8 @@
     }
 
     // =========================================================================
-    // SHAKE — meter is the same; shakeHit is now "double 100% within 500ms"
-    // + NEW: gravity LPF + impulse integration + direction code
+    // SHAKE — meter unchanged; shakeHit double 100% within 500ms
+    // + direction code + orientation sample capture during orient windows
     // =========================================================================
     function updateShake(e, t, dt, groove01=0, locked=false, smooth01=1){
       const acc = e.accelerationIncludingGravity || e.acceleration;
@@ -995,7 +964,6 @@
       const prevShake = shake01;
 
       if (!acc) {
-        // meter decay only
         shake01 = Math.max(0, shake01 - SHAKE_METER_DECAY * dtSafe);
         return { shake01, shakeHit:false, spike:0, amag:0, jerk:0, sd:"" };
       }
@@ -1004,13 +972,13 @@
       const ay = Number(acc.y) || 0;
       const az = Number(acc.z) || 0;
 
-      // --- gravity LPF (new, independent from existing shake math) ------------
+      // gravity LPF
       const aG = alphaFromCutoff(dtSafe, GRAV_LPF_HZ);
       gX = (1 - aG) * gX + aG * ax;
       gY = (1 - aG) * gY + aG * ay;
       gZ = (1 - aG) * gZ + aG * az;
 
-      // linear accel estimate for impulse / direction (new)
+      // linear accel estimate for impulse/direction
       const linX = ax - gX;
       const linY = ay - gY;
       const linZ = az - gZ;
@@ -1037,60 +1005,81 @@
       prevAx = ax; prevAy = ay; prevAz = az;
       prevAmag = amag;
 
-      // combined violence (unchanged)
       const spike = (SHAKE_HP_WEIGHT * hpSpike) + (SHAKE_JERK_WEIGHT * (jerkSpike / 80.0));
 
-      // intensity meter (unchanged)
       shake01 = clamp01(shake01 + SHAKE_METER_GAIN * spike * dtSafe - SHAKE_METER_DECAY * dtSafe);
 
-      // --- smooth bias (kept; does not directly trigger shakeHit) -------------
+      // (kept: smooth bias space; does not directly change shakeHit)
       const s = clamp01(smooth01 || 0);
       const boost = (s < SHAKE_SMOOTH_BOOST_START)
         ? clamp01((SHAKE_SMOOTH_BOOST_START - s) / Math.max(1e-6, SHAKE_SMOOTH_BOOST_START))
         : 0;
-      const _thrDrop = boost * SHAKE_SMOOTH_THR_DROP_MAX; // kept for compatibility / tuning space
+      void boost; // reserved knob
+      // const _thrDrop = boost * SHAKE_SMOOTH_THR_DROP_MAX;
 
-      // ✅ NEW: detect "full meter" rising edge
+      // "full meter" rising edge tracking
       const hitFull = (prevShake < SHAKE_FULL_HI) && (shake01 >= SHAKE_FULL_HI);
-
       if (hitFull) {
         shakeFullTimes.push(t);
-
-        // prune hits outside window
         const cutoff = t - SHAKE_WIN_WINDOW_SEC;
         while (shakeFullTimes.length && shakeFullTimes[0] < cutoff) shakeFullTimes.shift();
-      } else {
-        // still prune occasionally so it can’t grow if no more hits
-        if (shakeFullTimes.length) {
-          const cutoff = t - SHAKE_WIN_WINDOW_SEC;
-          while (shakeFullTimes.length && shakeFullTimes[0] < cutoff) shakeFullTimes.shift();
-        }
+      } else if (shakeFullTimes.length) {
+        const cutoff = t - SHAKE_WIN_WINDOW_SEC;
+        while (shakeFullTimes.length && shakeFullTimes[0] < cutoff) shakeFullTimes.shift();
       }
 
       let shakeHit = false;
       if (shakeFullTimes.length >= 2) {
         shakeHit = true;
-        // reset so you need a fresh double-hit for the next win
         shakeFullTimes.length = 0;
       }
 
-      // ✅ NEW: compute direction ONLY when shakeHit fires (lean)
       let sd = "";
       if (shakeHit) {
         const imp = computeImpulse(t);
-        // during calibration windows, capture this impulse as a sample
-        if (orient.active) orientConsumeSample(imp, t);
-        // always produce a direction code for the shake event
+
+        // if we're calibrating, capture samples from these shakeHits
+        if (orient.active) orientConsumeImpulse(imp);
+
         sd = chooseDirectionFromImpulse(imp.x,imp.y,imp.z, gX,gY,gZ);
         lastShakeDir = sd;
       }
 
-      // If orient window ended, attempt finalize step
-      if (orient.active) orientFinishStepIfReady(t);
+      // finalize step if time elapsed
+      orientFinalizeIfTime(t);
 
       return { shake01, shakeHit, spike, amag, jerk, sd };
     }
 
+    // =========================================================================
+    // "Start → Orient Phone → Stop" click handler behavior
+    // =========================================================================
+    function clickHandler(){
+      if (UI.state === "idle") {
+        start();
+        return;
+      }
+
+      if (UI.state === "running_need_orient") {
+        // Begin the two-step orient flow (phone-owned)
+        // Step 1: shake LEFT/RIGHT (axis 1)
+        // Step 2: shake FORWARD/BACK (axis 2)
+        orientReset();     // clean slate each time you enter orient mode
+        orientStart(1);
+        UI.state = "running_need_orient"; // stays until step2 completes
+        setBtn("ORIENT… 1/2");
+        return;
+      }
+
+      // running_oriented => Stop
+      stop();
+    }
+
+    startBtn.addEventListener('click', clickHandler);
+
+    // =========================================================================
+    // onMotion
+    // =========================================================================
     function onMotion(e) {
       if (!running) return;
 
@@ -1101,14 +1090,243 @@
 
         if (dt > 0) dtBuf.push(dt);
 
-        // Use last-known groove/lock as proxy so shake can fire immediately.
         const lockedProxy = !!(lock || graceLeft > 0);
         const grooveProxy = clamp01(lockStrength || lastGrooveUI || 0);
-
-        // Use last-known smoothness as proxy for low-smooth boost.
         const smoothProxy = clamp01(lastSmoothUI || 0);
 
         const sh = updateShake(e, t, dt, grooveProxy, lockedProxy, smoothProxy);
+
+        // UI state updates for orient flow:
+        if (UI.state !== "idle") {
+          if (orient.active) {
+            setBtn(orient.step === 1 ? "ORIENT… 1/2" : "ORIENT… 2/2");
+          } else if (!haveOrient && UI.state !== "running_oriented") {
+            // If step 1 just completed, auto-advance to step 2 immediately
+            // (this mirrors the "guided flow" without extra UI)
+            // We detect completion by seeing oc/od pings via publish, but locally:
+            // If we are not active and not oriented yet, start step 2.
+            // Step 1 completion sets bx/by but haveOrient remains false.
+            // We'll assume step 1 completed if bx/by changed AND we’re not oriented.
+            // More robust: track last completed step locally:
+          }
+        }
+
+        // Auto-advance logic (robust): track step completion locally
+        // We infer completion when orient.active went false and haveOrient still false and we were just in step 1.
+        // We'll keep a tiny state machine:
+      } catch (err) {
+        console.error("[onMotion crash]", err);
+      }
+    }
+
+    // Patch in the orient state machine (keeps code readable)
+    let _wasOrientActive = false;
+    let _lastOrientStep = 0;
+
+    // Wrap original onMotion so we can insert the robust auto-advance
+    const _onMotionCore = onMotion;
+    function onMotionWrapped(e){
+      const beforeActive = orient.active;
+      const beforeStep = orient.step;
+      _onMotionCore(e);
+
+      const afterActive = orient.active;
+
+      // Detect transition: active -> inactive
+      if (beforeActive && !afterActive) {
+        // Step finished. If it was step 1, immediately begin step 2.
+        if (beforeStep === 1 && !haveOrient) {
+          orientStart(2);
+          setBtn("ORIENT… 2/2");
+        } else if (beforeStep === 2 && haveOrient) {
+          // Fully oriented; button becomes Stop
+          UI.state = "running_oriented";
+          setBtn("Stop");
+        }
+      }
+
+      // If user is in running_need_orient but hasn't clicked ORIENT yet:
+      if (UI.state === "running_need_orient" && !orient.active && !haveOrient) {
+        // keep label as "Orient Phone"
+        setBtn("Orient Phone");
+      }
+
+      // If already oriented, lock label to Stop
+      if (UI.state !== "idle" && haveOrient && UI.state !== "running_oriented") {
+        UI.state = "running_oriented";
+        setBtn("Stop");
+      }
+
+      _wasOrientActive = afterActive;
+      _lastOrientStep = orient.step;
+    }
+
+    // Replace listener target to wrapped version when we start
+    function addMotionListener(){
+      window.addEventListener('devicemotion', onMotionWrapped, { passive: true });
+    }
+    function removeMotionListener(){
+      window.removeEventListener('devicemotion', onMotionWrapped);
+    }
+
+    // =========================================================================
+    // iOS permission gate (UI-less)
+    // =========================================================================
+    async function requestMotionPermissionIfNeeded() {
+      const needs = (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function')
+                 || (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function');
+
+      if (!needs) return true;
+
+      const reqs = [];
+
+      if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
+        reqs.push(DeviceMotionEvent.requestPermission().then(s => s === 'granted').catch(() => false));
+      }
+
+      if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+        reqs.push(DeviceOrientationEvent.requestPermission().then(s => s === 'granted').catch(() => false));
+      }
+
+      const results = await Promise.all(reqs);
+      return results.every(Boolean);
+    }
+
+    // =========================================================================
+    // Start/Stop — now Start→Orient Phone→Stop
+    // =========================================================================
+    async function start() {
+      if (!window.isSecureContext) return;
+
+      startBtn.disabled = true;
+      try {
+        const ok = await requestMotionPermissionIfNeeded();
+        if (!ok) return;
+
+        ensureAudio();
+        try { await audioCtx.resume(); } catch(e) {}
+
+        nextSendAtMs = 0;
+        lastSig = null;
+        await connectRelay();
+
+        running = true;
+        lastT = null;
+
+        ox=oy=oz=0;
+        omegaMag.length  = 0;
+        omegaNorm.length = 0;
+        omegaVec.length  = 0;
+        jerkBuf.length   = 0;
+        dtBuf.length     = 0;
+
+        dynamicsVecBuf.length = 0;
+        dynamicsDtBuf.length  = 0;
+
+        emaMean = 0;
+        emaVar  = 1;
+
+        lock = false;
+        lockStrength = 0;
+        grooveHz = 0;
+
+        graceLeft = 0;
+        recenterBadTime = 0;
+
+        energy = 0;
+        energyUI = 0;
+
+        mSpeedEMA = 0;
+        speedOut  = 0;
+
+        meterHoldLeft = 0;
+        lastGrooveUI   = 0;
+        lastDynamicsUI = 0;
+        lastSmoothUI   = 0;
+
+        shake01 = 0;
+        accelBaseMag = 9.81;
+
+        prevAx = prevAy = prevAz = 0;
+        prevAmag = 9.81;
+
+        shakeFullTimes.length = 0;
+
+        lastShakeDir = "";
+        aLinBuf.length = 0;
+
+        gX = 0; gY = 0; gZ = 9.81;
+
+        // Keep calibration across runs unless user re-enters Orient Phone
+        orient.active = false;
+        orient.step = 0;
+        orient.untilT = 0;
+        orient.samples.length = 0;
+
+        setAudio(0,0,false);
+        setBgFromEnergy(0);
+
+        addMotionListener();
+
+        // Button label after start:
+        if (haveOrient) {
+          UI.state = "running_oriented";
+          setBtn("Stop");
+        } else {
+          UI.state = "running_need_orient";
+          setBtn("Orient Phone");
+        }
+
+      } finally {
+        startBtn.disabled = false;
+      }
+
+      if (screen.orientation && screen.orientation.lock) {
+        try { await screen.orientation.lock('portrait-primary'); }
+        catch (e) { /* no-op */ }
+      }
+    }
+
+    function stop() {
+      running = false;
+      removeMotionListener();
+
+      if (audioCtx && gainNode) {
+        const now = audioCtx.currentTime;
+        gainNode.gain.cancelScheduledValues(now);
+        gainNode.gain.setTargetAtTime(0, now, 0.05);
+      }
+
+      disconnectRelay();
+      UI.state = "idle";
+      setBtn("Start");
+      setBgFromEnergy(0);
+    }
+
+    // =========================================================================
+    // Motion processing (rest of your original logic) — unchanged,
+    // but we need to keep it intact. We’ll re-insert your original onMotion body
+    // with only one substitution: updateShake(...) call stays, publish stays.
+    // =========================================================================
+
+    // Rebuild onMotion core with your original logic (unchanged), but using
+    // the wrapped listener already installed above.
+    function onMotion(e) {
+      if (!running) return;
+
+      try {
+        const t = performance.now() / 1000;
+        const dt = (lastT == null) ? 0 : (t - lastT);
+        lastT = t;
+
+        if (dt > 0) dtBuf.push(dt);
+
+        const lockedProxy = !!(lock || graceLeft > 0);
+        const grooveProxy = clamp01(lockStrength || lastGrooveUI || 0);
+        const smoothProxy = clamp01(lastSmoothUI || 0);
+
+        const sh = updateShake(e, t, dt, grooveProxy, lockedProxy, smoothProxy);
+
         const rr = e.rotationRate;
 
         if (!rr) {
@@ -1141,7 +1359,9 @@
             sd: sh.sd,
             locked: false,
             hz: 0,
-            d_r2: 0, d_r3: 0, d_gate: 0, d_balance: 0, d_couple: 0
+            d_r2: 0, d_r3: 0, d_gate: 0, d_balance: 0, d_couple: 0,
+            oc: orient.active ? orient.step : undefined,
+            od: undefined
           }, dt);
 
           setBgFromEnergy(clamp01(energyUI));
@@ -1227,7 +1447,9 @@
             sd: sh.sd,
             locked: false,
             hz: 0,
-            d_r2: 0, d_r3: 0, d_gate: 0, d_balance: 0, d_couple: 0
+            d_r2: 0, d_r3: 0, d_gate: 0, d_balance: 0, d_couple: 0,
+            oc: orient.active ? orient.step : undefined,
+            od: undefined
           }, dt);
 
           setBgFromEnergy(clamp01(energyUI));
@@ -1243,15 +1465,11 @@
         const avgJerk = median(jerkWindow);
         const smoothScore = smoothnessFromJerk(avgJerk);
 
-        // ✅ DYNAMICS (same as orbit): direction diversity in last ~1000ms
         const dDiv = dynamicsDiversityLastSec(DYNAMICS_WINDOW_SEC);
         const actGate = dynamicsActivityGate(sv.speed);
         const diversityGated = clamp01(dDiv.div01 * actGate);
 
-        // Energy bonus keeps the same "floor" behavior (preserved)
         const dynamicsBonus = DYNAMICS_FLOOR + (1 - DYNAMICS_FLOOR) * diversityGated;
-
-        // Preserve curve: exp shapes diversity; gain scales it.
         const shapedCore = diversityGated;
         const dynamicsUI = clamp01(DYNAMICS_UI_GAIN * Math.pow(shapedCore, DYNAMICS_UI_EXP));
 
@@ -1332,7 +1550,10 @@
           d_r3: dDiv.div01,
           d_gate: actGate,
           d_balance: 0,
-          d_couple: 0
+          d_couple: 0,
+
+          oc: orient.active ? orient.step : undefined,
+          od: undefined
         }, dt);
 
         setBgFromEnergy(clamp01(energyUI));
@@ -1367,7 +1588,7 @@
     }
 
     // =========================================================================
-    // Start/Stop (button label toggles only)
+    // Start/Stop
     // =========================================================================
     async function start() {
       if (!window.isSecureContext) return;
@@ -1418,24 +1639,17 @@
         lastDynamicsUI = 0;
         lastSmoothUI   = 0;
 
-        // SHAKE reset
         shake01 = 0;
         accelBaseMag = 9.81;
-
         prevAx = prevAy = prevAz = 0;
         prevAmag = 9.81;
-
         shakeFullTimes.length = 0;
 
-        // ✅ NEW direction/orient reset (does NOT auto-clear haveOrient)
         lastShakeDir = "";
         aLinBuf.length = 0;
 
-        // gravity init
         gX = 0; gY = 0; gZ = 9.81;
 
-        // leave orientation as-is across Start/Stop by default
-        // (receiver can reset with cmd:"orientReset")
         orient.active = false;
         orient.step = 0;
         orient.untilT = 0;
@@ -1444,21 +1658,29 @@
         setAudio(0,0,false);
         setBgFromEnergy(0);
 
-        window.addEventListener('devicemotion', onMotion, { passive: true });
-        startBtn.textContent = 'Stop';
+        addMotionListener();
+
+        if (haveOrient) {
+          UI.state = "running_oriented";
+          setBtn("Stop");
+        } else {
+          UI.state = "running_need_orient";
+          setBtn("Orient Phone");
+        }
+
       } finally {
         startBtn.disabled = false;
       }
 
       if (screen.orientation && screen.orientation.lock) {
         try { await screen.orientation.lock('portrait-primary'); }
-        catch (e) { /* no-op */ }
+        catch (e) {}
       }
     }
 
     function stop() {
       running = false;
-      window.removeEventListener('devicemotion', onMotion);
+      removeMotionListener();
 
       if (audioCtx && gainNode) {
         const now = audioCtx.currentTime;
@@ -1467,14 +1689,30 @@
       }
 
       disconnectRelay();
-      startBtn.textContent = 'Start';
+      UI.state = "idle";
+      setBtn("Start");
       setBgFromEnergy(0);
     }
 
-    startBtn.addEventListener('click', () => {
-      if (!running) start();
-      else stop();
-    });
+    // =========================================================================
+    // Final: single button click logic
+    // =========================================================================
+    startBtn.onclick = () => {
+      if (UI.state === "idle") {
+        start();
+        return;
+      }
+      if (UI.state === "running_need_orient") {
+        // enter orient wizard
+        orientReset();
+        orientStart(1);
+        setBtn("ORIENT… 1/2");
+        return;
+      }
+      // oriented => stop
+      stop();
+    };
+
   })();
   </script>
 </body>
