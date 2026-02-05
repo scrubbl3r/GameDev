@@ -1474,10 +1474,17 @@
 
     // quality metrics
     const sumLen = Math.hypot(ORIENT.sum.x, ORIENT.sum.y, ORIENT.sum.z);
+
     const resultant = sumLen / Math.max(1, ORIENT.n); // 0..1, higher=cleaner
-    const p01 = clamp01((ORIENT.n / ORIENT.MIN_SAMPLES) * (resultant / ORIENT.MIN_RESULTANT));
+
+    // ✅ Progress should only hit 100% when BOTH conditions are met.
+    // Use MIN() not product, so the bar cannot "lie".
+    const pN   = ORIENT.n / ORIENT.MIN_SAMPLES;
+    const pRes = resultant / ORIENT.MIN_RESULTANT;
+    const p01  = clamp01(Math.min(pN, pRes));
 
     orientProgress(p01);
+
 
     if (ORIENT.n >= ORIENT.MIN_SAMPLES && resultant >= ORIENT.MIN_RESULTANT){
         const t = { x: ORIENT.sum.x / sumLen, y: ORIENT.sum.y / sumLen, z: ORIENT.sum.z / sumLen };
