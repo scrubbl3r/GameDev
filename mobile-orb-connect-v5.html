@@ -214,10 +214,6 @@
         locked:      !!p.locked,
         shakeHit:    !!p.shakeHit,
         hz:          roundN(p.hz, 3),
-
-        // NEW: direction hint fields participate in the signature
-        sdh:         (p.sdh || ""),
-        sda:         (p.sda == null ? null : Math.round(p.sda)),
       };
     }
 
@@ -226,10 +222,6 @@
 
       if (sig.shakeHit && !lastSig.shakeHit) return true;
       if (sig.locked !== lastSig.locked) return true;
-
-      // NEW: direction hint changes should be allowed to publish (but not too noisy)
-      if (sig.sdh !== lastSig.sdh) return true;
-      if ((sig.sda != null && lastSig.sda != null) && Math.abs(sig.sda - lastSig.sda) > 140) return true;
 
       if (Math.abs(sig.energy01   - lastSig.energy01)   > EPS.energy01) return true;
       if (Math.abs(sig.groove01   - lastSig.groove01)   > EPS.groove01) return true;
@@ -274,10 +266,6 @@
 
       // send shake direction ONLY when a shakeHit fires (lean)
       if (payload.shakeHit && payload.sd) out.sd = payload.sd;
-
-      // NEW: ALWAYS-ON direction hint (receiver can use this on detonation)
-      if (payload.sdh) out.sdh = payload.sdh;
-      if (payload.sda != null) out.sda = Math.round(payload.sda);
 
       // orient status only as tiny pings (1 during step, 1 when done, 0 reset)
       if (payload.oc !== undefined && payload.oc !== null) out.oc = payload.oc;
@@ -416,9 +404,6 @@
     const VDOM_RATIO = 1.20;
     const ORIENT_MIN_IMP = 0.35;
 
-    // NEW: direction hint threshold (meaningful impulse only)
-    const DIR_HINT_MIN_IMP = 0.18;
-
     // Oriented basis (world-ish, in device coords): X=Left/Right, Y=Forward/Back
     let haveOrient = false;
     let bx = {x:1,y:0,z:0};
@@ -536,8 +521,6 @@
         shake01,
         shakeHit:false,
         sd:"",
-        sdh:"",
-        sda:9999,
         locked:false,
         hz:0,
         oc:0,
@@ -562,8 +545,6 @@
         shake01,
         shakeHit:false,
         sd:"",
-        sdh:lastShakeDir || "",
-        sda:lastShakeDirT ? Math.max(0, Math.round(((performance.now()/1000) - lastShakeDirT) * 1000)) : 9999,
         locked:false,
         hz:0,
         oc:step,
@@ -622,10 +603,7 @@
 
         publishDynamics({
           room, energy01: energyUI, groove01:lastGrooveUI, dynamics01:lastDynamicsUI, smooth01:lastSmoothUI,
-          speed01:speedOut, shake01, shakeHit:false, sd:"",
-          sdh:lastShakeDir || "",
-          sda:lastShakeDirT ? Math.max(0, Math.round((tNow - lastShakeDirT) * 1000)) : 9999,
-          locked:false, hz:0, oc:1, od:1
+          speed01:speedOut, shake01, shakeHit:false, sd:"", locked:false, hz:0, oc:1, od:1
         }, 0, true);
 
         return true;
@@ -661,10 +639,7 @@
 
         publishDynamics({
           room, energy01: energyUI, groove01:lastGrooveUI, dynamics01:lastDynamicsUI, smooth01:lastSmoothUI,
-          speed01:speedOut, shake01, shakeHit:false, sd:"",
-          sdh:lastShakeDir || "",
-          sda:lastShakeDirT ? Math.max(0, Math.round((tNow - lastShakeDirT) * 1000)) : 9999,
-          locked:false, hz:0, oc:2, od:1
+          speed01:speedOut, shake01, shakeHit:false, sd:"", locked:false, hz:0, oc:2, od:1
         }, 0, true);
 
         return true;
@@ -879,10 +854,7 @@
     let prevAmag = 9.81;
 
     let shakeFullTimes = [];
-
-    // NEW: last shake direction hint + timestamp (seconds)
     let lastShakeDir = "";
-    let lastShakeDirT = 0;
 
     let audioCtx = null, osc = null, gainNode = null;
 
@@ -983,7 +955,7 @@
 
     // =========================================================================
     // SHAKE — meter unchanged; shakeHit double 100% within 500ms
-    // + NEW: always-on direction hint update (sdh/sda)
+    // + direction code + orientation sample capture during orient windows
     // =========================================================================
     function updateShake(e, t, dt, groove01=0, locked=false, smooth01=1){
       const acc = e.accelerationIncludingGravity || e.acceleration;
@@ -1037,6 +1009,14 @@
 
       shake01 = clamp01(shake01 + SHAKE_METER_GAIN * spike * dtSafe - SHAKE_METER_DECAY * dtSafe);
 
+      // (kept: smooth bias space; does not directly change shakeHit)
+      const s = clamp01(smooth01 || 0);
+      const boost = (s < SHAKE_SMOOTH_BOOST_START)
+        ? clamp01((SHAKE_SMOOTH_BOOST_START - s) / Math.max(1e-6, SHAKE_SMOOTH_BOOST_START))
+        : 0;
+      void boost; // reserved knob
+      // const _thrDrop = boost * SHAKE_SMOOTH_THR_DROP_MAX;
+
       // "full meter" rising edge tracking
       const hitFull = (prevShake < SHAKE_FULL_HI) && (shake01 >= SHAKE_FULL_HI);
       if (hitFull) {
@@ -1054,27 +1034,15 @@
         shakeFullTimes.length = 0;
       }
 
-      // NEW: always-on direction hint update (based on impulse magnitude)
-      const impNow = computeImpulse(t);
-      const impMag = norm3(impNow.x, impNow.y, impNow.z);
-      if (impMag >= DIR_HINT_MIN_IMP) {
-        const hint = chooseDirectionFromImpulse(impNow.x, impNow.y, impNow.z, gX,gY,gZ);
-        if (hint) {
-          lastShakeDir = hint;
-          lastShakeDirT = t;
-        }
-      }
-
       let sd = "";
       if (shakeHit) {
-        const imp = impNow;
+        const imp = computeImpulse(t);
 
         // if we're calibrating, capture samples from these shakeHits
         if (orient.active) orientConsumeImpulse(imp);
 
         sd = chooseDirectionFromImpulse(imp.x,imp.y,imp.z, gX,gY,gZ);
         lastShakeDir = sd;
-        lastShakeDirT = t;
       }
 
       // finalize step if time elapsed
@@ -1084,16 +1052,34 @@
     }
 
     // =========================================================================
-    // State machine + motion listeners
+    // "Start → Orient Phone → Stop" click handler behavior
     // =========================================================================
-    function addMotionListener(){
-      window.addEventListener('devicemotion', onMotionWrapped, { passive: true });
-    }
-    function removeMotionListener(){
-      window.removeEventListener('devicemotion', onMotionWrapped);
+    function clickHandler(){
+      if (UI.state === "idle") {
+        start();
+        return;
+      }
+
+      if (UI.state === "running_need_orient") {
+        // Begin the two-step orient flow (phone-owned)
+        // Step 1: shake LEFT/RIGHT (axis 1)
+        // Step 2: shake FORWARD/BACK (axis 2)
+        orientReset();     // clean slate each time you enter orient mode
+        orientStart(1);
+        UI.state = "running_need_orient"; // stays until step2 completes
+        setBtn("ORIENT… 1/2");
+        return;
+      }
+
+      // running_oriented => Stop
+      stop();
     }
 
-    // Wrap onMotion so we can insert auto-advance and UI state updates (your existing)
+    startBtn.addEventListener('click', clickHandler);
+
+    // =========================================================================
+    // onMotion
+    // =========================================================================
     function onMotion(e) {
       if (!running) return;
 
@@ -1110,9 +1096,236 @@
 
         const sh = updateShake(e, t, dt, grooveProxy, lockedProxy, smoothProxy);
 
-        // NEW: direction hint fields for every publish
-        const sdh = lastShakeDir || "";
-        const sda = lastShakeDirT ? Math.max(0, Math.round((t - lastShakeDirT) * 1000)) : 9999;
+        // UI state updates for orient flow:
+        if (UI.state !== "idle") {
+          if (orient.active) {
+            setBtn(orient.step === 1 ? "ORIENT… 1/2" : "ORIENT… 2/2");
+          } else if (!haveOrient && UI.state !== "running_oriented") {
+            // If step 1 just completed, auto-advance to step 2 immediately
+            // (this mirrors the "guided flow" without extra UI)
+            // We detect completion by seeing oc/od pings via publish, but locally:
+            // If we are not active and not oriented yet, start step 2.
+            // Step 1 completion sets bx/by but haveOrient remains false.
+            // We'll assume step 1 completed if bx/by changed AND we’re not oriented.
+            // More robust: track last completed step locally:
+          }
+        }
+
+        // Auto-advance logic (robust): track step completion locally
+        // We infer completion when orient.active went false and haveOrient still false and we were just in step 1.
+        // We'll keep a tiny state machine:
+      } catch (err) {
+        console.error("[onMotion crash]", err);
+      }
+    }
+
+    // Patch in the orient state machine (keeps code readable)
+    let _wasOrientActive = false;
+    let _lastOrientStep = 0;
+
+    // Wrap original onMotion so we can insert the robust auto-advance
+    const _onMotionCore = onMotion;
+    function onMotionWrapped(e){
+      const beforeActive = orient.active;
+      const beforeStep = orient.step;
+      _onMotionCore(e);
+
+      const afterActive = orient.active;
+
+      // Detect transition: active -> inactive
+      if (beforeActive && !afterActive) {
+        // Step finished. If it was step 1, immediately begin step 2.
+        if (beforeStep === 1 && !haveOrient) {
+          orientStart(2);
+          setBtn("ORIENT… 2/2");
+        } else if (beforeStep === 2 && haveOrient) {
+          // Fully oriented; button becomes Stop
+          UI.state = "running_oriented";
+          setBtn("Stop");
+        }
+      }
+
+      // If user is in running_need_orient but hasn't clicked ORIENT yet:
+      if (UI.state === "running_need_orient" && !orient.active && !haveOrient) {
+        // keep label as "Orient Phone"
+        setBtn("Orient Phone");
+      }
+
+      // If already oriented, lock label to Stop
+      if (UI.state !== "idle" && haveOrient && UI.state !== "running_oriented") {
+        UI.state = "running_oriented";
+        setBtn("Stop");
+      }
+
+      _wasOrientActive = afterActive;
+      _lastOrientStep = orient.step;
+    }
+
+    // Replace listener target to wrapped version when we start
+    function addMotionListener(){
+      window.addEventListener('devicemotion', onMotionWrapped, { passive: true });
+    }
+    function removeMotionListener(){
+      window.removeEventListener('devicemotion', onMotionWrapped);
+    }
+
+    // =========================================================================
+    // iOS permission gate (UI-less)
+    // =========================================================================
+    async function requestMotionPermissionIfNeeded() {
+      const needs = (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function')
+                 || (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function');
+
+      if (!needs) return true;
+
+      const reqs = [];
+
+      if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
+        reqs.push(DeviceMotionEvent.requestPermission().then(s => s === 'granted').catch(() => false));
+      }
+
+      if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+        reqs.push(DeviceOrientationEvent.requestPermission().then(s => s === 'granted').catch(() => false));
+      }
+
+      const results = await Promise.all(reqs);
+      return results.every(Boolean);
+    }
+
+    // =========================================================================
+    // Start/Stop — now Start→Orient Phone→Stop
+    // =========================================================================
+    async function start() {
+      if (!window.isSecureContext) return;
+
+      startBtn.disabled = true;
+      try {
+        const ok = await requestMotionPermissionIfNeeded();
+        if (!ok) return;
+
+        ensureAudio();
+        try { await audioCtx.resume(); } catch(e) {}
+
+        nextSendAtMs = 0;
+        lastSig = null;
+        await connectRelay();
+
+        running = true;
+        lastT = null;
+
+        ox=oy=oz=0;
+        omegaMag.length  = 0;
+        omegaNorm.length = 0;
+        omegaVec.length  = 0;
+        jerkBuf.length   = 0;
+        dtBuf.length     = 0;
+
+        dynamicsVecBuf.length = 0;
+        dynamicsDtBuf.length  = 0;
+
+        emaMean = 0;
+        emaVar  = 1;
+
+        lock = false;
+        lockStrength = 0;
+        grooveHz = 0;
+
+        graceLeft = 0;
+        recenterBadTime = 0;
+
+        energy = 0;
+        energyUI = 0;
+
+        mSpeedEMA = 0;
+        speedOut  = 0;
+
+        meterHoldLeft = 0;
+        lastGrooveUI   = 0;
+        lastDynamicsUI = 0;
+        lastSmoothUI   = 0;
+
+        shake01 = 0;
+        accelBaseMag = 9.81;
+
+        prevAx = prevAy = prevAz = 0;
+        prevAmag = 9.81;
+
+        shakeFullTimes.length = 0;
+
+        lastShakeDir = "";
+        aLinBuf.length = 0;
+
+        gX = 0; gY = 0; gZ = 9.81;
+
+        // Keep calibration across runs unless user re-enters Orient Phone
+        orient.active = false;
+        orient.step = 0;
+        orient.untilT = 0;
+        orient.samples.length = 0;
+
+        setAudio(0,0,false);
+        setBgFromEnergy(0);
+
+        addMotionListener();
+
+        // Button label after start:
+        if (haveOrient) {
+          UI.state = "running_oriented";
+          setBtn("Stop");
+        } else {
+          UI.state = "running_need_orient";
+          setBtn("Orient Phone");
+        }
+
+      } finally {
+        startBtn.disabled = false;
+      }
+
+      if (screen.orientation && screen.orientation.lock) {
+        try { await screen.orientation.lock('portrait-primary'); }
+        catch (e) { /* no-op */ }
+      }
+    }
+
+    function stop() {
+      running = false;
+      removeMotionListener();
+
+      if (audioCtx && gainNode) {
+        const now = audioCtx.currentTime;
+        gainNode.gain.cancelScheduledValues(now);
+        gainNode.gain.setTargetAtTime(0, now, 0.05);
+      }
+
+      disconnectRelay();
+      UI.state = "idle";
+      setBtn("Start");
+      setBgFromEnergy(0);
+    }
+
+    // =========================================================================
+    // Motion processing (rest of your original logic) — unchanged,
+    // but we need to keep it intact. We’ll re-insert your original onMotion body
+    // with only one substitution: updateShake(...) call stays, publish stays.
+    // =========================================================================
+
+    // Rebuild onMotion core with your original logic (unchanged), but using
+    // the wrapped listener already installed above.
+    function onMotion(e) {
+      if (!running) return;
+
+      try {
+        const t = performance.now() / 1000;
+        const dt = (lastT == null) ? 0 : (t - lastT);
+        lastT = t;
+
+        if (dt > 0) dtBuf.push(dt);
+
+        const lockedProxy = !!(lock || graceLeft > 0);
+        const grooveProxy = clamp01(lockStrength || lastGrooveUI || 0);
+        const smoothProxy = clamp01(lastSmoothUI || 0);
+
+        const sh = updateShake(e, t, dt, grooveProxy, lockedProxy, smoothProxy);
 
         const rr = e.rotationRate;
 
@@ -1144,7 +1357,6 @@
             shake01: sh.shake01,
             shakeHit: sh.shakeHit,
             sd: sh.sd,
-            sdh, sda,                 // NEW
             locked: false,
             hz: 0,
             d_r2: 0, d_r3: 0, d_gate: 0, d_balance: 0, d_couple: 0,
@@ -1233,7 +1445,6 @@
             shake01: sh.shake01,
             shakeHit: sh.shakeHit,
             sd: sh.sd,
-            sdh, sda,               // NEW
             locked: false,
             hz: 0,
             d_r2: 0, d_r3: 0, d_gate: 0, d_balance: 0, d_couple: 0,
@@ -1332,7 +1543,6 @@
           shake01: sh.shake01,
           shakeHit: sh.shakeHit,
           sd: sh.sd,
-          sdh, sda,                 // NEW
           locked: lockedNow,
           hz: grooveHz,
 
@@ -1351,40 +1561,6 @@
 
       } catch (err) {
         console.error("[onMotion crash]", err);
-      }
-    }
-
-    // Patch in the orient state machine (keeps code readable)
-    function onMotionWrapped(e){
-      const beforeActive = orient.active;
-      const beforeStep = orient.step;
-
-      onMotion(e);
-
-      const afterActive = orient.active;
-
-      // Detect transition: active -> inactive
-      if (beforeActive && !afterActive) {
-        // Step finished. If it was step 1, immediately begin step 2.
-        if (beforeStep === 1 && !haveOrient) {
-          orientStart(2);
-          setBtn("ORIENT… 2/2");
-        } else if (beforeStep === 2 && haveOrient) {
-          // Fully oriented; button becomes Stop
-          UI.state = "running_oriented";
-          setBtn("Stop");
-        }
-      }
-
-      // If user is in running_need_orient but hasn't clicked ORIENT yet:
-      if (UI.state === "running_need_orient" && !orient.active && !haveOrient) {
-        setBtn("Orient Phone");
-      }
-
-      // If already oriented, lock label to Stop
-      if (UI.state !== "idle" && haveOrient && UI.state !== "running_oriented") {
-        UI.state = "running_oriented";
-        setBtn("Stop");
       }
     }
 
@@ -1470,7 +1646,6 @@
         shakeFullTimes.length = 0;
 
         lastShakeDir = "";
-        lastShakeDirT = 0;
         aLinBuf.length = 0;
 
         gX = 0; gY = 0; gZ = 9.81;
