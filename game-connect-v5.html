@@ -1197,6 +1197,44 @@
       else disableAudio();
     });
 
+
+    // =========================================================================
+    // SHAKE → BEST-GUESS DIRECTION (v0: raw omega winner-take-all)
+    // =========================================================================
+    let lastRawOmega = { x:0, y:0, z:0, has:0 };
+
+    function cacheRawOmegaFromMsg(d){
+    // pull the raw omega vector exactly like telemetry does (supports omega / r / omegaX..)
+    const v = telePickVecRaw(d, "omega"); // uses omega OR fallback r
+    const has = teleHas(d, "omega");      // uses omega OR fallback r
+    if (!has) return;
+    lastRawOmega = { x: v.x, y: v.y, z: v.z, has: 1 };
+    }
+
+    function pickShakeDirCodeFromOmega(v){
+    // pick dominant axis by absolute rotation-rate
+    const ax = Math.abs(v.x), ay = Math.abs(v.y), az = Math.abs(v.z);
+
+    if (ax >= ay && ax >= az){
+        // X axis → LEFT/RIGHT
+        return (v.x >= 0) ? "R" : "L";
+    } else if (ay >= ax && ay >= az){
+        // Y axis → UP/DOWN
+        return (v.y >= 0) ? "U" : "D";
+    } else {
+        // Z axis → FORWARD/BACK
+        return (v.z >= 0) ? "F" : "B";
+    }
+    }
+
+    function flashShakeDirectionFromLatest(ms=420){
+    if (!lastRawOmega || !lastRawOmega.has) return;
+    const code = pickShakeDirCodeFromOmega(lastRawOmega);
+    flashDirLamp(code, ms);
+    }
+
+
+
     // =========================================================================
     // LAMPS — independent timers
     // =========================================================================
@@ -1317,20 +1355,24 @@
 
       const dt = nowMs - shakeFirstHitAt;
 
-      if (dt <= DOUBLEBANG_MS){
+        if (dt <= DOUBLEBANG_MS){
         if (canSpendShake()){
-          spendShake();
-          flashShakeLamp(400);
-          triggerShockwave();
+            spendShake();
+            flashShakeLamp(400);
+            triggerShockwave();
 
-          shakeCooldownUntil = nowMs + SHAKE_COOLDOWN_MS;
-          shakeFirstHitAt = 0;
+            // ✅ v0 direction test: pick one of 6 lamps from raw omega
+            flashShakeDirectionFromLatest(420);
+
+            shakeCooldownUntil = nowMs + SHAKE_COOLDOWN_MS;
+            shakeFirstHitAt = 0;
         } else {
-          shakeFirstHitAt = 0;
+            shakeFirstHitAt = 0;
         }
-      } else {
+        } else {
         shakeFirstHitAt = nowMs;
-      }
+        }
+
     }
 
     function processShakeDoubleBang(shakeVal01, nowMs){
@@ -2150,6 +2192,9 @@
       const speed    = pick01NewOrOld("speed01", "speed");
       const shake    = pick01NewOrOld("shake01", "shake");
       const locked   = !!d.locked;
+        // cache raw omega so the shake detonation can pick a direction
+        cacheRawOmegaFromMsg(d);
+
 
       updateEnergyBankFromPhone(energyFromPhone, nowMs);
 
