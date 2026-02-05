@@ -270,6 +270,7 @@
       lastSig = sig;
       nextSendAtMs = now + SEND_MIN_MS;
 
+
       const out = {
         room: payload.room,
         fallDrag: FALL_DRAG_DEFAULT,
@@ -284,10 +285,15 @@
         shakeHit:   sig.shakeHit,
         hz:         sig.hz,
 
-        // NEW: stream both vectors as compact arrays (quantized)
-        a: [sig.agx, sig.agy, sig.agz],  // accelIncludingGravity (m/s^2-ish)
-        r: [sig.rrx, sig.rry, sig.rrz],  // rotationRate (deg/sec)
+        // Compact payload (keep)
+        a: [sig.agx, sig.agy, sig.agz],  // accelIncludingGravity
+        r: [sig.rrx, sig.rry, sig.rrz],  // rotationRate
+
+        // ✅ Receiver/telemetry compatibility (aliases)
+        dir:  [sig.agx, sig.agy, sig.agz],
+        omega:[sig.rrx, sig.rry, sig.rrz],
       };
+
 
       if (TELEMETRY_ON) {
         out.t     = roundN(payload.t, 1);

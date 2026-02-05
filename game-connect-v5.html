@@ -1628,13 +1628,27 @@
     }
 
     function teleHas(d, key){
-    return (d && d[key] != null) ? 1 : 0;
+    if (!d) return 0;
+    if (d[key] != null) return 1;
+
+    // ✅ NEW fallbacks: a -> dir, r -> omega
+    if (key === "dir" && d.a != null) return 1;
+    if (key === "omega" && d.r != null) return 1;
+
+    return 0;
     }
 
-    // Raw vector probe (no normalization). Accepts array/object/scalar fields.
-    // prefix = "dir" or "omega"
+
     function telePickVecRaw(d, prefix){
-    const src = d && d[prefix];
+    // prefix = "dir" or "omega"
+    // Accepts:
+    //  - d.dir / d.omega (array/object)
+    //  - scalar dirX/dirY/dirZ, omegaX/omegaY/omegaZ
+    //  - ✅ NEW fallbacks: d.a (for dir), d.r (for omega)
+    const fallbackKey = (prefix === "dir") ? "a" : (prefix === "omega") ? "r" : null;
+
+    const src = (d && (d[prefix] != null ? d[prefix] : (fallbackKey ? d[fallbackKey] : null)));
+
     let x = 0, y = 0, z = 0;
 
     if (Array.isArray(src) && src.length >= 3){
@@ -1648,14 +1662,11 @@
         z = Number(d && d[prefix + "Z"]);
     }
 
-    // Return 0s if any component is non-finite
     if (!isFinite(x) || !isFinite(y) || !isFinite(z)){
         return { x:0, y:0, z:0 };
     }
     return { x, y, z };
     }
-
-
 
     function teleMaybeLog(d){
       if (!teleRecording) return;
@@ -2077,32 +2088,40 @@
     }
 
     function pickDirVec(d){
-      // Accept any of these (lean / tolerant):
-      // 1) d.dir = [x,y,z]
-      // 2) d.dir = {x,y,z}
-      // 3) d.dirX / d.dirY / d.dirZ
-      // 4) d.omega = [x,y,z] or {x,y,z} (optional alias)
-      const src = (d && (d.dir != null ? d.dir : d.omega));
-      let x=0,y=0,z=0;
+    // Priority:
+    // 1) d.dir
+    // 2) d.a   (accelIncludingGravity)
+    // 3) d.omega
+    // 4) d.r   (rotationRate)
+    // 5) scalar dirX.. / omegaX..
+    const src =
+        (d && (d.dir != null ? d.dir :
+            d.a   != null ? d.a   :
+            d.omega != null ? d.omega :
+            d.r   != null ? d.r   :
+            null));
 
-      if (Array.isArray(src) && src.length >= 3){
+    let x=0,y=0,z=0;
+
+    if (Array.isArray(src) && src.length >= 3){
         x = Number(src[0]); y = Number(src[1]); z = Number(src[2]);
-      } else if (src && typeof src === "object"){
+    } else if (src && typeof src === "object"){
         x = Number(src.x); y = Number(src.y); z = Number(src.z);
-      } else {
-        // scalar fields
+    } else {
+        // scalar fields (prefer dir*, then omega*)
         x = Number(d && (d.dirX != null ? d.dirX : d.omegaX));
         y = Number(d && (d.dirY != null ? d.dirY : d.omegaY));
         z = Number(d && (d.dirZ != null ? d.dirZ : d.omegaZ));
-      }
-
-      if (!isFinite(x) || !isFinite(y) || !isFinite(z)) return null;
-
-      const m = Math.hypot(x,y,z);
-      if (!(m > 1e-6)) return null;
-
-      return { x:x/m, y:y/m, z:z/m, mag:m };
     }
+
+    if (!isFinite(x) || !isFinite(y) || !isFinite(z)) return null;
+
+    const m = Math.hypot(x,y,z);
+    if (!(m > 1e-6)) return null;
+
+    return { x:x/m, y:y/m, z:z/m, mag:m };
+    }
+
 
     function dirToYawTiltDeg(v){
       // yaw around vertical axis (x/y plane), tilt from horizon via z
