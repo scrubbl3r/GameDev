@@ -1409,15 +1409,6 @@
     }
 
 
-    // Optional debug hint (comment out later) ---------- ///
-    if (els.orientHint){
-    const pct = Math.round(p01 * 100);
-    els.orientHint.textContent =
-        (ORIENT.step === 1 ? "Shake phone LEFT ↔ RIGHT" : "Shake phone FORWARD ↔ BACK") +
-        ` — ${pct}% (samples ${ORIENT.n}/${ORIENT.MIN_SAMPLES}, quality ${resultant.toFixed(2)}/${ORIENT.MIN_RESULTANT.toFixed(2)})`;
-    }
-
-
     function orientStart(){
     ORIENT.active = true;
     ORIENT.step = 1;
@@ -1494,6 +1485,15 @@
     const p01  = clamp01(Math.min(pN, pRes));
 
     orientProgress(p01);
+
+    // Optional debug hint (comment out later)
+    if (els.orientHint){
+    const pct = Math.round(p01 * 100);
+    els.orientHint.textContent =
+        (ORIENT.step === 1 ? "Shake phone LEFT ↔ RIGHT" : "Shake phone FORWARD ↔ BACK") +
+        ` — ${pct}% (samples ${ORIENT.n}/${ORIENT.MIN_SAMPLES}, quality ${resultant.toFixed(2)}/${ORIENT.MIN_RESULTANT.toFixed(2)})`;
+    }
+
 
 
     if (ORIENT.n >= ORIENT.MIN_SAMPLES && resultant >= ORIENT.MIN_RESULTANT){
