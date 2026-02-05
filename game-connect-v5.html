@@ -1301,6 +1301,31 @@
       allDirLampOff();
     }
 
+    function processPhoneShakeEvent(d, nowMs){
+        // Canonical shake event comes from the phone now
+        if (!d || !d.shakeHit) return;
+
+        // Direction lamps should flash whenever the phone reports a shakeHit
+        if (typeof d.sd === "string" && d.sd.trim()) {
+            flashDirLamp(d.sd, 420);
+        }
+
+        // Shockwave + shake lamp remains energy-gated + respects cooldown
+        if (nowMs < shakeCooldownUntil) return;
+
+        // Keep your existing rule: don't allow detonation while diversity lamp is lit
+        if (isDiversityLampLit()) return;
+
+        if (canSpendShake()){
+            spendShake();
+            flashShakeLamp(400);
+            triggerShockwave();
+
+            shakeCooldownUntil = nowMs + SHAKE_COOLDOWN_MS;
+        }
+    }
+
+
     function registerShakeHit(nowMs){
       if (nowMs < shakeCooldownUntil) return;
 
@@ -2138,7 +2163,7 @@
       updateStability(dynamics, nowMs);
       updateVariability(dynamics, nowMs);
 
-      processShakeDoubleBang(shake, nowMs);
+        processPhoneShakeEvent(d, nowMs);
 
       setAudio(energyUI01, groove, locked);
     }
