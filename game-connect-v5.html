@@ -2163,8 +2163,7 @@
       updateStability(dynamics, nowMs);
       updateVariability(dynamics, nowMs);
 
-        processPhoneShakeEvent(d, nowMs);
-
+      processShakeDoubleBang(shake, nowMs);
 
       setAudio(energyUI01, groove, locked);
     }
