@@ -1584,7 +1584,8 @@
       teleLines = 0;
 
       els.teleOut.textContent =
-        "ms\tdms\tspeed01\tenergy01\tgroove01\tdynamics01\tsmooth01\tshake01\tlocked\thz\td_r2\td_r3\td_gate\td_balance\td_couple\n";
+       "ms\tdms\tspeed01\tenergy01\tgroove01\tdynamics01\tsmooth01\tshake01\tlocked\thz\tdirX\tdirY\tdirZ\td_r2\td_r3\td_gate\td_balance\td_couple\n";
+
       els.teleRecBtn.textContent = "Stop";
       els.teleRecBtn.classList.add("recOn");
     }
@@ -1636,6 +1637,11 @@
 
       const locked = !!d.locked;
       const hz = (d.hz != null && isFinite(Number(d.hz))) ? Number(d.hz) : 0;
+      // Direction vector (normalized) for telemetry: dir/omega/[dirX..] tolerant
+        const dirV = pickDirVec(d);
+        const dirX = dirV ? dirV.x : 0;
+        const dirY = dirV ? dirV.y : 0;
+        const dirZ = dirV ? dirV.z : 0;
 
       const d_r2      = (d.d_r2 != null) ? telePickNum(d, "d_r2") : telePickNum(d, "o_r2");
       const d_r3      = (d.d_r3 != null) ? telePickNum(d, "d_r3") : telePickNum(d, "o_r3");
@@ -1647,7 +1653,9 @@
         `${ms.toFixed(1)}\t${dms.toFixed(1)}\t` +
         `${speed.toFixed(4)}\t${energy.toFixed(4)}\t${groove.toFixed(4)}\t${dynamics.toFixed(4)}\t${smooth.toFixed(4)}\t${shake.toFixed(4)}\t` +
         `${locked ? 1 : 0}\t${hz.toFixed(3)}\t` +
+        `${dirX.toFixed(4)}\t${dirY.toFixed(4)}\t${dirZ.toFixed(4)}\t` +
         `${d_r2.toFixed(4)}\t${d_r3.toFixed(4)}\t${d_gate.toFixed(4)}\t${d_balance.toFixed(4)}\t${d_couple.toFixed(4)}\n`;
+
 
       els.teleOut.textContent += line;
       teleLines++;
