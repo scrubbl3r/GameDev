@@ -303,6 +303,85 @@
       box-shadow: inset 0 0 0 1px rgba(0,0,0,.25);
     }
 
+/* ======================================================================
+   ORIENT PHONE overlay (receiver-only training flow)
+   ====================================================================== */
+.orientOverlay{
+  position:absolute;
+  inset:0;
+  z-index: 10; /* above orb/shield/shock */
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  pointer-events:none; /* enable only for button */
+}
+
+    .orientBtn{
+    pointer-events:auto;
+    padding:12px 16px;
+    border-radius:14px;
+    border:1px solid rgba(50,255,117,.40);
+    background: rgba(0,0,0,.62);
+    color: var(--g);
+    font-weight:1000;
+    letter-spacing:.12em;
+    text-transform: uppercase;
+    box-shadow:
+        0 0 0 1px rgba(0,0,0,.35) inset,
+        0 0 26px rgba(50,255,117,.10);
+    }
+
+    .orientBtn:hover{
+    border-color: rgba(50,255,117,.60);
+    box-shadow:
+        0 0 0 1px rgba(0,0,0,.35) inset,
+        0 0 36px rgba(50,255,117,.14);
+    }
+
+    .orientMsg{
+    position:absolute;
+    left:50%;
+    top:50%;
+    transform: translate(-50%,-50%);
+    width:min(520px, 86%);
+    padding:14px 16px;
+    border-radius:16px;
+    border:1px solid rgba(50,255,117,.22);
+    background: rgba(0,0,0,.72);
+    box-shadow: 0 22px 90px rgba(0,0,0,.65);
+    text-align:center;
+    pointer-events:none;
+    }
+
+    .orientMsg .title{
+    font-weight:1000;
+    letter-spacing:.10em;
+    text-transform: uppercase;
+    margin-bottom:8px;
+    }
+
+    .orientMsg .hint{
+    font-size:12px;
+    opacity:.86;
+    line-height:1.35;
+    }
+
+    .orientMsg .prog{
+    margin-top:10px;
+    height:10px;
+    border-radius:999px;
+    border:1px solid rgba(50,255,117,.28);
+    background: rgba(50,255,117,.08);
+    overflow:hidden;
+    }
+    .orientMsg .progFill{
+    height:100%;
+    width:0%;
+    background: rgba(50,255,117,.85);
+    transition: width 80ms linear;
+    }
+
+
     .starCanvas{
       position:absolute;
       inset:0;
@@ -719,6 +798,17 @@
               <div id="orb" class="orb atOrigin" aria-label="Orb"></div>
             </div>
           </div>
+          <!-- ORIENT PHONE overlay -->
+            <div id="orientOverlay" class="orientOverlay" aria-label="Orientation training overlay">
+            <button id="orientBtn" class="orientBtn" aria-label="Orient phone">ORIENT PHONE</button>
+
+            <div id="orientMsg" class="orientMsg" style="display:none;" aria-live="polite">
+                <div id="orientTitle" class="title">Orient Phone</div>
+                <div id="orientHint" class="hint">—</div>
+                <div class="prog"><div id="orientProgFill" class="progFill"></div></div>
+            </div>
+            </div>
+
         </div>
 
         <div class="physControls">
@@ -853,6 +943,14 @@
       teleClose: $("teleClose"),
       teleRecBtn: $("teleRecBtn"),
       teleOut: $("teleOut"),
+
+    orientOverlay: $("orientOverlay"),
+      orientBtn: $("orientBtn"),
+      orientMsg: $("orientMsg"),
+      orientTitle: $("orientTitle"),
+      orientHint: $("orientHint"),
+      orientProgFill: $("orientProgFill"),
+
     };
 
     const WORKER_BASE = "https://orb-token.mrgarthwilliams.workers.dev";
@@ -1209,6 +1307,237 @@
       if (!has) return;
       lastRawOmega = { x: v.x, y: v.y, z: v.z, has: 1 };
     }
+
+    // =========================================================================
+    // ORIENT PHONE — gravity-based calibration (receiver-only)
+    // =========================================================================
+    let lastGravity = { x:0, y:0, z:0, has:0 }; // from d.a (accelIncludingGravity)
+
+    function cacheGravityFromMsg(d){
+    // "dir" prefix in your tooling falls back to d.a already
+    const g = telePickVecRaw(d, "dir");
+    const has = teleHas(d, "dir");
+    if (!has) return;
+    // normalize
+    const m = Math.hypot(g.x, g.y, g.z);
+    if (!(m > 1e-6)) return;
+    lastGravity = { x: g.x/m, y: g.y/m, z: g.z/m, has: 1 };
+    }
+
+    function vDot(a,b){ return a.x*b.x + a.y*b.y + a.z*b.z; }
+    function vScale(a,s){ return { x:a.x*s, y:a.y*s, z:a.z*s }; }
+    function vSub(a,b){ return { x:a.x-b.x, y:a.y-b.y, z:a.z-b.z }; }
+    function vNorm(a){
+    const m = Math.hypot(a.x,a.y,a.z);
+    return (m > 1e-6) ? { x:a.x/m, y:a.y/m, z:a.z/m, mag:m } : { x:0,y:0,z:0, mag:0 };
+    }
+
+    // remove gravity component: project onto plane perpendicular to gravity
+    function projectToHorizon(v, gHat){
+    const k = vDot(v, gHat);
+    return vSub(v, vScale(gHat, k));
+    }
+
+    const ORIENT = {
+    active: false,
+    step: 0, // 0=idle, 1=LR, 2=FB, 3=done
+    // templates (unit vectors in horizon plane)
+    T_lr: null,
+    T_fb: null,
+
+    // sampling
+    sum: { x:0, y:0, z:0 },
+    n: 0,
+    // quality thresholds (tuned for stability)
+    MIN_SAMPLES: 34,
+    MIN_MAG: 0.55,      // min |omega_h| to accept a sample
+    MIN_RESULTANT: 0.82 // |sum|/n, higher = cleaner axis
+    };
+
+    const ORIENT_STORE_KEY = "orb_orient_v1";
+
+    function orientLoad(){
+    try{
+        const raw = localStorage.getItem(ORIENT_STORE_KEY);
+        if (!raw) return;
+        const j = JSON.parse(raw);
+        if (j && j.T_lr && j.T_fb){
+        ORIENT.T_lr = vNorm(j.T_lr);
+        ORIENT.T_fb = vNorm(j.T_fb);
+        if (ORIENT.T_lr.mag > 0.8 && ORIENT.T_fb.mag > 0.8){
+            // keep only unit
+            ORIENT.T_lr = { x: ORIENT.T_lr.x, y: ORIENT.T_lr.y, z: ORIENT.T_lr.z };
+            ORIENT.T_fb = { x: ORIENT.T_fb.x, y: ORIENT.T_fb.y, z: ORIENT.T_fb.z };
+        } else {
+            ORIENT.T_lr = null; ORIENT.T_fb = null;
+        }
+        }
+    }catch(_){}
+    }
+
+    function orientSave(){
+    try{
+        if (!ORIENT.T_lr || !ORIENT.T_fb) return;
+        localStorage.setItem(ORIENT_STORE_KEY, JSON.stringify({
+        T_lr: ORIENT.T_lr,
+        T_fb: ORIENT.T_fb,
+        ts: Date.now()
+        }));
+    }catch(_){}
+    }
+
+    function orientResetAccum(){
+    ORIENT.sum = { x:0, y:0, z:0 };
+    ORIENT.n = 0;
+    }
+
+    function orientUI(showBtn, showMsg){
+    if (els.orientBtn) els.orientBtn.style.display = showBtn ? "" : "none";
+    if (els.orientMsg) els.orientMsg.style.display = showMsg ? "" : "none";
+    if (els.orientProgFill) els.orientProgFill.style.width = "0%";
+    }
+
+    function orientSetMessage(title, hint){
+    if (els.orientTitle) els.orientTitle.textContent = title;
+    if (els.orientHint) els.orientHint.textContent = hint;
+    }
+
+    function orientProgress(p01){
+    if (!els.orientProgFill) return;
+    const p = clamp01(p01) * 100;
+    els.orientProgFill.style.width = p.toFixed(1) + "%";
+    }
+
+    function orientStart(){
+    ORIENT.active = true;
+    ORIENT.step = 1;
+    orientResetAccum();
+    orientUI(false, true);
+    orientSetMessage(
+        "Orient Phone",
+        "Shake phone LEFT ↔ RIGHT (relative to the screen) until the bar fills."
+    );
+
+    // optional: clear lamps so the user focuses
+    clearDirLampTimers();
+    allDirLampOff();
+    forceShakeLampOff();
+    }
+
+    function orientFinishStepAndAdvance(template){
+    if (ORIENT.step === 1) ORIENT.T_lr = template;
+    if (ORIENT.step === 2) ORIENT.T_fb = template;
+
+    if (ORIENT.step === 1){
+        ORIENT.step = 2;
+        orientResetAccum();
+        orientProgress(0);
+        orientSetMessage(
+        "Orient Phone",
+        "Shake phone FORWARD ↔ BACK (relative to the screen) until the bar fills."
+        );
+        return;
+    }
+
+    // done
+    ORIENT.step = 3;
+    ORIENT.active = false;
+    orientSave();
+    orientUI(true, false);
+    }
+
+    function orientTryConsumeOmegaSample(rawOmega){
+    if (!ORIENT.active) return;
+    if (!rawOmega || !rawOmega.has) return;
+    if (!lastGravity || !lastGravity.has) return;
+
+    const gHat = lastGravity; // unit
+    // horizon component of omega (gravity-removed)
+    const oH = projectToHorizon({ x: rawOmega.x, y: rawOmega.y, z: rawOmega.z }, gHat);
+    const u = vNorm(oH);
+    if (!(u.mag > ORIENT.MIN_MAG)) return;
+
+    // sign-correct so we learn an AXIS even if user shakes both directions:
+    // flip sample to align with current running sum
+    const sumMag = Math.hypot(ORIENT.sum.x, ORIENT.sum.y, ORIENT.sum.z);
+    if (sumMag > 1e-6){
+        const sumHat = { x: ORIENT.sum.x/sumMag, y: ORIENT.sum.y/sumMag, z: ORIENT.sum.z/sumMag };
+        if (vDot(u, sumHat) < 0){
+        u.x *= -1; u.y *= -1; u.z *= -1;
+        }
+    }
+
+    ORIENT.sum.x += u.x;
+    ORIENT.sum.y += u.y;
+    ORIENT.sum.z += u.z;
+    ORIENT.n += 1;
+
+    // quality metrics
+    const sumLen = Math.hypot(ORIENT.sum.x, ORIENT.sum.y, ORIENT.sum.z);
+    const resultant = sumLen / Math.max(1, ORIENT.n); // 0..1, higher=cleaner
+    const p01 = clamp01((ORIENT.n / ORIENT.MIN_SAMPLES) * (resultant / ORIENT.MIN_RESULTANT));
+
+    orientProgress(p01);
+
+    if (ORIENT.n >= ORIENT.MIN_SAMPLES && resultant >= ORIENT.MIN_RESULTANT){
+        const t = { x: ORIENT.sum.x / sumLen, y: ORIENT.sum.y / sumLen, z: ORIENT.sum.z / sumLen };
+        orientFinishStepAndAdvance(t);
+    }
+    }
+
+    // Replace v0 direction pick with calibrated classifier
+    function pickShakeDirCodeCalibrated(rawOmega){
+    if (!rawOmega || !rawOmega.has) return null;
+
+    // If not calibrated, fallback to old behavior
+    if (!ORIENT.T_lr || !ORIENT.T_fb || !lastGravity || !lastGravity.has){
+        return pickShakeDirCodeFromOmega(rawOmega);
+    }
+
+    const gHat = lastGravity;
+
+    // vertical axis score (Up/Down)
+    const v = vNorm({ x: rawOmega.x, y: rawOmega.y, z: rawOmega.z });
+    const sUD = vDot(v, gHat); // -1..1
+
+    // horizontal classification for LR / FB
+    const oH = projectToHorizon({ x: rawOmega.x, y: rawOmega.y, z: rawOmega.z }, gHat);
+    const h = vNorm(oH);
+    const sLR = vDot(h, ORIENT.T_lr); // -1..1
+    const sFB = vDot(h, ORIENT.T_fb); // -1..1
+
+    // choose dominant axis by absolute score (3-way)
+    const aUD = Math.abs(sUD);
+    const aLR = Math.abs(sLR);
+    const aFB = Math.abs(sFB);
+
+    if (aUD >= aLR && aUD >= aFB){
+        // sign -> U/D (note: depending on your phone axis sign, you may want to invert)
+        return (sUD >= 0) ? "D" : "U";
+    } else if (aLR >= aFB){
+        return (sLR >= 0) ? "R" : "L";
+    } else {
+        return (sFB >= 0) ? "F" : "B";
+    }
+    }
+
+    function flashShakeDirectionFromLatest(ms=420){
+    if (!lastRawOmega || !lastRawOmega.has) return;
+    const code = pickShakeDirCodeCalibrated(lastRawOmega);
+    if (!code) return;
+    flashDirLamp(code, ms);
+    }
+
+    // init persisted calibration on load
+    orientLoad();
+
+    // hook the button
+    if (els.orientBtn){
+    els.orientBtn.addEventListener("click", () => {
+        orientStart();
+    });
+    }
+
 
     function pickShakeDirCodeFromOmega(v){
       // pick dominant axis by absolute rotation-rate
@@ -2220,8 +2549,13 @@
       const speed    = pick01NewOrOld("speed01", "speed");
       const shake    = pick01NewOrOld("shake01", "shake");
       const locked   = !!d.locked;
-      // cache raw omega so the shake detonation can pick a direction
+      
+      // cache gravity + raw omega (foundation + shake)
+      cacheGravityFromMsg(d);
       cacheRawOmegaFromMsg(d);
+
+      // if calibrating, consume samples continuously from the incoming stream
+      orientTryConsumeOmegaSample(lastRawOmega);
 
       updateEnergyBankFromPhone(energyFromPhone, nowMs);
 
@@ -2289,7 +2623,13 @@
       updateStability(dynamics, nowMs);
       updateVariability(dynamics, nowMs);
 
-      processShakeDoubleBang(shake, nowMs);
+      // During orientation training, we pause shake gameplay (no energy spend / detonation)
+      if (!ORIENT.active){
+        processShakeDoubleBang(shake, nowMs);
+      } else {
+        // keep shake lamp OFF during training
+        forceShakeLampOff();
+      }
 
       setAudio(energyUI01, groove, locked);
     }
