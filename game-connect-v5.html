@@ -350,7 +350,7 @@
     background: rgba(0,0,0,.72);
     box-shadow: 0 22px 90px rgba(0,0,0,.65);
     text-align:center;
-    pointer-events:none;
+    pointer-events:auto; /* ✅ allow clicking START */
     }
 
     .orientMsg .title{
@@ -379,6 +379,31 @@
     width:0%;
     background: rgba(50,255,117,.85);
     transition: width 80ms linear;
+    }
+
+    .orientStartBtn{
+    margin-top: 10px;
+    padding: 10px 14px;
+    border-radius: 12px;
+    border: 1px solid rgba(50,255,117,.40);
+    background: rgba(0,0,0,.55);
+    color: var(--g);
+    font-weight: 1000;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    cursor: pointer;
+    box-shadow:
+        0 0 0 1px rgba(0,0,0,.35) inset,
+        0 0 22px rgba(50,255,117,.10);
+    }
+    .orientStartBtn:hover{
+    border-color: rgba(50,255,117,.60);
+    box-shadow:
+        0 0 0 1px rgba(0,0,0,.35) inset,
+        0 0 30px rgba(50,255,117,.14);
+    }
+    .orientStartBtn:active{
+    transform: translateY(1px);
     }
 
 
@@ -805,8 +830,14 @@
             <div id="orientMsg" class="orientMsg" style="display:none;" aria-live="polite">
                 <div id="orientTitle" class="title">Orient Phone</div>
                 <div id="orientHint" class="hint">—</div>
+
+                <button id="orientStartBtn" class="orientStartBtn" type="button" aria-label="Start orientation step">
+                    START
+                </button>
+
                 <div class="prog"><div id="orientProgFill" class="progFill"></div></div>
-            </div>
+                </div>
+
             </div>
 
         </div>
@@ -950,7 +981,7 @@
       orientTitle: $("orientTitle"),
       orientHint: $("orientHint"),
       orientProgFill: $("orientProgFill"),
-
+    orientStartBtn: $("orientStartBtn"),
     };
 
     const WORKER_BASE = "https://orb-token.mrgarthwilliams.workers.dev";
@@ -1339,20 +1370,26 @@
     }
 
     const ORIENT = {
-    active: false,
-    step: 0, // 0=idle, 1=LR, 2=FB, 3=done
-    // templates (unit vectors in horizon plane)
-    T_lr: null,
-    T_fb: null,
+        active: false, // true ONLY while sampling
+        step: 0,       // 0=idle, 1=LR, 2=FB, 3=done
 
-    // sampling
-    sum: { x:0, y:0, z:0 },
-    n: 0,
-    // quality thresholds (tuned for stability)
-    MIN_SAMPLES: 34,
-    MIN_MAG: 0.55,      // min |omega_h| to accept a sample
-    MIN_RESULTANT: 0.82 // |sum|/n, higher = cleaner axis
+        // ✅ NEW: UI flow
+        mode: "idle",  // "idle" | "prompt1" | "sample1" | "prompt2" | "sample2" | "done"
+
+        // templates (unit vectors in horizon plane)
+        T_lr: null,
+        T_fb: null,
+
+        // sampling
+        sum: { x:0, y:0, z:0 },
+        n: 0,
+
+        // quality thresholds
+        MIN_SAMPLES: 34,
+        MIN_MAG: 0.55,
+        MIN_RESULTANT: 0.82
     };
+
 
     const ORIENT_STORE_KEY = "orb_orient_v1";
 
@@ -1391,11 +1428,13 @@
     ORIENT.n = 0;
     }
 
-    function orientUI(showBtn, showMsg){
+    function orientUI(showBtn, showMsg, showStart){
     if (els.orientBtn) els.orientBtn.style.display = showBtn ? "" : "none";
     if (els.orientMsg) els.orientMsg.style.display = showMsg ? "" : "none";
+    if (els.orientStartBtn) els.orientStartBtn.style.display = showStart ? "" : "none";
     if (els.orientProgFill) els.orientProgFill.style.width = "0%";
     }
+
 
     function orientSetMessage(title, hint){
     if (els.orientTitle) els.orientTitle.textContent = title;
@@ -1410,45 +1449,94 @@
 
 
     function orientStart(){
-    ORIENT.active = true;
-    ORIENT.step = 1;
-    orientResetAccum();
-    orientUI(false, true);
-    orientSetMessage(
-        "Orient Phone",
-        "Shake phone LEFT ↔ RIGHT (relative to the screen) until the bar fills."
-    );
+        // Enter the flow (prompt step 1)
+        ORIENT.active = false;
+        ORIENT.step = 1;
+        ORIENT.mode = "prompt1";
 
-    // optional: clear lamps so the user focuses
-    clearDirLampTimers();
-    allDirLampOff();
-    forceShakeLampOff();
-    }
-
-    function orientFinishStepAndAdvance(template){
-    if (ORIENT.step === 1) ORIENT.T_lr = template;
-    if (ORIENT.step === 2) ORIENT.T_fb = template;
-
-    if (ORIENT.step === 1){
-        ORIENT.step = 2;
         orientResetAccum();
         orientProgress(0);
+
+        // Hide the big ORIENT PHONE button; show modal + START
+        orientUI(false, true, true);
+
         orientSetMessage(
-        "Orient Phone",
-        "Shake phone FORWARD ↔ BACK (relative to the screen) until the bar fills."
+            "Orient Phone",
+            "Shake phone LEFT ↔ RIGHT to fill the meter. Press START when you’re ready."
         );
-        return;
+
+        // optional: clear lamps so the user focuses
+        clearDirLampTimers();
+        allDirLampOff();
+        forceShakeLampOff();
     }
 
-    // done
-    ORIENT.step = 3;
-    ORIENT.active = false;
-    orientSave();
-    orientUI(true, false);
+    function orientBeginSamplingForCurrentStep(){
+        if (ORIENT.step !== 1 && ORIENT.step !== 2) return;
+
+        ORIENT.active = true;
+        ORIENT.mode = (ORIENT.step === 1) ? "sample1" : "sample2";
+
+        orientResetAccum();
+        orientProgress(0);
+
+        // Hide START while sampling
+        orientUI(false, true, false);
+
+        orientSetMessage(
+            "Orient Phone",
+            (ORIENT.step === 1)
+            ? "Shake phone LEFT ↔ RIGHT until the bar fills."
+            : "Shake phone FORWARD ↔ BACK until the bar fills."
+        );
+
+        // keep gameplay shake effects off during sampling
+        forceShakeLampOff();
     }
+
+
+    function orientFinishStepAndAdvance(template){
+        if (ORIENT.step === 1) ORIENT.T_lr = template;
+        if (ORIENT.step === 2) ORIENT.T_fb = template;
+
+        // stop sampling immediately
+        ORIENT.active = false;
+
+        if (ORIENT.step === 1){
+            // Move to step 2 PROMPT (user must press START)
+            ORIENT.step = 2;
+            ORIENT.mode = "prompt2";
+
+            orientResetAccum();
+            orientProgress(0);
+
+            // Show START again
+            orientUI(false, true, true);
+
+            orientSetMessage(
+            "Orient Phone",
+            "Shake phone FORWARD ↔ BACK to fill the meter. Press START when you’re ready."
+            );
+            return;
+        }
+
+        // DONE
+        ORIENT.step = 3;
+        ORIENT.mode = "done";
+        ORIENT.active = false;
+
+        orientSave();
+
+        // ✅ remove orientation UI entirely
+    if (els.orientOverlay) els.orientOverlay.style.display = "none";
+    }
+
 
     function orientTryConsumeOmegaSample(rawOmega){
+    // ✅ only consume samples while we are actively sampling
     if (!ORIENT.active) return;
+    if (!(ORIENT.mode === "sample1" || ORIENT.mode === "sample2")) return;
+
     if (!rawOmega || !rawOmega.has) return;
     if (!lastGravity || !lastGravity.has) return;
 
@@ -1487,13 +1575,14 @@
     orientProgress(p01);
 
     // Optional debug hint (comment out later)
+    /*
     if (els.orientHint){
     const pct = Math.round(p01 * 100);
     els.orientHint.textContent =
         (ORIENT.step === 1 ? "Shake phone LEFT ↔ RIGHT" : "Shake phone FORWARD ↔ BACK") +
         ` — ${pct}% (samples ${ORIENT.n}/${ORIENT.MIN_SAMPLES}, quality ${resultant.toFixed(2)}/${ORIENT.MIN_RESULTANT.toFixed(2)})`;
     }
-
+    */
 
 
     if (ORIENT.n >= ORIENT.MIN_SAMPLES && resultant >= ORIENT.MIN_RESULTANT){
@@ -1552,6 +1641,13 @@
     if (els.orientBtn){
     els.orientBtn.addEventListener("click", () => {
         orientStart();
+    });
+    }
+
+    // hook the START button inside the orient modal
+    if (els.orientStartBtn){
+    els.orientStartBtn.addEventListener("click", () => {
+        orientBeginSamplingForCurrentStep();
     });
     }
 
