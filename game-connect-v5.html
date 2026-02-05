@@ -1197,43 +1197,40 @@
       else disableAudio();
     });
 
-
     // =========================================================================
     // SHAKE → BEST-GUESS DIRECTION (v0: raw omega winner-take-all)
     // =========================================================================
     let lastRawOmega = { x:0, y:0, z:0, has:0 };
 
     function cacheRawOmegaFromMsg(d){
-    // pull the raw omega vector exactly like telemetry does (supports omega / r / omegaX..)
-    const v = telePickVecRaw(d, "omega"); // uses omega OR fallback r
-    const has = teleHas(d, "omega");      // uses omega OR fallback r
-    if (!has) return;
-    lastRawOmega = { x: v.x, y: v.y, z: v.z, has: 1 };
+      // pull the raw omega vector exactly like telemetry does (supports omega / r / omegaX..)
+      const v = telePickVecRaw(d, "omega"); // uses omega OR fallback r
+      const has = teleHas(d, "omega");      // uses omega OR fallback r
+      if (!has) return;
+      lastRawOmega = { x: v.x, y: v.y, z: v.z, has: 1 };
     }
 
     function pickShakeDirCodeFromOmega(v){
-    // pick dominant axis by absolute rotation-rate
-    const ax = Math.abs(v.x), ay = Math.abs(v.y), az = Math.abs(v.z);
+      // pick dominant axis by absolute rotation-rate
+      const ax = Math.abs(v.x), ay = Math.abs(v.y), az = Math.abs(v.z);
 
-    if (ax >= ay && ax >= az){
+      if (ax >= ay && ax >= az){
         // X axis → LEFT/RIGHT
         return (v.x >= 0) ? "R" : "L";
-    } else if (ay >= ax && ay >= az){
+      } else if (ay >= ax && ay >= az){
         // Y axis → UP/DOWN
         return (v.y >= 0) ? "U" : "D";
-    } else {
+      } else {
         // Z axis → FORWARD/BACK
         return (v.z >= 0) ? "F" : "B";
-    }
+      }
     }
 
     function flashShakeDirectionFromLatest(ms=420){
-    if (!lastRawOmega || !lastRawOmega.has) return;
-    const code = pickShakeDirCodeFromOmega(lastRawOmega);
-    flashDirLamp(code, ms);
+      if (!lastRawOmega || !lastRawOmega.has) return;
+      const code = pickShakeDirCodeFromOmega(lastRawOmega);
+      flashDirLamp(code, ms);
     }
-
-
 
     // =========================================================================
     // LAMPS — independent timers
@@ -1256,6 +1253,13 @@
 
     // Direction lamps (flash on sd from phone)
     const dirLampTO = { U:null, D:null, L:null, R:null, F:null, B:null };
+
+    // ✅ NEW: clear any queued timeouts (prevents timer pile-ups / late callbacks)
+    function clearDirLampTimers(){
+      for (const k in dirLampTO){
+        if (dirLampTO[k]) { clearTimeout(dirLampTO[k]); dirLampTO[k] = null; }
+      }
+    }
 
     function allDirLampOff(){
       if (els.lampUp) els.lampUp.classList.remove("on");
@@ -1337,6 +1341,9 @@
       shakeLastHitAt = -1e9;
       shakeCooldownUntil = 0;
       forceShakeLampOff();
+
+      // ✅ NEW: hard-clear any queued direction timers
+      clearDirLampTimers();
       allDirLampOff();
     }
 
@@ -1355,24 +1362,23 @@
 
       const dt = nowMs - shakeFirstHitAt;
 
-        if (dt <= DOUBLEBANG_MS){
+      if (dt <= DOUBLEBANG_MS){
         if (canSpendShake()){
-            spendShake();
-            flashShakeLamp(400);
-            triggerShockwave();
+          spendShake();
+          flashShakeLamp(400);
+          triggerShockwave();
 
-            // ✅ v0 direction test: pick one of 6 lamps from raw omega
-            flashShakeDirectionFromLatest(420);
+          // ✅ v0 direction test: pick one of 6 lamps from raw omega
+          flashShakeDirectionFromLatest(420);
 
-            shakeCooldownUntil = nowMs + SHAKE_COOLDOWN_MS;
-            shakeFirstHitAt = 0;
+          shakeCooldownUntil = nowMs + SHAKE_COOLDOWN_MS;
+          shakeFirstHitAt = 0;
         } else {
-            shakeFirstHitAt = 0;
+          shakeFirstHitAt = 0;
         }
-        } else {
+      } else {
         shakeFirstHitAt = nowMs;
-        }
-
+      }
     }
 
     function processShakeDoubleBang(shakeVal01, nowMs){
@@ -1597,12 +1603,41 @@
     }
 
     // =========================================================================
-    // TELEMETRY MODAL — unchanged
+    // TELEMETRY MODAL — buffered writer (less GC churn) + fix double-assign typo
     // =========================================================================
     let teleRecording = false;
     let teleT0 = 0;
     let teleLast = 0;
     let teleLines = 0;
+
+    // ✅ NEW: buffered append (reduces textContent += churn)
+    let teleBuf = [];
+    let teleBufChars = 0;
+    let teleFlushRAF = 0;
+
+    function teleFlushNow(){
+      teleFlushRAF = 0;
+      if (!teleBuf.length) return;
+      const chunk = teleBuf.join("");
+      teleBuf.length = 0;
+      teleBufChars = 0;
+      els.teleOut.textContent += chunk;
+      // keep "follow" behavior
+      if (teleLines % 40 === 0) els.teleOut.scrollTop = els.teleOut.scrollHeight;
+      // cap
+      if (els.teleOut.textContent.length > 220000) {
+        els.teleOut.textContent += "\n(TRUNCATED: output capped)\n";
+        stopTeleRecording();
+      }
+    }
+
+    function teleQueue(line){
+      teleBuf.push(line);
+      teleBufChars += line.length;
+      // flush either next frame, or if buffer is getting chunky
+      if (!teleFlushRAF) teleFlushRAF = requestAnimationFrame(teleFlushNow);
+      if (teleBufChars > 8000) teleFlushNow();
+    }
 
     function openTele(){
       els.teleModal.classList.add("on");
@@ -1612,6 +1647,8 @@
       teleRecording = false;
       els.teleRecBtn.textContent = "Record";
       els.teleRecBtn.classList.remove("recOn");
+      if (teleFlushRAF) { cancelAnimationFrame(teleFlushRAF); teleFlushRAF = 0; }
+      teleFlushNow();
     }
     function closeTele(){
       stopTeleRecording();
@@ -1625,15 +1662,18 @@
       teleLast = teleT0;
       teleLines = 0;
 
+      teleBuf.length = 0;
+      teleBufChars = 0;
+      if (teleFlushRAF) { cancelAnimationFrame(teleFlushRAF); teleFlushRAF = 0; }
+
+      // ✅ FIX: remove duplicate assignment typo
       els.teleOut.textContent =
-       els.teleOut.textContent =
         "ms\tdms\tspeed01\tenergy01\tgroove01\tdynamics01\tsmooth01\tshake01\tlocked\thz\t" +
         "dirX\tdirY\tdirZ\t" +
         "raw_dirX\traw_dirY\traw_dirZ\t" +
         "raw_omegaX\traw_omegaY\traw_omegaZ\t" +
         "has_dir\thas_omega\t" +
         "d_r2\td_r3\td_gate\td_balance\td_couple\n";
-
 
       els.teleRecBtn.textContent = "Stop";
       els.teleRecBtn.classList.add("recOn");
@@ -1670,44 +1710,43 @@
     }
 
     function teleHas(d, key){
-    if (!d) return 0;
-    if (d[key] != null) return 1;
+      if (!d) return 0;
+      if (d[key] != null) return 1;
 
-    // ✅ NEW fallbacks: a -> dir, r -> omega
-    if (key === "dir" && d.a != null) return 1;
-    if (key === "omega" && d.r != null) return 1;
+      // ✅ NEW fallbacks: a -> dir, r -> omega
+      if (key === "dir" && d.a != null) return 1;
+      if (key === "omega" && d.r != null) return 1;
 
-    return 0;
+      return 0;
     }
 
-
     function telePickVecRaw(d, prefix){
-    // prefix = "dir" or "omega"
-    // Accepts:
-    //  - d.dir / d.omega (array/object)
-    //  - scalar dirX/dirY/dirZ, omegaX/omegaY/omegaZ
-    //  - ✅ NEW fallbacks: d.a (for dir), d.r (for omega)
-    const fallbackKey = (prefix === "dir") ? "a" : (prefix === "omega") ? "r" : null;
+      // prefix = "dir" or "omega"
+      // Accepts:
+      //  - d.dir / d.omega (array/object)
+      //  - scalar dirX/dirY/dirZ, omegaX/omegaY/omegaZ
+      //  - ✅ NEW fallbacks: d.a (for dir), d.r (for omega)
+      const fallbackKey = (prefix === "dir") ? "a" : (prefix === "omega") ? "r" : null;
 
-    const src = (d && (d[prefix] != null ? d[prefix] : (fallbackKey ? d[fallbackKey] : null)));
+      const src = (d && (d[prefix] != null ? d[prefix] : (fallbackKey ? d[fallbackKey] : null)));
 
-    let x = 0, y = 0, z = 0;
+      let x = 0, y = 0, z = 0;
 
-    if (Array.isArray(src) && src.length >= 3){
+      if (Array.isArray(src) && src.length >= 3){
         x = Number(src[0]); y = Number(src[1]); z = Number(src[2]);
-    } else if (src && typeof src === "object"){
+      } else if (src && typeof src === "object"){
         x = Number(src.x); y = Number(src.y); z = Number(src.z);
-    } else {
+      } else {
         // scalar fields: dirX/dirY/dirZ or omegaX/omegaY/omegaZ
         x = Number(d && d[prefix + "X"]);
         y = Number(d && d[prefix + "Y"]);
         z = Number(d && d[prefix + "Z"]);
-    }
+      }
 
-    if (!isFinite(x) || !isFinite(y) || !isFinite(z)){
+      if (!isFinite(x) || !isFinite(y) || !isFinite(z)){
         return { x:0, y:0, z:0 };
-    }
-    return { x, y, z };
+      }
+      return { x, y, z };
     }
 
     function teleMaybeLog(d){
@@ -1727,11 +1766,12 @@
 
       const locked = !!d.locked;
       const hz = (d.hz != null && isFinite(Number(d.hz))) ? Number(d.hz) : 0;
-      // Direction vector (normalized) for telemetry: dir/omega/[dirX..] tolerant
-        const dirV = pickDirVec(d);
-        const dirX = dirV ? dirV.x : 0;
-        const dirY = dirV ? dirV.y : 0;
-        const dirZ = dirV ? dirV.z : 0;
+
+      // normalized for telemetry (your existing function later in file)
+      const dirV = pickDirVec(d);
+      const dirX = dirV ? dirV.x : 0;
+      const dirY = dirV ? dirV.y : 0;
+      const dirZ = dirV ? dirV.z : 0;
 
       const d_r2      = (d.d_r2 != null) ? telePickNum(d, "d_r2") : telePickNum(d, "o_r2");
       const d_r3      = (d.d_r3 != null) ? telePickNum(d, "d_r3") : telePickNum(d, "o_r3");
@@ -1739,36 +1779,25 @@
       const d_balance = (d.d_balance != null) ? telePickNum(d, "d_balance") : telePickNum(d, "o_balance");
       const d_couple  = (d.d_couple != null) ? telePickNum(d, "d_couple") : telePickNum(d, "o_couple");
 
-        // Raw vector probes (no normalization)
-        const rawDir   = telePickVecRaw(d, "dir");
-        const rawOmega = telePickVecRaw(d, "omega");
-        const hasDir   = teleHas(d, "dir");
-        const hasOmega = teleHas(d, "omega");
-
+      // raw vector probes
+      const rawDir   = telePickVecRaw(d, "dir");
+      const rawOmega = telePickVecRaw(d, "omega");
+      const hasDir   = teleHas(d, "dir");
+      const hasOmega = teleHas(d, "omega");
 
       const line =
         `${ms.toFixed(1)}\t${dms.toFixed(1)}\t` +
         `${speed.toFixed(4)}\t${energy.toFixed(4)}\t${groove.toFixed(4)}\t${dynamics.toFixed(4)}\t${smooth.toFixed(4)}\t${shake.toFixed(4)}\t` +
         `${locked ? 1 : 0}\t${hz.toFixed(3)}\t` +
-        // normalized (from your existing logic earlier in the function)
         `${dirX.toFixed(4)}\t${dirY.toFixed(4)}\t${dirZ.toFixed(4)}\t` +
-        // raw probes
         `${rawDir.x.toFixed(4)}\t${rawDir.y.toFixed(4)}\t${rawDir.z.toFixed(4)}\t` +
         `${rawOmega.x.toFixed(4)}\t${rawOmega.y.toFixed(4)}\t${rawOmega.z.toFixed(4)}\t` +
         `${hasDir}\t${hasOmega}\t` +
-        // existing d_ stream
         `${d_r2.toFixed(4)}\t${d_r3.toFixed(4)}\t${d_gate.toFixed(4)}\t${d_balance.toFixed(4)}\t${d_couple.toFixed(4)}\n`;
 
-
-
-      els.teleOut.textContent += line;
       teleLines++;
-
-      if (teleLines % 40 === 0) els.teleOut.scrollTop = els.teleOut.scrollHeight;
-      if (els.teleOut.textContent.length > 220000) {
-        els.teleOut.textContent += "\n(TRUNCATED: output capped)\n";
-        stopTeleRecording();
-      }
+      // ✅ NEW: queue instead of immediate textContent +=
+      teleQueue(line);
     }
 
     // =========================================================================
@@ -2130,40 +2159,39 @@
     }
 
     function pickDirVec(d){
-    // Priority:
-    // 1) d.dir
-    // 2) d.a   (accelIncludingGravity)
-    // 3) d.omega
-    // 4) d.r   (rotationRate)
-    // 5) scalar dirX.. / omegaX..
-    const src =
+      // Priority:
+      // 1) d.dir
+      // 2) d.a   (accelIncludingGravity)
+      // 3) d.omega
+      // 4) d.r   (rotationRate)
+      // 5) scalar dirX.. / omegaX..
+      const src =
         (d && (d.dir != null ? d.dir :
-            d.a   != null ? d.a   :
-            d.omega != null ? d.omega :
-            d.r   != null ? d.r   :
-            null));
+          d.a   != null ? d.a   :
+          d.omega != null ? d.omega :
+          d.r   != null ? d.r   :
+          null));
 
-    let x=0,y=0,z=0;
+      let x=0,y=0,z=0;
 
-    if (Array.isArray(src) && src.length >= 3){
+      if (Array.isArray(src) && src.length >= 3){
         x = Number(src[0]); y = Number(src[1]); z = Number(src[2]);
-    } else if (src && typeof src === "object"){
+      } else if (src && typeof src === "object"){
         x = Number(src.x); y = Number(src.y); z = Number(src.z);
-    } else {
+      } else {
         // scalar fields (prefer dir*, then omega*)
         x = Number(d && (d.dirX != null ? d.dirX : d.omegaX));
         y = Number(d && (d.dirY != null ? d.dirY : d.omegaY));
         z = Number(d && (d.dirZ != null ? d.dirZ : d.omegaZ));
+      }
+
+      if (!isFinite(x) || !isFinite(y) || !isFinite(z)) return null;
+
+      const m = Math.hypot(x,y,z);
+      if (!(m > 1e-6)) return null;
+
+      return { x:x/m, y:y/m, z:z/m, mag:m };
     }
-
-    if (!isFinite(x) || !isFinite(y) || !isFinite(z)) return null;
-
-    const m = Math.hypot(x,y,z);
-    if (!(m > 1e-6)) return null;
-
-    return { x:x/m, y:y/m, z:z/m, mag:m };
-    }
-
 
     function dirToYawTiltDeg(v){
       // yaw around vertical axis (x/y plane), tilt from horizon via z
@@ -2192,9 +2220,8 @@
       const speed    = pick01NewOrOld("speed01", "speed");
       const shake    = pick01NewOrOld("shake01", "shake");
       const locked   = !!d.locked;
-        // cache raw omega so the shake detonation can pick a direction
-        cacheRawOmegaFromMsg(d);
-
+      // cache raw omega so the shake detonation can pick a direction
+      cacheRawOmegaFromMsg(d);
 
       updateEnergyBankFromPhone(energyFromPhone, nowMs);
 
