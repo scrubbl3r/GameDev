@@ -1668,7 +1668,7 @@
       }
     }
 
-    function flashShakeDirectionFromLatest(ms=420){
+    function flashShakeDirectionFromLatestCalibrated(ms=420){
       if (!lastRawOmega || !lastRawOmega.has) return;
       const code = pickShakeDirCodeFromOmega(lastRawOmega);
       flashDirLamp(code, ms);
@@ -1811,7 +1811,7 @@
           triggerShockwave();
 
           // ✅ v0 direction test: pick one of 6 lamps from raw omega
-          flashShakeDirectionFromLatest(420);
+          flashShakeDirectionFromLatestCalibrated(420);
 
           shakeCooldownUntil = nowMs + SHAKE_COOLDOWN_MS;
           shakeFirstHitAt = 0;
