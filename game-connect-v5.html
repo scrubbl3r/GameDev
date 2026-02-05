@@ -531,7 +531,7 @@
     }
 
     /* ======================================================================
-       START SCREEN (PAIR PHONE) — big green outline button, covers receiver+game
+       START SCREEN (START GAME) — black screen + single centered link
        - Touches nothing else; just overlays until you click.
        ====================================================================== */
     #startScreen{
@@ -540,45 +540,42 @@
       display:flex;
       align-items:center;
       justify-content:center;
-      padding: 24px 16px;
+      background:#000;
       z-index: 998; /* below modals (999), above app */
       pointer-events:auto;
     }
     #startScreen.off{ display:none; }
 
+    /* override global button styling for this one control only */
     #startBtn{
-      width: 100%;
-      height: 100%;
-      border-radius: 18px;
-      border: 0px solid var(--g);
-      background: #000;
+      padding:0;
+      border:0;
+      border-radius:0;
+      background:transparent;
       color: var(--g);
       font-weight: 1000;
       letter-spacing: .18em;
       text-transform: uppercase;
-      display:flex;
-      align-items:center;
-      justify-content:center;
       cursor:pointer;
-      box-shadow:
-        0 0 0 1px rgba(50,255,117,.10) inset,
-        0 0 28px rgba(50,255,117,.10);
-      text-shadow:
-        0 0 16px rgba(50,255,117,.14);
+      box-shadow:none;
+      text-shadow: 0 0 16px rgba(50,255,117,.14);
       user-select:none;
       -webkit-tap-highlight-color: transparent;
-    }
-    #startBtn:hover{
-      box-shadow:
-        0 0 0 1px rgba(50,255,117,.16) inset,
-        0 0 40px rgba(50,255,117,.14);
-    }
-    #startBtn:active{
-      transform: translateY(1px);
     }
     #startBtn span{
       font-size: clamp(28px, 5.2vw, 64px);
       line-height: 1;
+      text-decoration: underline;
+      text-underline-offset: 10px;
+      text-decoration-thickness: 2px;
+      text-decoration-color: rgba(50,255,117,.45);
+    }
+    #startBtn:hover span{
+      text-decoration-color: rgba(50,255,117,.85);
+      text-shadow: 0 0 22px rgba(50,255,117,.18);
+    }
+    #startBtn:active{
+      transform: translateY(1px);
     }
   </style>
 
@@ -589,8 +586,8 @@
 <body>
   <!-- START SCREEN OVERLAY -->
   <div id="startScreen" aria-label="Start screen">
-    <button id="startBtn" aria-label="Pair phone">
-      <span>PAIR PHONE</span>
+    <button id="startBtn" aria-label="Start game">
+      <span>START GAME</span>
     </button>
   </div>
 
@@ -1203,25 +1200,20 @@
     let lastRawOmega = { x:0, y:0, z:0, has:0 };
 
     function cacheRawOmegaFromMsg(d){
-      // pull the raw omega vector exactly like telemetry does (supports omega / r / omegaX..)
-      const v = telePickVecRaw(d, "omega"); // uses omega OR fallback r
-      const has = teleHas(d, "omega");      // uses omega OR fallback r
+      const v = telePickVecRaw(d, "omega");
+      const has = teleHas(d, "omega");
       if (!has) return;
       lastRawOmega = { x: v.x, y: v.y, z: v.z, has: 1 };
     }
 
     function pickShakeDirCodeFromOmega(v){
-      // pick dominant axis by absolute rotation-rate
       const ax = Math.abs(v.x), ay = Math.abs(v.y), az = Math.abs(v.z);
 
       if (ax >= ay && ax >= az){
-        // X axis → LEFT/RIGHT
         return (v.x >= 0) ? "R" : "L";
       } else if (ay >= ax && ay >= az){
-        // Y axis → UP/DOWN
         return (v.y >= 0) ? "U" : "D";
       } else {
-        // Z axis → FORWARD/BACK
         return (v.z >= 0) ? "F" : "B";
       }
     }
@@ -1251,10 +1243,8 @@
       els.shakeLamp.classList.remove("on");
     }
 
-    // Direction lamps (flash on sd from phone)
     const dirLampTO = { U:null, D:null, L:null, R:null, F:null, B:null };
 
-    // ✅ NEW: clear any queued timeouts (prevents timer pile-ups / late callbacks)
     function clearDirLampTimers(){
       for (const k in dirLampTO){
         if (dirLampTO[k]) { clearTimeout(dirLampTO[k]); dirLampTO[k] = null; }
@@ -1342,7 +1332,6 @@
       shakeCooldownUntil = 0;
       forceShakeLampOff();
 
-      // ✅ NEW: hard-clear any queued direction timers
       clearDirLampTimers();
       allDirLampOff();
     }
@@ -1367,8 +1356,6 @@
           spendShake();
           flashShakeLamp(400);
           triggerShockwave();
-
-          // ✅ v0 direction test: pick one of 6 lamps from raw omega
           flashShakeDirectionFromLatest(420);
 
           shakeCooldownUntil = nowMs + SHAKE_COOLDOWN_MS;
@@ -1610,7 +1597,6 @@
     let teleLast = 0;
     let teleLines = 0;
 
-    // ✅ NEW: buffered append (reduces textContent += churn)
     let teleBuf = [];
     let teleBufChars = 0;
     let teleFlushRAF = 0;
@@ -1622,9 +1608,7 @@
       teleBuf.length = 0;
       teleBufChars = 0;
       els.teleOut.textContent += chunk;
-      // keep "follow" behavior
       if (teleLines % 40 === 0) els.teleOut.scrollTop = els.teleOut.scrollHeight;
-      // cap
       if (els.teleOut.textContent.length > 220000) {
         els.teleOut.textContent += "\n(TRUNCATED: output capped)\n";
         stopTeleRecording();
@@ -1634,7 +1618,6 @@
     function teleQueue(line){
       teleBuf.push(line);
       teleBufChars += line.length;
-      // flush either next frame, or if buffer is getting chunky
       if (!teleFlushRAF) teleFlushRAF = requestAnimationFrame(teleFlushNow);
       if (teleBufChars > 8000) teleFlushNow();
     }
@@ -1666,7 +1649,6 @@
       teleBufChars = 0;
       if (teleFlushRAF) { cancelAnimationFrame(teleFlushRAF); teleFlushRAF = 0; }
 
-      // ✅ FIX: remove duplicate assignment typo
       els.teleOut.textContent =
         "ms\tdms\tspeed01\tenergy01\tgroove01\tdynamics01\tsmooth01\tshake01\tlocked\thz\t" +
         "dirX\tdirY\tdirZ\t" +
@@ -1713,7 +1695,6 @@
       if (!d) return 0;
       if (d[key] != null) return 1;
 
-      // ✅ NEW fallbacks: a -> dir, r -> omega
       if (key === "dir" && d.a != null) return 1;
       if (key === "omega" && d.r != null) return 1;
 
@@ -1721,13 +1702,7 @@
     }
 
     function telePickVecRaw(d, prefix){
-      // prefix = "dir" or "omega"
-      // Accepts:
-      //  - d.dir / d.omega (array/object)
-      //  - scalar dirX/dirY/dirZ, omegaX/omegaY/omegaZ
-      //  - ✅ NEW fallbacks: d.a (for dir), d.r (for omega)
       const fallbackKey = (prefix === "dir") ? "a" : (prefix === "omega") ? "r" : null;
-
       const src = (d && (d[prefix] != null ? d[prefix] : (fallbackKey ? d[fallbackKey] : null)));
 
       let x = 0, y = 0, z = 0;
@@ -1737,7 +1712,6 @@
       } else if (src && typeof src === "object"){
         x = Number(src.x); y = Number(src.y); z = Number(src.z);
       } else {
-        // scalar fields: dirX/dirY/dirZ or omegaX/omegaY/omegaZ
         x = Number(d && d[prefix + "X"]);
         y = Number(d && d[prefix + "Y"]);
         z = Number(d && d[prefix + "Z"]);
@@ -1767,7 +1741,6 @@
       const locked = !!d.locked;
       const hz = (d.hz != null && isFinite(Number(d.hz))) ? Number(d.hz) : 0;
 
-      // normalized for telemetry (your existing function later in file)
       const dirV = pickDirVec(d);
       const dirX = dirV ? dirV.x : 0;
       const dirY = dirV ? dirV.y : 0;
@@ -1779,7 +1752,6 @@
       const d_balance = (d.d_balance != null) ? telePickNum(d, "d_balance") : telePickNum(d, "o_balance");
       const d_couple  = (d.d_couple != null) ? telePickNum(d, "d_couple") : telePickNum(d, "o_couple");
 
-      // raw vector probes
       const rawDir   = telePickVecRaw(d, "dir");
       const rawOmega = telePickVecRaw(d, "omega");
       const hasDir   = teleHas(d, "dir");
@@ -1796,7 +1768,6 @@
         `${d_r2.toFixed(4)}\t${d_r3.toFixed(4)}\t${d_gate.toFixed(4)}\t${d_balance.toFixed(4)}\t${d_couple.toFixed(4)}\n`;
 
       teleLines++;
-      // ✅ NEW: queue instead of immediate textContent +=
       teleQueue(line);
     }
 
@@ -2159,12 +2130,6 @@
     }
 
     function pickDirVec(d){
-      // Priority:
-      // 1) d.dir
-      // 2) d.a   (accelIncludingGravity)
-      // 3) d.omega
-      // 4) d.r   (rotationRate)
-      // 5) scalar dirX.. / omegaX..
       const src =
         (d && (d.dir != null ? d.dir :
           d.a   != null ? d.a   :
@@ -2179,7 +2144,6 @@
       } else if (src && typeof src === "object"){
         x = Number(src.x); y = Number(src.y); z = Number(src.z);
       } else {
-        // scalar fields (prefer dir*, then omega*)
         x = Number(d && (d.dirX != null ? d.dirX : d.omegaX));
         y = Number(d && (d.dirY != null ? d.dirY : d.omegaY));
         z = Number(d && (d.dirZ != null ? d.dirZ : d.omegaZ));
@@ -2194,9 +2158,8 @@
     }
 
     function dirToYawTiltDeg(v){
-      // yaw around vertical axis (x/y plane), tilt from horizon via z
-      const yaw = Math.atan2(v.y, v.x) * 180/Math.PI;   // -180..180
-      const tilt = Math.asin(clamp(v.z, -1, 1)) * 180/Math.PI; // -90..90
+      const yaw = Math.atan2(v.y, v.x) * 180/Math.PI;
+      const tilt = Math.asin(clamp(v.z, -1, 1)) * 180/Math.PI;
       return { yaw, tilt };
     }
 
@@ -2220,7 +2183,7 @@
       const speed    = pick01NewOrOld("speed01", "speed");
       const shake    = pick01NewOrOld("shake01", "shake");
       const locked   = !!d.locked;
-      // cache raw omega so the shake detonation can pick a direction
+
       cacheRawOmegaFromMsg(d);
 
       updateEnergyBankFromPhone(energyFromPhone, nowMs);
@@ -2262,19 +2225,17 @@
       els.vEnergy.classList.toggle("over", over);
       els.bEnergy.classList.toggle("over", over);
 
-      // --- Direction readout (optional; does nothing if phone isn't sending it yet)
       const dirV = pickDirVec(d);
       if (els.dirReadout){
         if (dirV){
           const a = dirToYawTiltDeg(dirV);
-          const yaw = ((a.yaw % 360) + 360) % 360; // 0..360
+          const yaw = ((a.yaw % 360) + 360) % 360;
           els.dirReadout.textContent = `${yaw.toFixed(0)}° yaw  |  ${a.tilt.toFixed(0)}° tilt`;
         } else {
           els.dirReadout.textContent = "—";
         }
       }
 
-      // sd is only sent by the phone on shakeHit (lean)
       if (d && typeof d.sd === "string" && d.sd.trim()) {
         flashDirLamp(d.sd, 420);
       }
@@ -2351,7 +2312,6 @@
 
         if (els.pairModal.classList.contains("on")) closePairModal();
 
-        // If the start screen is still up for some reason, drop it on first msg.
         if (els.startScreen && !els.startScreen.classList.contains("off")) {
           els.startScreen.classList.add("off");
         }
@@ -2378,7 +2338,7 @@
       // This click is a user gesture → allowed to start AudioContext
       if (!audioEnabled) await enableAudio();
 
-      // Hide immediately (visual intent), then run exact same behavior as Pair Phone.
+      // Hide immediately, then run exact same behavior as Pair Phone.
       els.startScreen.classList.add("off");
       els.pairBtn.click();
     });
