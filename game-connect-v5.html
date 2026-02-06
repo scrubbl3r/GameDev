@@ -1363,6 +1363,62 @@
     return (m > 1e-6) ? { x:a.x/m, y:a.y/m, z:a.z/m, mag:m } : { x:0,y:0,z:0, mag:0 };
     }
 
+    // --- recent motion history (for better shake-direction classification) ---
+    const MOTION_HIST_MS = 220;         // keep ~0.22s
+    const HIT_PICK_WIN_MS = 180;        // analyze last ~0.18s on detonation
+    const motionHist = [];              // { t, ox, oy, oz, gx, gy, gz }
+
+    let gLP = { x:0, y:0, z:1, has:0 }; // low-pass gravity estimate
+
+    function updateGravityLP(){
+    if (!lastGravity || !lastGravity.has) return;
+    if (!gLP.has){
+        gLP = { x:lastGravity.x, y:lastGravity.y, z:lastGravity.z, has:1 };
+        return;
+    }
+    // small alpha = stable "down" even during shakes
+    const a = 0.08;
+    const x = gLP.x*(1-a) + lastGravity.x*a;
+    const y = gLP.y*(1-a) + lastGravity.y*a;
+    const z = gLP.z*(1-a) + lastGravity.z*a;
+    const m = Math.hypot(x,y,z);
+    if (m > 1e-6) gLP = { x:x/m, y:y/m, z:z/m, has:1 };
+    }
+
+    function pushMotionSample(nowMs){
+    if (!lastRawOmega || !lastRawOmega.has) return;
+    updateGravityLP();
+    if (!gLP || !gLP.has) return;
+
+    motionHist.push({
+        t: nowMs,
+        ox: lastRawOmega.x, oy: lastRawOmega.y, oz: lastRawOmega.z,
+        gx: gLP.x, gy: gLP.y, gz: gLP.z
+    });
+
+    const cutoff = nowMs - MOTION_HIST_MS;
+    while (motionHist.length && motionHist[0].t < cutoff) motionHist.shift();
+    }
+
+    function pickOmegaForHit(nowMs){
+    // choose the peak-magnitude omega sample in the last HIT_PICK_WIN_MS
+    const t0 = nowMs - HIT_PICK_WIN_MS;
+    let best = null;
+    let bestMag = -1;
+
+    for (let i = motionHist.length - 1; i >= 0; i--){
+        const s = motionHist[i];
+        if (s.t < t0) break;
+        const mag = Math.hypot(s.ox, s.oy, s.oz);
+        if (mag > bestMag){
+        bestMag = mag;
+        best = s;
+        }
+    }
+    return best;
+    }
+
+
     // remove gravity component: project onto plane perpendicular to gravity
     function projectToHorizon(v, gHat){
     const k = vDot(v, gHat);
@@ -1617,6 +1673,13 @@
     const aLR = Math.abs(sLR);
     const aFB = Math.abs(sFB);
 
+    const UD_WIN_THR = 0.72; // tune 0.65..0.80
+
+    if (aUD >= aLR && aUD >= aFB && aUD >= UD_WIN_THR){
+    return (sUD >= 0) ? "D" : "U";
+    }
+
+
     if (aUD >= aLR && aUD >= aFB){
         // sign -> U/D (note: depending on your phone axis sign, you may want to invert)
         return (sUD >= 0) ? "D" : "U";
@@ -1627,7 +1690,7 @@
     }
     }
 
-    function flashShakeDirectionFromLatest(ms=420){
+    function flashShakeDirectionFromLatestCalibrated(ms=420){
     if (!lastRawOmega || !lastRawOmega.has) return;
     const code = pickShakeDirCodeCalibrated(lastRawOmega);
     if (!code) return;
@@ -1668,11 +1731,6 @@
       }
     }
 
-    function flashShakeDirectionFromLatestCalibrated(ms=420){
-      if (!lastRawOmega || !lastRawOmega.has) return;
-      const code = pickShakeDirCodeFromOmega(lastRawOmega);
-      flashDirLamp(code, ms);
-    }
 
     // =========================================================================
     // LAMPS — independent timers
@@ -1810,8 +1868,15 @@
           flashShakeLamp(400);
           triggerShockwave();
 
-          // ✅ v0 direction test: pick one of 6 lamps from raw omega
-          flashShakeDirectionFromLatestCalibrated(420);
+            const s = pickOmegaForHit(nowMs);
+            if (s){
+            // temporarily set "lastGravity" to the smoothed gravity at that sample time
+            lastGravity = { x:s.gx, y:s.gy, z:s.gz, has:1 };
+            const raw = { x:s.ox, y:s.oy, z:s.oz, has:1 };
+            const code = pickShakeDirCodeCalibrated(raw);
+            if (code) flashDirLamp(code, 420);
+            }
+
 
           shakeCooldownUntil = nowMs + SHAKE_COOLDOWN_MS;
           shakeFirstHitAt = 0;
@@ -2666,6 +2731,7 @@
       // cache gravity + raw omega (foundation + shake)
       cacheGravityFromMsg(d);
       cacheRawOmegaFromMsg(d);
+      pushMotionSample(nowMs);
 
       // if calibrating, consume samples continuously from the incoming stream
       orientTryConsumeOmegaSample(lastRawOmega);
